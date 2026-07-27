@@ -7,7 +7,6 @@ class TranslationResult:
     raw_output: str
 
 class Translator(ABC):
-    """Interfaccia base per i traduttori linguaggio naturale -> kglanguage."""
 
     @abstractmethod
     def translate(self, question: str, schema_context: str) -> TranslationResult:
