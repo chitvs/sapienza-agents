@@ -6,7 +6,7 @@ class TranslationResult:
     query: str
     raw_output: str
 
-class Translator(ABC):
+class BaseTranslator(ABC):
 
     @abstractmethod
     def translate(self, question: str, schema_context: str) -> TranslationResult:

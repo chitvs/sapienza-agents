@@ -18,6 +18,7 @@ agents/kg/
 │   │   └── wikimedia.py
 │   └── translators/        # Text2kglanguage
 │       └── base.py
+│       └── sparql.py       # Text2SPARQL
 └── tests/                  # test di integrazione
     └── test_wikimedia.py
 ```
@@ -31,6 +32,14 @@ Per evitare warning relativi agli import, su vscode creare una cartella chiamata
     ]
 }
 ```
+
+#### Connectors
+
+Connettono una parola ad un entità, cercandola e ottenendo proprietà sul db selezionato. Ad esempio nel file `connectors/wikimedia.py` è implementato il connettore per Wikimedia.
+
+#### Translators
+
+Convertono il linguaggio naturale in una query per un knowledge graph. Ad esempio Wikimedia utilizza SPARQL come linguaggio e quindi bisogna utilizzare Text2SPARQL (implementato in `translators/sparql.py`).
 
 #### Testing
 
