@@ -5,7 +5,7 @@ from connectors.wikimedia import WikimediaConnector
 # test di ricerca, funzione search_entity
 # 'universe' corrisponde a Q1
 # controlla se effettivamente appare tra i risultati di ricerca
-def test_search_entity_finds_known_entity():
+def test_search_entity():
     connector = WikimediaConnector()
     results = connector.search_entity("universe", limit=3)
 
@@ -13,7 +13,7 @@ def test_search_entity_finds_known_entity():
     assert any(r.id == "Q1" for r in results) # Q1 (il risultato atteso) c'è?
 
 # test di estrazione, funzione get_entity
-def test_get_entity_returns_label_and_properties():
+def test_get_entity():
     connector = WikimediaConnector()
     entity = connector.get_entity("Q1")
 
