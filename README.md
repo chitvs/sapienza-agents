@@ -52,6 +52,10 @@ Convertono il linguaggio naturale in una query per un knowledge graph tramite:
 
 - `translate`: text -> query kg
 
+#### Executors
+
+Si occupano dell'esecuzione delle query sui database o triplestore target.
+
 #### Testing
 
 Nella cartella `tests` sono presenti alcuni test da effettuare con pytest.
