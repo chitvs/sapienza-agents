@@ -40,9 +40,17 @@ Interagiscono che le API dei knowledge graph e hanno due compiti principali:
 - `search_entity`: text -> lista di entità con quel nome.
 - `get_entity`: entità -> dati di quell'entità.
 
+#### Linkers
+
+Si occupano del processo chiamato entity linking. Utilizzano la seguente funzione:
+
+- `link`: associa le entità al testo (utilizzando le funzioni grezze dei connettori).
+
 #### Translators
 
-Convertono il linguaggio naturale in una query per un knowledge graph. Ad esempio Wikimedia utilizza SPARQL come linguaggio e quindi bisogna utilizzare Text2SPARQL (implementato in `translators/sparql.py`).
+Convertono il linguaggio naturale in una query per un knowledge graph tramite:
+
+- `translate`: text -> query kg
 
 #### Testing
 

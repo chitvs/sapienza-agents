@@ -10,5 +10,5 @@ class BaseTranslator(ABC):
 
     @abstractmethod
     def translate(self, question: str, schema_context: str) -> TranslationResult:
-        """Traduce una domanda in kglanguage, dato lo schema del grafo."""
+        """Traduce una domanda in linguaggio naturale in una query per il knowledge graph, dato lo schema del grafo."""
         raise NotImplementedError
