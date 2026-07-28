@@ -1,6 +1,6 @@
 # Test per il wikimedia connector
 
-from connectors.wikimedia import WikimediaConnector
+from connectors.wikimedia_connector import WikimediaConnector
 
 # test di ricerca, funzione search_entity
 # 'universe' corrisponde a Q1

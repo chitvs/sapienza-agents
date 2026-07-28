@@ -35,7 +35,10 @@ Per evitare warning relativi agli import, su vscode creare una cartella chiamata
 
 #### Connectors
 
-Connettono una parola ad un entità, cercandola e ottenendo proprietà sul db selezionato. Ad esempio nel file `connectors/wikimedia.py` è implementato il connettore per Wikimedia.
+Interagiscono che le API dei knowledge graph e hanno due compiti principali:
+
+- `search_entity`: text -> lista di entità con quel nome.
+- `get_entity`: entità -> dati di quell'entità.
 
 #### Translators
 

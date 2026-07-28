@@ -17,7 +17,7 @@ class BaseConnector(ABC):
 
     @abstractmethod
     def search_entity(self, text: str, limit: int = 5) -> list[EntityCandidate]:
-        """Cerca entità a partire da testo (text), ritorna una lista di entità candidate, con un limite."""
+        """Cerca entità a partire da testo, ritorna una lista di entità candidate, con un limite."""
         raise NotImplementedError
 
     @abstractmethod

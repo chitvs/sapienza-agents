@@ -1,5 +1,5 @@
 import requests
-from connectors.base import BaseConnector, EntityCandidate, EntityData
+from connectors.base_connector import BaseConnector, EntityCandidate, EntityData
 
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 
@@ -42,6 +42,7 @@ class WikimediaConnector(BaseConnector):
                     label = item["label"]
                     
                 # creazione oggetto e aggiunta alla lista
+                # todo: aggiungi descrizione
                 candidate = EntityCandidate(id=entity_id, label=label)
                 results.append(candidate)
                 
