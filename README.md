@@ -10,20 +10,34 @@ Struttura del codice:
 
 ```text
 agents/kg/
-├── pytest.ini              # configurazione di pytest per il discovery dei moduli
-├── requirements.txt        # dipendenze
+├── pytest.ini                  # configurazione di pytest per il discovery dei moduli
+├── requirements.txt            # dipendenze
 ├── src/
-│   ├── connectors/         # estrazione dati dai grafi
-│   │   ├── base.py
-│   │   └── wikimedia.py
-│   └── translators/        # Text2kglanguage
-│       └── base.py
-│       └── sparql.py       # Text2SPARQL
-└── tests/                  # test di integrazione
-    └── test_wikimedia.py
+│   ├── connectors/             # estrazione dati dai grafi
+│   │   ├── base_connector.py
+│   │   └── wikimedia_connector.py
+│   ├── linkers/                # Entity Linking (testo -> QID)
+│   │   ├── base_linker.py
+│   │   └── lookup_linker.py
+│   ├── translators/            # Text2kglanguage
+│   │   ├── base_translator.py
+│   │   └── sparql_translator.py
+│   ├── executors/              # Esecuzione query su DB/Triplestore
+│   │   ├── base_executor.py
+│   │   └── sparql_executor.py
+│   └── grounders/              # Symbol Grounding (QID -> Label umana)
+│       ├── base_grounder.py
+│       └── wikidata_grounder.py
+└── tests/                      # test di integrazione
+    ├── test_wikimedia_connector.py
+    ├── test_lookup_linker.py
+    ├── test_sparql_translator.py
+    ├── test_sparql_executor.py
+    └── test_wikidata_grounder.py
+
 ```
 
-Per evitare warning relativi agli import, su vscode creare una cartella chiamata `.vscode` nella root e creare un file `settings.json` con dentro:
+Per evitare warning relativi agli import, su VS Code creare una cartella chiamata `.vscode` nella root del progetto e creare un file `settings.json` con dentro:
 
 ```json
 {
@@ -35,33 +49,42 @@ Per evitare warning relativi agli import, su vscode creare una cartella chiamata
 
 #### Connectors
 
-Interagiscono che le API dei knowledge graph e hanno due compiti principali:
+Interagiscono con le API dei knowledge graph e hanno due compiti principali:
 
-- `search_entity`: text -> lista di entità con quel nome.
-- `get_entity`: entità -> dati di quell'entità.
+- `search_entity`: text -> lista di entità candidate con quel nome.
+- `get_entity`: entity_id -> dati dettagliati di quell'entità.
 
 #### Linkers
 
-Si occupano del processo chiamato entity linking. Utilizzano la seguente funzione:
+Si occupano del processo di entity linking:
 
-- `link`: associa le entità al testo (utilizzando le funzioni grezze dei connettori).
+- `link`: associa la menzione testuale al corrispondente ID univoco del grafo (es. "Einstein" -> Q937), appoggiandosi ai connettori.
 
 #### Translators
 
-Convertono il linguaggio naturale in una query per un knowledge graph tramite:
+Convertono il linguaggio naturale in una query formale per un knowledge graph tramite:
 
-- `translate`: text -> query kg
+- `translate`: riceve la domanda dell'utente e il contesto sulle entità mappate (es. wd:Q937, wdt:P569), invoca LLM e restituisce la query.
 
 #### Executors
 
-Si occupano dell'esecuzione delle query sui database o triplestore target.
+Si occupano dell'esecuzione delle query generate sui database o triplestore target:
+
+- `execute`: invia la query formattata all'endpoint di destinazione (es. Wikidata SPARQL endpoint) e restituisce i risultati grezzi.
+
+#### Grounders
+
+Si occupano del processo di symbol grounding e label resolution:
+
+- `ground`: prende in input i dati grezzi restituiti dagli esecutori e risolve gli URI/QID nelle rispettive etichette leggibili in linguaggio naturale.
+
+---
 
 #### Testing
 
-Nella cartella `tests` sono presenti alcuni test da effettuare con pytest.
-Per runnare:
+Nella cartella `tests` sono presenti i test di integrazione da effettuare con `pytest`.
 
-Entrare nella cartella corretta e creare/attivare il virtual environment:
+Per eseguirli, entrare nella cartella corretta e attivare il virtual environment:
 
 ```bash
 cd ~/sapienza-agents/agents/kg
@@ -75,7 +98,7 @@ Installare le dipendenze:
 uv pip install -r requirements.txt
 ```
 
-Ora è il momento di lanciare i test (`-v` sta per 'verbose'):
+Eseguire i test (`-v` sta per 'verbose'):
 
 ##### Tutti i test
 
@@ -83,8 +106,21 @@ Ora è il momento di lanciare i test (`-v` sta per 'verbose'):
 uv run pytest -v
 ```
 
-##### Test del connector wikimedia
+##### Test dei singoli moduli
 
 ```bash
-uv run pytest tests/test_wikimedia.py -v
+# Test connettori
+uv run pytest tests/test_wikimedia_connector.py -v
+
+# Test linker
+uv run pytest tests/test_lookup_linker.py -v
+
+# Test translator (richiede Ollama attivo)
+uv run pytest tests/test_sparql_translator.py -v -s
+
+# Test executor
+uv run pytest tests/test_sparql_executor.py -v
+
+# Test grounder
+uv run pytest tests/test_wikidata_grounder.py -v
 ```
