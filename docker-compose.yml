@@ -1,0 +1,59 @@
+services:
+  # agente kg
+  kg-agent:
+    build:
+      context: ./agents/kg
+      dockerfile: Dockerfile
+    container_name: kg-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    networks:
+      - agents-net
+
+  # agente planner
+  planner-agent:
+    build:
+      context: ./agents/planner
+      dockerfile: Dockerfile
+    container_name: planner-agent
+    ports:
+      - "8001:8001"
+    networks:
+      - agents-net
+
+  # agente multi-api
+  multiapi-agent:
+    build:
+      context: ./agents/multiapi
+      dockerfile: Dockerfile
+    container_name: multiapi-agent
+    ports:
+      - "8002:8002"
+    networks:
+      - agents-net
+
+  # Orchestratore
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: orchestrator
+    ports:
+      - "8080:8080"
+    environment:
+      - KG_AGENT_URL=http://kg-agent:8000
+      - PLANNER_AGENT_URL=http://planner-agent:8001
+      - MULTIAPI_AGENT_URL=http://multiapi-agent:8002
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    depends_on:
+      - kg-agent
+      - planner-agent
+      - multiapi-agent
+    networks:
+      - agents-net
+
+networks:
+  agents-net:
+    driver: bridge
