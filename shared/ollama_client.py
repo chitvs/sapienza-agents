@@ -1,7 +1,11 @@
 import re
 from pathlib import Path
 import requests
-from configs.settings import settings
+
+try:
+    from configs.settings import settings
+except ImportError:
+    settings = None
 
 class OllamaClient:
     """client unificato e condiviso per interagire con le api di ollama."""
@@ -13,11 +17,16 @@ class OllamaClient:
         timeout: float | None = None,
         prompts_dir: Path | str | None = None,
     ):
+        default_host = settings.ollama_host if settings else "http://localhost:11434"
+        default_model = settings.ollama_model if settings else "llama3.2"
+        default_timeout = settings.ollama_timeout if settings else 180.0
+        default_prompts_dir = settings.prompts_dir if settings else None
+
         self.session = None
-        self.host = (host or settings.ollama_host).rstrip("/")
-        self.model_name = model_name or settings.ollama_model
-        self.timeout = timeout or settings.ollama_timeout
-        self.prompts_dir = Path(prompts_dir) if prompts_dir else settings.prompts_dir
+        self.host = (host or default_host).rstrip("/")
+        self.model_name = model_name or default_model
+        self.timeout = timeout or default_timeout
+        self.prompts_dir = Path(prompts_dir) if prompts_dir else default_prompts_dir
         self.session = requests.Session()
 
     def close(self):
@@ -62,7 +71,7 @@ class OllamaClient:
 
         prompt_path = self.prompts_dir / prompt_filename
         if not prompt_path.exists():
-            raise FileNotFoundError(f"File prompt non trovato: {prompt_path}")
+            raise FileNotFoundError(f"file prompt non trovato: {prompt_path}")
 
         template = prompt_path.read_text(encoding="utf-8")
         if kwargs:
@@ -70,7 +79,7 @@ class OllamaClient:
         return template
 
     def generate(self, prompt: str, temperature: float = 0.0) -> str:
-        """invia un prompt al modello Ollama e restituisce la risposta."""
+        """invia un prompt al modello ollama e restituisce la risposta."""
         url = f"{self.host}/api/generate"
         payload = {
             "model": self.model_name,
@@ -85,7 +94,7 @@ class OllamaClient:
         return data.get("response", "").strip()
 
     def chat(self, system_prompt: str, user_content: str, temperature: float = 0.0) -> str:
-        """invia un messaggio chat con un system prompt al modello Ollama."""
+        """invia un messaggio chat con un system prompt al modello ollama."""
         url = f"{self.host}/api/chat"
         payload = {
             "model": self.model_name,

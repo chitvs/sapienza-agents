@@ -28,8 +28,8 @@ class BaseConnector(ABC):
 
     def ground_results(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
-        Risolve gli URI/ID grezzi restituendo etichette leggibili in linguaggio naturale.
-        Di default esamina ciascuna chiave/valore e converte gli URI conosciuti tramite get_entity().
+        risolve gli uri/id grezzi restituendo etichette leggibili in linguaggio naturale.
+        di default esamina ciascuna chiave/valore e converte gli uri conosciuti tramite get_entity().
         """
         grounded_results = []
         resolved: dict[str, str] = {}
@@ -38,7 +38,7 @@ class BaseConnector(ABC):
             for var_name, var_data in row.items():
                 val = var_data.get("value", "") if isinstance(var_data, dict) else str(var_data)
 
-                # se il valore è un URI Wikidata (es. http://www.wikidata.org/entity/Q937)
+                # se il valore è un uri wikidata (es. http://www.wikidata.org/entity/Q937)
                 if "wikidata.org/entity/Q" in val:
                     qid = val.split("/")[-1]
                     if qid in resolved:

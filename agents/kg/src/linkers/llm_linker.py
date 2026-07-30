@@ -1,71 +1,50 @@
 import json
-import ollama
-from connectors.base_connector import BaseConnector
+import logging
 from connectors.wikimedia_connector import WikimediaConnector
 from linkers.base_linker import BaseLinker, LinkedEntity
+from shared.ollama_client import OllamaClient
+
+logger = logging.getLogger(__name__)
 
 class LLMLinker(BaseLinker):
     """
-    Entity Linker generico basato su LLM (Ollama):
-    1. Usa l'LLM per identificare ed estrarre le menzioni di entità nel testo.
-    2. Usa il connettore per risolvere ciascuna menzione nel corrispondente QID del grafo.
+    entity linker zero-shot basato su llm e wikidata:
+    - usa l'llm per identificare ed estrarre le menzioni nel testo in qualsiasi lingua.
+    - esegue la ricerca dei candidati su wikidata via api rest.
     """
 
     def __init__(
         self,
-        connector: BaseConnector | None = None,
-        model_name: str = "llama3.2",
+        connector: WikimediaConnector | None = None,
+        llm_client: OllamaClient | None = None,
+        model_name: str | None = None,
     ):
         self.connector = connector or WikimediaConnector()
-        self.model_name = model_name
+        if llm_client is not None:
+            self.llm_client = llm_client
+        else:
+            self.llm_client = OllamaClient(model_name=model_name)
 
     def _extract_mentions(self, text: str) -> list[str]:
-        prompt = f"""Estrai tutte le menzioni di entità reali (persone, luoghi, organizzazioni, concetti principali) dalla seguente frase.
-Restituisci ESCLUSIVAMENTE un array JSON di stringhe contenente i nomi delle entità estratte.
-
-Esempi:
-Frase: "Qual è la data di nascita di Albert Einstein?"
-Output: ["Albert Einstein"]
-
-Frase: "Chi ha diretto il film Inception?"
-Output: ["Inception"]
-
-Frase: "Quali sono le città principali della Svizzera?"
-Output: ["Svizzera"]
-
-Frase: "{text}"
-Output:"""
-
+        system_prompt = self.llm_client.load_prompt("extract_mentions.txt")
         try:
-            response = ollama.generate(model=self.model_name, prompt=prompt)
-            raw_output = response.get("response", "").strip()
-
-            # gestione sicura dei blocchi di codice markdown ```json ... ```
-            if "```" in raw_output:
-                parts = raw_output.split("```")
-                for part in parts:
-                    part_str = part.strip()
-                    if part_str.startswith("json"):
-                        part_str = part_str[4:].strip()
-                    if part_str.startswith("[") and part_str.endswith("]"):
-                        raw_output = part_str
-                        break
-
-            mentions = json.loads(raw_output)
+            raw_output = self.llm_client.chat(system_prompt=system_prompt, user_content=text, temperature=0.0)
+            cleaned = self.llm_client.clean_code_block(raw_output)
+            mentions = json.loads(cleaned)
             if isinstance(mentions, list):
-                return [str(m).strip() for m in mentions if m]
-        except Exception:
-            pass
+                return [str(m).strip() for m in mentions if str(m).strip()]
+        except Exception as err:
+            logger.warning("estrazione menzioni llm fallita: %s", err)
 
-        return [text]
+        return [text.strip()]
 
     def link(self, text: str) -> list[LinkedEntity]:
-        """Identifica le menzioni con l'LLM e risolve i QID tramite il connettore."""
+        """identifica le menzioni con l'llm e le associa ai qid di wikidata."""
         mentions = self._extract_mentions(text)
         linked_entities = []
 
         for mention in mentions:
-            candidates = self.connector.search_entity(mention, limit=1)
+            candidates = self.connector.search_entity(mention, limit=5)
             if candidates:
                 best_match = candidates[0]
                 linked_entities.append(

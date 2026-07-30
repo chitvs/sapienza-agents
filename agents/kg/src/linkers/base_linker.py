@@ -12,5 +12,5 @@ class BaseLinker(ABC):
 
     @abstractmethod
     def link(self, text: str) -> list[LinkedEntity]:
-        """Estrae e associa le entità menzionate nel testo ai rispettivi QID."""
+        """estrae e associa le entità menzionate nel testo ai rispettivi qid."""
         raise NotImplementedError

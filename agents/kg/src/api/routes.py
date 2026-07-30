@@ -7,10 +7,6 @@ router = APIRouter()
 # istanza globale della pipeline gestita all'avvio dell'applicazione
 _pipeline: KGPipeline | None = None
 
-def set_pipeline(pipeline_instance: KGPipeline):
-    global _pipeline
-    _pipeline = pipeline_instance
-
 def get_pipeline() -> KGPipeline:
     global _pipeline
     if _pipeline is None:
@@ -24,7 +20,7 @@ def health_check():
     if current_pipeline is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Pipeline non inizializzata",
+            detail="pipeline non inizializzata",
         )
     return {"status": "ok", "service": "kg-agent"}
 
@@ -47,5 +43,5 @@ def process_query(request: QueryRequest):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Errore durante l'elaborazione della query: {str(e)}",
+            detail=f"errore durante l'elaborazione della query: {str(e)}",
         )
