@@ -1,17 +1,20 @@
 import re
 from shared.ollama_client import OllamaClient
+from configs.settings import settings
 
 
 class SPARQLTranslator:
-    """traduttore Text2SPARQL basato su LLM (Ollama)."""
+    """traduttore Text2SPARQL basato su LLM (Ollama) con modello dedicato alla traduzione."""
 
     def __init__(self, llm_client: OllamaClient | None = None, model_name: str | None = None, host: str | None = None):
         if llm_client is not None:
             self.llm_client = llm_client
         else:
+            # usa il modello di traduzione dedicato (piu' pesante) per default
+            translation_model = model_name or settings.ollama_translation_model
             self.llm_client = OllamaClient(
                 host=host,
-                model_name=model_name,
+                model_name=translation_model,
             )
 
     @staticmethod
@@ -37,30 +40,29 @@ class SPARQLTranslator:
 
         query = re.sub(r"SELECT\s+(\(?\b(?:COUNT|SUM|AVG|MIN|MAX)\([^)]+\)\)?)\s+WHERE", fix_aggregate_alias, query, flags=re.IGNORECASE)
 
-        # Correggi variabili SELECT non vincolate nel WHERE
-        select_match = re.search(r"SELECT\s+((?:(?:\((?:COUNT|SUM|AVG|MIN|MAX)\([^)]+\)\s+AS\s+\?\w+\)|\?\w+)\s*)+)WHERE", query, re.IGNORECASE)
-        if select_match:
-            select_clause = select_match.group(1)
-            where_body = query[select_match.end():]
-            where_vars = set(re.findall(r"\?\w+", where_body))
-
-            select_vars = re.findall(r"\?\w+", select_clause)
-            for var in select_vars:
-                if var not in where_vars and where_vars:
-                    first_where_var = list(where_vars)[0]
-                    query = query.replace(var, first_where_var)
+        # sposta SERVICE wikibase:label dentro il blocco WHERE se e' stato messo fuori
+        service_pattern = r"(\})\s*(SERVICE\s+wikibase:label\s*\{[^}]*\})\s*$"
+        service_match = re.search(service_pattern, query, re.IGNORECASE | re.DOTALL)
+        if service_match:
+            service_block = service_match.group(2)
+            # rimuovi il SERVICE dalla posizione errata e inseriscilo prima dell'ultima }
+            query = query[:service_match.start()] + "\n  " + service_block + "\n}"
 
         return query
 
     def translate(self, question: str, schema_context: str = "") -> str:
-        system_prompt = self.llm_client.load_prompt("translate_sparql.txt")
-        user_content = f"Domanda: {question}\n\nEvidenze/Contesto:\n{schema_context}"
+        system_prompt = self.llm_client.load_prompt(
+            "translate_sparql.txt",
+            schema=schema_context,
+            question=question,
+        )
 
         raw_output = self.llm_client.chat(
             system_prompt=system_prompt,
-            user_content=user_content,
+            user_content=question,
             temperature=0.0,
         )
 
         cleaned = OllamaClient.clean_code_block(raw_output)
         return self.sanitize_sparql(cleaned)
+

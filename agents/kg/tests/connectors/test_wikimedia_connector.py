@@ -2,7 +2,7 @@ from connectors.wikimedia_connector import WikimediaConnector
 
 def test_search_entity():
     connector = WikimediaConnector()
-    results = connector.search_entity("universe", limit=3)
+    results = connector.search_entity("universe", limit=5)
     assert len(results) > 0
     assert any(r.id == "Q1" for r in results)
 

@@ -40,6 +40,65 @@ class KGPipeline:
             print(msg)
         logger.info(msg)
 
+    def _execute_with_correction(self, current_query: str, question: str) -> tuple[list[dict], str]:
+        """esegue la query con self-correction loop in caso di errore."""
+        raw_results = None
+        last_error = None
+        max_retries = settings.max_correction_retries
+
+        for attempt in range(max_retries + 1):
+            try:
+                raw_results = self.executor.execute(current_query)
+                self._log(f"  -> esecuzione riuscita al tentativo {attempt + 1}. trovate {len(raw_results)} righe grezze.")
+                break
+            except Exception as err:
+                last_error = err
+                self._log(f"  [warn] errore durante l'esecuzione (tentativo {attempt + 1}/{max_retries + 1}): {err}")
+                if attempt < max_retries and self.corrector:
+                    self._log("  [retry] attivazione self-correction loop...")
+                    current_query = self.corrector.correct(
+                        question=question,
+                        failed_query=current_query,
+                        error_message=str(err),
+                    )
+                    self._log("  -> query corretta dal modello:\n" + "\n".join([f"     {line}" for line in current_query.splitlines()]))
+                else:
+                    raise err
+
+        if raw_results is None and last_error is not None:
+            raise last_error
+
+        return raw_results, current_query
+
+    def _validate_and_retry(self, raw_results: list[dict], current_query: str, question: str, schema_context: str) -> tuple[list[dict], str]:
+        """validazione react: se i risultati sono vuoti, rigenera la query con feedback."""
+        if raw_results:
+            return raw_results, current_query
+
+        self._log("\n[info] [step] react validation: risultati vuoti, rigenerazione query con feedback")
+
+        feedback = (
+            f"the previous SPARQL query returned 0 results:\n{current_query}\n\n"
+            f"try a different approach. consider using SERVICE wikibase:label, "
+            f"schema:description, or different properties from the schema context.\n\n"
+            f"schema context:\n{schema_context}"
+        )
+
+        retry_query = self.translator.translate(
+            question=question,
+            schema_context=feedback,
+        )
+        self._log("  -> query rigenerata:\n" + "\n".join([f"     {line}" for line in retry_query.splitlines()]))
+
+        try:
+            retry_results, retry_query = self._execute_with_correction(retry_query, question)
+            if retry_results:
+                return retry_results, retry_query
+        except Exception as err:
+            self._log(f"  [warn] rigenerazione fallita: {err}")
+
+        return raw_results, current_query
+
     def run(self, question: str) -> tuple[list[dict], str]:
         """esegue la pipeline agentica per wikidata con log strutturati."""
         self._log("\n[info] [step] verifica semantic cache")
@@ -68,37 +127,16 @@ class KGPipeline:
         self._log("  -> schema prunato fornito al modello:\n" + "\n".join([f"     {line}" for line in schema_context.splitlines()[:5]]))
 
         # traduzione text2kg
-        self._log(f"\n[info] [step] traduzione text2kg (modello: {settings.ollama_model})")
+        self._log(f"\n[info] [step] traduzione text2kg (modello: {settings.ollama_translation_model})")
         current_query = self.translator.translate(question=question, schema_context=schema_context)
         self._log("  -> query generata:\n" + "\n".join([f"     {line}" for line in current_query.splitlines()]))
 
         # esecuzione query con self-correction loop
         self._log("\n[info] [step] esecuzione query & self-correction loop")
-        raw_results = None
-        last_error = None
-        max_retries = settings.max_correction_retries
+        raw_results, current_query = self._execute_with_correction(current_query, question)
 
-        for attempt in range(max_retries + 1):
-            try:
-                raw_results = self.executor.execute(current_query)
-                self._log(f"  -> esecuzione riuscita al tentativo {attempt + 1}. trovate {len(raw_results)} righe grezze.")
-                break
-            except Exception as err:
-                last_error = err
-                self._log(f"  [warn] errore durante l'esecuzione (tentativo {attempt + 1}/{max_retries + 1}): {err}")
-                if attempt < max_retries and self.corrector:
-                    self._log("  [retry] attivazione self-correction loop...")
-                    current_query = self.corrector.correct(
-                        question=question,
-                        failed_query=current_query,
-                        error_message=str(err),
-                    )
-                    self._log("  -> query corretta dal modello:\n" + "\n".join([f"     {line}" for line in current_query.splitlines()]))
-                else:
-                    raise err
-
-        if raw_results is None and last_error is not None:
-            raise last_error
+        # react validation: rigenera se risultati vuoti
+        raw_results, current_query = self._validate_and_retry(raw_results, current_query, question, schema_context)
 
         # symbol grounding
         self._log("\n[info] [step] symbol grounding & value resolution")

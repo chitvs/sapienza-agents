@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     # impostazioni Ollama
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
-    ollama_timeout: float = 180.0
+    ollama_translation_model: str = "qwen2.5-coder:7b"
+    ollama_timeout: float = 300.0
 
     # impostazioni Wikidata SPARQL
     sparql_endpoint: str = "https://query.wikidata.org/sparql"

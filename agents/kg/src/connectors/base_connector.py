@@ -13,6 +13,7 @@ class EntityData:
     id: str
     label: str
     properties: dict[str, list[str]]
+    description: str = ""
 
 class BaseConnector(ABC):
 

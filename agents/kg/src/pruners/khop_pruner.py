@@ -36,18 +36,30 @@ class KHopPruner:
                     continue
 
                 nodes.append({"id": entity_data.id, "label": entity_data.label})
-                line = f"entità: wd:{entity_data.id} ({entity_data.label})"
+
+                # descrizione prominente dell'entita' come prima riga del contesto
+                desc_str = f" - {entity_data.description}" if getattr(entity_data, "description", "") else ""
+                header = f"entità: wd:{entity_data.id} ({entity_data.label}{desc_str})"
+
+                # la descrizione wikidata e' informazione critica per il modello
+                if getattr(entity_data, "description", ""):
+                    header += f"\ndescrizione wikidata: \"{entity_data.description}\""
 
                 if entity_data.properties:
                     props_sample = list(entity_data.properties.items())[:max_items]
-                    props_str = ", ".join([f"wdt:{p_id} (valori: {vals[:2]})" for p_id, vals in props_sample])
-                    line += f" -> proprietà disponibili: [{props_str}]"
+                    props_formatted = []
+                    for prop_key, vals in props_sample:
+                        p_id = prop_key.split(" ")[0]
+                        props_formatted.append(f"wdt:{p_id} [{prop_key}] (valori: {vals[:2]})")
 
-                    for prop_id, vals in props_sample:
+                    header += f"\nproprietà: [{', '.join(props_formatted)}]"
+
+                    for prop_key, vals in props_sample:
+                        p_id = prop_key.split(" ")[0]
                         for val in vals[:2]:
-                            edges.append({"source": entity_data.id, "prop": prop_id, "target": val})
+                            edges.append({"source": entity_data.id, "prop": p_id, "target": val})
 
-                context_lines.append(line)
+                context_lines.append(header)
 
         if not context_lines:
             for seed_id in seed_entity_ids:

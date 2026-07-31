@@ -16,7 +16,7 @@ class SPARQLExecutor(BaseExecutor):
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "sapienza-agents-bot/1.0 (https://github.com/sapienza-agents; contact@example.com)",
+            "User-Agent": "kg-agent",
             "Accept": "application/sparql-results+json",
         })
 
@@ -30,7 +30,10 @@ class SPARQLExecutor(BaseExecutor):
             )
             response.raise_for_status()
         except requests.HTTPError as e:
-            raise SPARQLExecutionError("HTTP Error", query=query) from e
+            error_detail = f"HTTP {e.response.status_code}" if e.response is not None else "HTTP Error"
+            if e.response is not None:
+                error_detail += f": {e.response.text[:500]}"
+            raise SPARQLExecutionError(error_detail, query=query) from e
         except requests.Timeout as e:
             raise SPARQLExecutionError("timeout superato durante l'esecuzione della query", query=query) from e
         except requests.RequestException as e:

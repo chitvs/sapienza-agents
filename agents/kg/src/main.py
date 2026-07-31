@@ -1,3 +1,13 @@
+import sys
+from pathlib import Path
+
+root_dir = Path(__file__).resolve().parents[3]
+src_dir = Path(__file__).resolve().parent
+if str(root_dir) not in sys.path:
+    sys.path.insert(0, str(root_dir))
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
 from fastapi import FastAPI
 from api.routes import router as api_router
 
