@@ -22,4 +22,8 @@ def test_query():
     assert res.status_code == 200
     data = res.json()
     assert data["count"] > 0
+    assert "confidence" in data
+    assert data["confidence"] == 1.0
+    assert "execution_time_ms" in data
+    assert data["execution_time_ms"] > 0
     assert "1879-03-14" in str(data["results"][0])

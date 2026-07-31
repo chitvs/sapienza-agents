@@ -19,17 +19,19 @@ class ErrorConditionedCorrector:
             return "GENERAL_ERROR"
 
     def correct(self, question: str, failed_query: str, error_message: str) -> str:
-        """corregge la query fallita caricando il prompt di correzione."""
+        """corregge la query fallita caricando il prompt di correzione con la tipologia di errore."""
+        error_type = self.classify_error(error_message)
         system_prompt = self.llm_client.load_prompt(
             "correction.txt",
             question=question,
             failed_query=failed_query,
             error_message=error_message,
+            error_type=error_type,
         )
 
         corrected_raw = self.llm_client.chat(
             system_prompt=system_prompt,
-            user_content=f"Domanda: {question}\nQuery Errata: {failed_query}\nErrore: {error_message}",
+            user_content=f"Domanda: {question}\nTipologia Errore: {error_type}\nQuery Errata: {failed_query}\nErrore: {error_message}",
             temperature=0.0,
         )
         return OllamaClient.clean_code_block(corrected_raw)

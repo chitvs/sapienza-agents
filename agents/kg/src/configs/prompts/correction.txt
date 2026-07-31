@@ -2,11 +2,18 @@ la query sparql precedentemente generata ha prodotto un errore durante l'esecuzi
 
 domanda utente: {question}
 
+tipologia errore: {error_type}
+
 query errata:
 {failed_query}
 
 errore riscontrato:
 {error_message}
 
-il tuo compito è correggere la query sparql per risolvere l'errore riscontrato.
+linee guida per la correzione in base alla tipologia errore ({error_type}):
+- SYNTAX_ERROR: risolvi gli errori di sintassi SPARQL, verifica parentesi graffe, punti e virgole finali e alias delle aggregazioni (es. COUNT(?x) AS ?count).
+- MISSING_PREFIX: assicurati di usare i prefissi corretti (wd: per entità, wdt: per proprietà dirette).
+- TIMEOUT: semplifica la query, rimuovi join non necessari o aggiungi LIMIT.
+- GENERAL_ERROR: verifica la correttezza logica dei tripli SPARQL e la corrispondenza con la domanda.
+
 restituisci esclusivamente il codice sparql corretto (nessun blocco markdown, nessuna spiegazione).

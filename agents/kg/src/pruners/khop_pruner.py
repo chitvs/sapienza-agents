@@ -1,13 +1,7 @@
-from dataclasses import dataclass, field
 from typing import Any
+from pruners.base_pruner import BasePruner, PrunedSchema
 
-@dataclass
-class PrunedSchema:
-    nodes: list[dict[str, Any]] = field(default_factory=list)
-    edges: list[dict[str, Any]] = field(default_factory=list)
-    context_text: str = ""
-
-class KHopPruner:
+class KHopPruner(BasePruner):
     """schema pruner per l'estrazione delle proprietà e delle relazioni dell'entità per l'llm."""
 
     def prune(
@@ -37,28 +31,13 @@ class KHopPruner:
 
                 nodes.append({"id": entity_data.id, "label": entity_data.label})
 
-                # descrizione prominente dell'entita' come prima riga del contesto
-                desc_str = f" - {entity_data.description}" if getattr(entity_data, "description", "") else ""
-                header = f"entità: wd:{entity_data.id} ({entity_data.label}{desc_str})"
-
-                # la descrizione wikidata e' informazione critica per il modello
-                if getattr(entity_data, "description", ""):
-                    header += f"\ndescrizione wikidata: \"{entity_data.description}\""
-
-                if entity_data.properties:
-                    props_sample = list(entity_data.properties.items())[:max_items]
-                    props_formatted = []
-                    for prop_key, vals in props_sample:
-                        p_id = prop_key.split(" ")[0]
-                        props_formatted.append(f"wdt:{p_id} [{prop_key}] (valori: {vals[:2]})")
-
-                    header += f"\nproprietà: [{', '.join(props_formatted)}]"
-
-                    for prop_key, vals in props_sample:
-                        p_id = prop_key.split(" ")[0]
-                        for val in vals[:2]:
-                            edges.append({"source": entity_data.id, "prop": p_id, "target": val})
-
+                props_sample = list(entity_data.properties.items())[:max_items] if entity_data.properties else []
+                header, entity_edges = self.format_entity_context(
+                    entity_data=entity_data,
+                    props_sample=props_sample,
+                    connector_or_client=connector_or_client,
+                )
+                edges.extend(entity_edges)
                 context_lines.append(header)
 
         if not context_lines:

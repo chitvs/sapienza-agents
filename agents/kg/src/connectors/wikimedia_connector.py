@@ -1,30 +1,33 @@
 import time
 import logging
 import requests
+from typing import Any
 from connectors.base_connector import BaseConnector, EntityCandidate, EntityData
 
 logger = logging.getLogger(__name__)
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 
-CORE_PROPERTIES = {
-    "P31", "P279", "P36", "P106", "P569", "P570", "P19", "P20", "P17", "P131",
-    "P27", "P108", "P69", "P463", "P35", "P6", "P39", "P50", "P57", "P161",
-    "P61", "P580", "P582", "P102", "P1376", "P735", "P734"
-}
-
 class WikimediaConnector(BaseConnector):
-    """connettore verso wikidata api rest multilingua con caching in-memory."""
+    """connettore verso wikidata api rest multilingua con caching in-memory a dimensione limitata."""
 
-    def __init__(self, language: str = "en"):
+    def __init__(self, language: str = "en", max_cache_size: int = 1000):
         self.language = language
+        self.max_cache_size = max_cache_size
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "kg-agent",
+            "User-Agent": "kg-agent/1.0 (https://github.com/chitvs/sapienza-agents)",
             "Accept": "application/json",
         })
         self._property_label_cache: dict[str, str] = {}
         self._entity_cache: dict[str, EntityData] = {}
         self._search_cache: dict[str, list[EntityCandidate]] = {}
+
+    def _set_cache_entry(self, cache_dict: dict, key: str, value: Any):
+        """memorizza un elemento in cache rispettando il limite massimo di elementi."""
+        if len(cache_dict) >= self.max_cache_size and key not in cache_dict:
+            first_key = next(iter(cache_dict))
+            del cache_dict[first_key]
+        cache_dict[key] = value
 
     def _get_with_retry(self, params: dict[str, str]) -> requests.Response:
         """esegue richieste get con retry automatico e backoff in caso di rate limiting (HTTP 429)."""
@@ -53,7 +56,7 @@ class WikimediaConnector(BaseConnector):
         raise requests.HTTPError("Numero massimo di tentativi superato per rate limit 429")
 
     def _fetch_property_labels(self, prop_ids: list[str]) -> dict[str, str]:
-        """recupera le etichette delle proprietà wikidata in un'unica chiamata batch HTTP."""
+        """recupera le etichette delle proprietà wikidata in chiamate batch HTTP da 50 elementi."""
         missing = [p for p in prop_ids if p not in self._property_label_cache]
         if not missing:
             return {p: self._property_label_cache[p] for p in prop_ids}
@@ -78,11 +81,11 @@ class WikimediaConnector(BaseConnector):
                             label_val = labels[lang].get("value", "")
                             if label_val:
                                 break
-                    self._property_label_cache[pid] = label_val or pid
+                    self._set_cache_entry(self._property_label_cache, pid, label_val or pid)
             except Exception as err:
                 logger.warning("recupero etichette proprietà fallito: %s", err)
                 for pid in batch:
-                    self._property_label_cache[pid] = pid
+                    self._set_cache_entry(self._property_label_cache, pid, pid)
 
         return {p: self._property_label_cache.get(p, p) for p in prop_ids}
 
@@ -111,14 +114,14 @@ class WikimediaConnector(BaseConnector):
                     description = item.get("description", "")
                     results.append(EntityCandidate(id=entity_id, label=label, description=description))
 
-            self._search_cache[cache_key] = results
+            self._set_cache_entry(self._search_cache, cache_key, results)
             return results
         except Exception as err:
             logger.warning("ricerca entità wikidata fallita per '%s': %s", text, err)
             return []
 
     def get_entity(self, entity_id: str) -> EntityData:
-        """recupera i dati dell'entità sfruttando la cache in-memory."""
+        """recupera i dati completi dell'entità da Wikidata API senza troncamento arbitrario."""
         cache_key = f"{entity_id}:{self.language}"
         if cache_key in self._entity_cache:
             return self._entity_cache[cache_key]
@@ -176,26 +179,19 @@ class WikimediaConnector(BaseConnector):
                     if values:
                         raw_properties[prop_id] = values
 
-            # Ordina le proprietà per prioritizzare le proprietà fondamentali e i valori semantici PRIMA del troncamento a 40
-            def prop_sorter(pid: str):
-                is_core = 0 if pid in CORE_PROPERTIES else 1
-                vals = raw_properties.get(pid, [])
-                has_semantic_val = 0 if any(str(v).startswith("Q") or "-" in str(v) for v in vals) else 1
-                return (is_core, has_semantic_val, pid)
-
-            sorted_pids = sorted(raw_properties.keys(), key=prop_sorter)
-            top_prop_ids = sorted_pids[:40]
-            prop_labels = self._fetch_property_labels(top_prop_ids)
+            # Recupera le etichette per tutte le proprietà dell'entità
+            all_prop_ids = list(raw_properties.keys())
+            prop_labels = self._fetch_property_labels(all_prop_ids)
 
             properties = {}
-            for prop_id in top_prop_ids:
+            for prop_id in all_prop_ids:
                 vals = raw_properties[prop_id]
                 label_text = prop_labels.get(prop_id, prop_id)
                 key_name = f"{prop_id} ({label_text})" if label_text and label_text != prop_id else prop_id
                 properties[key_name] = vals
 
             result = EntityData(id=entity_id, label=label, description=description, properties=properties)
-            self._entity_cache[cache_key] = result
+            self._set_cache_entry(self._entity_cache, cache_key, result)
             return result
         except Exception as err:
             logger.warning("recupero entità wikidata fallito per '%s': %s", entity_id, err)

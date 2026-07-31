@@ -1,12 +1,17 @@
 import logging
 from datetime import datetime, timezone
 from typing import Any
+from connectors.base_connector import BaseConnector
 from connectors.wikimedia_connector import WikimediaConnector
+from linkers.base_linker import BaseLinker
 from linkers.llm_linker import LLMLinker
 from translators.sparql_translator import SPARQLTranslator
+from executors.base_executor import BaseExecutor
 from executors.sparql_executor import SPARQLExecutor
 from correctors.error_conditioned_corrector import ErrorConditionedCorrector
+from pruners.base_pruner import BasePruner
 from pruners.khop_pruner import KHopPruner
+from pruners.relevance_pruner import RelevancePruner
 from cache.semantic_cache import SemanticQueryCache
 from configs.settings import settings
 
@@ -17,20 +22,22 @@ class KGPipeline:
 
     def __init__(
         self,
-        connector: Any = None,
-        linker: Any = None,
-        translator: Any = None,
-        executor: Any = None,
-        pruner: Any = None,
-        corrector: Any = None,
+        connector: BaseConnector | None = None,
+        linker: BaseLinker | None = None,
+        translator: SPARQLTranslator | None = None,
+        executor: BaseExecutor | None = None,
+        pruner: BasePruner | None = None,
+        corrector: ErrorConditionedCorrector | None = None,
         cache: SemanticQueryCache | None = None,
+        target_kg: str = "wikidata",
         verbose: bool = False,
     ):
+        self.target_kg = target_kg
         self.connector = connector or WikimediaConnector()
         self.linker = linker or LLMLinker(connector=self.connector)
         self.translator = translator or SPARQLTranslator()
         self.executor = executor or SPARQLExecutor()
-        self.pruner = pruner or KHopPruner()
+        self.pruner = pruner or RelevancePruner()
         self.corrector = corrector or ErrorConditionedCorrector()
         self.cache = cache or SemanticQueryCache()
         self.verbose = verbose
@@ -146,7 +153,7 @@ class KGPipeline:
         timestamp = datetime.now(timezone.utc).isoformat()
         for row in grounded_results:
             row["_provenance"] = {
-                "source_kg": "wikidata",
+                "source_kg": self.target_kg,
                 "timestamp": timestamp,
             }
 

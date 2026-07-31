@@ -39,20 +39,24 @@ class BaseConnector(ABC):
             for var_name, var_data in row.items():
                 val = var_data.get("value", "") if isinstance(var_data, dict) else str(var_data)
 
-                # se il valore è un uri wikidata (es. http://www.wikidata.org/entity/Q937)
-                if "wikidata.org/entity/Q" in val:
-                    qid = val.split("/")[-1]
-                    if qid in resolved:
-                        grounded_row[var_name] = resolved[qid]
+                # se il valore è un URI di risorsa/entità (es. wikidata QID o DBpedia resource URI)
+                if "wikidata.org/entity/Q" in val or "dbpedia.org/resource/" in val:
+                    entity_id = val.split("/")[-1]
+                    if entity_id in resolved:
+                        grounded_row[var_name] = resolved[entity_id]
                     else:
                         try:
-                            entity = self.get_entity(qid)
+                            entity = self.get_entity(entity_id)
                             resolved_val = entity.label if entity and entity.label else val
-                            resolved[qid] = resolved_val
+                            resolved[entity_id] = resolved_val
                             grounded_row[var_name] = resolved_val
                         except Exception:
-                            resolved[qid] = val
+                            resolved[entity_id] = val
                             grounded_row[var_name] = val
+                elif val.startswith("+") and "T" in val and "Z" in val:
+                    # Formatta date ISO 8601 di Wikidata (es. +1879-03-14T00:00:00Z -> 1879-03-14)
+                    cleaned_date = val.lstrip("+").split("T")[0]
+                    grounded_row[var_name] = cleaned_date
                 else:
                     grounded_row[var_name] = val
 

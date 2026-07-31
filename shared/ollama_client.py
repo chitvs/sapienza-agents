@@ -52,16 +52,15 @@ class OllamaClient:
 
         cleaned = raw_output.strip()
         if "```" in cleaned:
-            parts = cleaned.split("```")
-            for part in parts:
-                part_str = part.strip()
-                if part_str.startswith(("sparql", "cypher", "json", "sql")):
-                    part_str = re.sub(r"^(sparql|cypher|json|sql)\s*", "", part_str, flags=re.IGNORECASE).strip()
-                if part_str:
-                    cleaned = part_str
-                    break
+            # cerca un blocco racchiuso tra ```...```
+            match = re.search(r"```(?:sparql|cypher|json|sql)?\s*(.*?)\s*```", cleaned, flags=re.IGNORECASE | re.DOTALL)
+            if match:
+                return match.group(1).strip()
+            # fallback: se manca il ``` finale
+            match = re.search(r"```(?:sparql|cypher|json|sql)?\s*(.*)", cleaned, flags=re.IGNORECASE | re.DOTALL)
+            if match:
+                return match.group(1).strip()
 
-        cleaned = cleaned.replace("```", "").strip()
         return cleaned
 
     def load_prompt(self, prompt_filename: str, **kwargs) -> str:

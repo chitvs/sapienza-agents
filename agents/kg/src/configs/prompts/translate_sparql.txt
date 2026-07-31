@@ -4,22 +4,31 @@ SPARQL generation rules:
 - use standard Wikidata SPARQL syntax: wd: for entities, wdt: for direct properties, p:/ps:/pq: for qualified statements.
 - ALWAYS include SERVICE wikibase:label to automatically resolve labels and descriptions:
   SERVICE wikibase:label {{{{ bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en,it". }}}}
-- FOR IDENTITY, DESCRIPTION, OR "WHO IS / WHAT IS" QUESTIONS (e.g. "Chi è X?", "Who is X?", "What is X?"):
-  You MUST select the entity description (?description or ?entityDescription) and/or schema:description, NOT just the label or entity name!
-  Example:
-  SELECT ?description WHERE {{{{
-    wd:Q126916 schema:description ?description .
-  }}}}
-  OR:
-  SELECT ?entityLabel ?entityDescription WHERE {{{{
-    BIND(wd:Q126916 AS ?entity)
-    SERVICE wikibase:label {{{{ bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en,it". }}}}
-  }}}}
-- when traversing class hierarchies, use property paths: wdt:P31/wdt:P279* (instance of / subclass of).
-- use OPTIONAL for properties that may not exist.
-- use LIMIT to constrain large result sets.
-- select meaningful variable names that reflect the question's intent.
-- return ONLY raw SPARQL code. no markdown code blocks (no ```), no explanation.
+
+1. FOR AGGREGATION & COUNT QUESTIONS (e.g., "Quanti X...", "How many X...", "Count of X"):
+   - Use COUNT or COUNT(DISTINCT ?var) with an alias, e.g.:
+     SELECT (COUNT(DISTINCT ?item) AS ?count) WHERE {{{{ ... }}}}
+   - For grouped aggregations or top-N questions, use GROUP BY and ORDER BY:
+     SELECT ?categoryLabel (COUNT(?item) AS ?count) WHERE {{{{ ... }}}} GROUP BY ?categoryLabel ORDER BY DESC(?count) LIMIT 10
+
+2. FOR TEMPORAL CONSTRAINTS & QUALIFIED STATEMENTS (e.g., "Who was president in 2015?", "Chi era la carica X nel 2020?"):
+   - Use Wikidata statement reification with p:P... / ps:P... / pq:P... for start time (pq:P580), end time (pq:P582), or point in time (pq:P585).
+   - Filter temporal intervals appropriately using FILTER or date functions when requested.
+
+3. FOR MULTI-HOP RELATIONSHIPS (e.g., "In quale città è nata la moglie di X?", "Where was the spouse of X born?"):
+   - Chain multiple triple patterns across intermediate nodes:
+     wd:Q... wdt:P26 ?spouse . ?spouse wdt:P19 ?birthPlace .
+
+4. FOR IDENTITY, DESCRIPTION, OR "WHO IS / WHAT IS" QUESTIONS (e.g., "Chi è X?", "Who is X?", "What is X?"):
+   - You MUST select the entity description (?description or ?entityDescription) and/or schema:description, NOT just the label or entity name:
+     SELECT ?description WHERE {{{{ wd:Q126916 schema:description ?description . }}}}
+
+5. GENERAL SYNTAX RULES:
+   - when traversing class hierarchies, use property paths: wdt:P31/wdt:P279* (instance of / subclass of).
+   - use OPTIONAL for properties that may not exist.
+   - use LIMIT to constrain large result sets when appropriate.
+   - select meaningful variable names that reflect the question's intent.
+   - return ONLY raw SPARQL code. no markdown code blocks (no ```), no explanation.
 
 Schema context:
 {schema}

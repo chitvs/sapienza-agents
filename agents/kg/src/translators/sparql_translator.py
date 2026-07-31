@@ -29,16 +29,17 @@ class SPARQLTranslator:
         # Assicura che le funzioni di aggregazione nella SELECT abbiano un alias (es. COUNT(?x) -> (COUNT(?x) AS ?count))
         def fix_aggregate_alias(match):
             full_select = match.group(0)
-            expr = match.group(1).strip()
+            prefix_vars = match.group(1)
+            expr = match.group(2).strip()
             if " AS " in expr.upper():
                 return full_select
             if expr.startswith("(") and expr.endswith(")"):
                 expr = expr[1:-1].strip()
             func_match = re.search(r"\b(COUNT|SUM|AVG|MIN|MAX)\b", expr, re.IGNORECASE)
             func_name = func_match.group(1).lower() if func_match else "count"
-            return f"SELECT ({expr} AS ?{func_name}) WHERE"
+            return f"SELECT {prefix_vars}({expr} AS ?{func_name}) WHERE"
 
-        query = re.sub(r"SELECT\s+(\(?\b(?:COUNT|SUM|AVG|MIN|MAX)\([^)]+\)\)?)\s+WHERE", fix_aggregate_alias, query, flags=re.IGNORECASE)
+        query = re.sub(r"SELECT\s+(.*?)(\(?\b(?:COUNT|SUM|AVG|MIN|MAX)\([^)]+\)\)?)\s+WHERE", fix_aggregate_alias, query, flags=re.IGNORECASE)
 
         # sposta SERVICE wikibase:label dentro il blocco WHERE se e' stato messo fuori
         service_pattern = r"(\})\s*(SERVICE\s+wikibase:label\s*\{[^}]*\})\s*$"
