@@ -23,9 +23,9 @@ class SPARQLExecutor(BaseExecutor):
     def execute(self, query: str) -> list[dict]:
         """esegue la query sparql e restituisce i risultati grezzi."""
         try:
-            response = self.session.get(
+            response = self.session.post(
                 self.endpoint,
-                params={"query": query, "format": "json"},
+                data={"query": query, "format": "json"},
                 timeout=self.timeout
             )
             response.raise_for_status()

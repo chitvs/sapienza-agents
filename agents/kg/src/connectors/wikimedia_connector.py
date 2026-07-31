@@ -22,9 +22,10 @@ class WikimediaConnector(BaseConnector):
         self._entity_cache: dict[str, EntityData] = {}
         self._search_cache: dict[str, list[EntityCandidate]] = {}
 
-    def _set_cache_entry(self, cache_dict: dict, key: str, value: Any):
+    def _set_cache_entry(self, cache_dict: dict, key: str, value: Any, max_size: int | None = None):
         """memorizza un elemento in cache rispettando il limite massimo di elementi."""
-        if len(cache_dict) >= self.max_cache_size and key not in cache_dict:
+        limit = max_size or self.max_cache_size
+        if len(cache_dict) >= limit and key not in cache_dict:
             first_key = next(iter(cache_dict))
             del cache_dict[first_key]
         cache_dict[key] = value
@@ -34,7 +35,6 @@ class WikimediaConnector(BaseConnector):
         max_retries = 5
         for attempt in range(max_retries):
             try:
-                time.sleep(0.15)
                 response = self.session.get(WIKIDATA_API, params=params, timeout=15.0)
                 if response.status_code == 429:
                     logger.info("rate limit 429 incontrato, attesa %d s...", 3 * (attempt + 1))
@@ -81,11 +81,11 @@ class WikimediaConnector(BaseConnector):
                             label_val = labels[lang].get("value", "")
                             if label_val:
                                 break
-                    self._set_cache_entry(self._property_label_cache, pid, label_val or pid)
+                    self._set_cache_entry(self._property_label_cache, pid, label_val or pid, max_size=10000)
             except Exception as err:
                 logger.warning("recupero etichette proprietà fallito: %s", err)
                 for pid in batch:
-                    self._set_cache_entry(self._property_label_cache, pid, pid)
+                    self._set_cache_entry(self._property_label_cache, pid, pid, max_size=10000)
 
         return {p: self._property_label_cache.get(p, p) for p in prop_ids}
 

@@ -10,11 +10,10 @@ class RelevancePruner(BasePruner):
     """
 
     @staticmethod
-    def score_property(question: str, prop_key: str, values: list[Any]) -> float:
-        if not question:
+    def score_property(q_tokens: set[str], prop_key: str, values: list[Any]) -> float:
+        if not q_tokens:
             return 0.0
 
-        q_tokens = set(re.findall(r"\w+", question.lower()))
         p_tokens = set(re.findall(r"\w+", prop_key.lower()))
 
         # Sovrapposizione diretta dei token
@@ -62,6 +61,7 @@ class RelevancePruner(BasePruner):
         visited_ids = set()
 
         if connector_or_client and hasattr(connector_or_client, "get_entity"):
+            q_tokens = set(re.findall(r"\w+", question.lower())) if question else set()
             for seed_id in seed_entity_ids:
                 if seed_id in visited_ids:
                     continue
@@ -77,7 +77,7 @@ class RelevancePruner(BasePruner):
                     # Ordina le proprietà in base alla rilevanza semantica rispetto alla domanda
                     scored_props = sorted(
                         entity_data.properties.items(),
-                        key=lambda item: self.score_property(question, item[0], item[1]),
+                        key=lambda item: self.score_property(q_tokens, item[0], item[1]),
                         reverse=True,
                     )
                     props_sample = scored_props[:max_items]
