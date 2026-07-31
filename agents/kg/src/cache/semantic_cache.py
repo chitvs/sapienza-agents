@@ -25,7 +25,7 @@ class SemanticQueryCache:
     def set(self, question: str, query: str, results: list[dict]):
         """memorizza la query e i risultati per la domanda specificata."""
         key = self._normalize_key(question)
-        if len(self._cache) >= self.capacity:
+        if key not in self._cache and len(self._cache) >= self.capacity:
             # rimuovi il primo elemento in stile FIFO
             first_key = next(iter(self._cache))
             del self._cache[first_key]

@@ -71,7 +71,7 @@ class LLMLinker(BaseLinker):
         # Fallback 2: rimozione stopword generali
         clean_text = re.sub(r"[?!.,;:]", "", text)
         words = clean_text.split()
-        stopwords = {"what", "who", "where", "when", "which", "how", "is", "are", "the", "a", "an", "of", "in", "on", "to", "for", "chi", "cosa", "qual", "quale", "dove", "quando", "il", "la", "le", "i", "gli", "un", "una", "di", "del", "della", "degli", "dei", "in", "da", "con", "su", "per", "tra", "fra"}
+        stopwords = {"what", "who", "where", "when", "which", "how", "is", "are", "the", "a", "an", "of", "in", "on", "to", "for", "chi", "cosa", "qual", "quale", "dove", "quando", "il", "la", "le", "i", "gli", "un", "una", "di", "del", "della", "degli", "dei", "da", "con", "su", "per", "tra", "fra"}
         candidates = [w for w in words if w.lower() not in stopwords]
         if candidates:
             return [" ".join(candidates)]

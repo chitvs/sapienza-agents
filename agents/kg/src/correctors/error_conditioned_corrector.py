@@ -1,4 +1,5 @@
 from shared.ollama_client import OllamaClient
+from translators.sparql_translator import SPARQLTranslator
 
 class ErrorConditionedCorrector:
     """correttore guidato da classificazione errori e re-prompting llm."""
@@ -34,4 +35,5 @@ class ErrorConditionedCorrector:
             user_content=f"Domanda: {question}\nTipologia Errore: {error_type}\nQuery Errata: {failed_query}\nErrore: {error_message}",
             temperature=0.0,
         )
-        return OllamaClient.clean_code_block(corrected_raw)
+        cleaned = OllamaClient.clean_code_block(corrected_raw)
+        return SPARQLTranslator.sanitize_sparql(cleaned)
