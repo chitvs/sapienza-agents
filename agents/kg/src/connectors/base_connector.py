@@ -37,12 +37,17 @@ class BaseConnector(ABC):
         for row in raw_results:
             grounded_row = {}
             for var_name, var_data in row.items():
-                val = var_data.get("value", "") if isinstance(var_data, dict) else str(var_data)
+                if isinstance(var_data, dict):
+                    val = var_data.get("value", "")
+                else:
+                    val = str(var_data)
 
                 # se il valore è un URI di risorsa/entità (es. wikidata QID o DBpedia resource URI)
                 if "wikidata.org/entity/Q" in val or "dbpedia.org/resource/" in val:
                     entity_id = val.split("/")[-1]
-                    if entity_id in resolved:
+                    if hasattr(self, "_entity_cache") and entity_id in getattr(self, "_entity_cache", {}):
+                        grounded_row[var_name] = self._entity_cache[entity_id]
+                    elif entity_id in resolved:
                         grounded_row[var_name] = resolved[entity_id]
                     else:
                         try:

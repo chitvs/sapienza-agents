@@ -40,4 +40,6 @@ class SPARQLExecutor(BaseExecutor):
             raise SPARQLExecutionError(f"errore di connessione: {str(e)}", query=query) from e
 
         data = response.json()
+        if "boolean" in data:
+            return [{"boolean": data["boolean"]}]
         return data.get("results", {}).get("bindings", [])

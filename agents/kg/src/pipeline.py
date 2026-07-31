@@ -62,6 +62,13 @@ class KGPipeline:
                 last_error = err
                 self._log(f"  [warn] errore durante l'esecuzione (tentativo {attempt + 1}/{max_retries + 1}): {err}")
                 if attempt < max_retries and self.corrector:
+                    import time
+                    err_str = str(err).lower()
+                    if "429" in err_str or "timeout" in err_str or "rate limit" in err_str:
+                        self._log(f"  [retry] rate limit o timeout rilevato, attesa {2.0 * (attempt + 1)}s...")
+                        time.sleep(2.0 * (attempt + 1))
+                        continue
+                    
                     self._log("  [retry] attivazione self-correction loop...")
                     current_query = self.corrector.correct(
                         question=question,

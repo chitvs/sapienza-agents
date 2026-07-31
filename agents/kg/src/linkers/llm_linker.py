@@ -57,7 +57,7 @@ class LLMLinker(BaseLinker):
             cleaned = self.llm_client.clean_code_block(raw_output)
             mentions = json.loads(cleaned)
             if isinstance(mentions, list):
-                valid = [str(m).strip() for m in mentions if str(m).strip() and str(m).strip().lower() in text.lower()]
+                valid = [str(m).strip() for m in mentions if str(m).strip()]
                 if valid:
                     return valid
         except Exception as err:

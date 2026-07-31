@@ -1,3 +1,4 @@
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
@@ -43,7 +44,7 @@ class BasePruner(ABC):
                 formatted_vals = []
                 for val in vals[:2]:
                     val_str = str(val)
-                    if val_str.startswith("Q") and connector_or_client and hasattr(connector_or_client, "get_entity"):
+                    if re.match(r"^Q\d+$", val_str) and connector_or_client and hasattr(connector_or_client, "get_entity"):
                         try:
                             val_ent = connector_or_client.get_entity(val_str)
                             if val_ent and val_ent.label:

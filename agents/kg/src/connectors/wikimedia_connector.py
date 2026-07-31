@@ -37,6 +37,8 @@ class WikimediaConnector(BaseConnector):
             try:
                 response = self.session.get(WIKIDATA_API, params=params, timeout=15.0)
                 if response.status_code == 429:
+                    if attempt == max_retries - 1:
+                        response.raise_for_status()
                     logger.info("rate limit 429 incontrato, attesa %d s...", 3 * (attempt + 1))
                     time.sleep(3.0 * (attempt + 1))
                     continue
@@ -104,8 +106,7 @@ class WikimediaConnector(BaseConnector):
             "limit": limit,
         }
         try:
-            response = self._get_with_retry(params)
-            data = response.json()
+            data = self._get_with_retry(params)
             results = []
             if "search" in data:
                 for item in data["search"]:
