@@ -42,12 +42,15 @@ class SPARQLTranslator:
         query = re.sub(r"SELECT\s+(.*?)(\(?\b(?:COUNT|SUM|AVG|MIN|MAX)\([^)]+\)\)?)\s+WHERE", fix_aggregate_alias, query, flags=re.IGNORECASE)
 
         # sposta SERVICE wikibase:label dentro il blocco WHERE se e' stato messo fuori
-        service_pattern = r"(\})\s*(SERVICE\s+wikibase:label\s*\{[^}]*\})\s*$"
+        service_pattern = r"(\})\s*(SERVICE\s+wikibase:label\s*\{[^}]*\})\s*(.*)$"
         service_match = re.search(service_pattern, query, re.IGNORECASE | re.DOTALL)
         if service_match:
             service_block = service_match.group(2)
+            after_service = service_match.group(3).strip()
             # rimuovi il SERVICE dalla posizione errata e inseriscilo prima dell'ultima }
             query = query[:service_match.start()] + "\n  " + service_block + "\n}"
+            if after_service:
+                query += "\n" + after_service
 
         return query
 

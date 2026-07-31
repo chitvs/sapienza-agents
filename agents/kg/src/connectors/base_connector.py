@@ -53,7 +53,7 @@ class BaseConnector(ABC):
                         except Exception:
                             resolved[entity_id] = val
                             grounded_row[var_name] = val
-                elif val.startswith("+") and "T" in val and "Z" in val:
+                elif val.startswith(("+", "-")) and "T" in val and "Z" in val:
                     # Formatta date ISO 8601 di Wikidata (es. +1879-03-14T00:00:00Z -> 1879-03-14)
                     cleaned_date = val.lstrip("+").split("T")[0]
                     grounded_row[var_name] = cleaned_date
