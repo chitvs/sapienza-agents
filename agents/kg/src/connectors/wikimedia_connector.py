@@ -106,7 +106,8 @@ class WikimediaConnector(BaseConnector):
             "limit": limit,
         }
         try:
-            data = self._get_with_retry(params)
+            response = self._get_with_retry(params)
+            data = response.json()
             results = []
             if "search" in data:
                 for item in data["search"]:
