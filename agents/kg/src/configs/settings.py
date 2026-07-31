@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # impostazioni Ollama
     ollama_host: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2"
+    ollama_model: str = "qwen2.5-coder:7b"
     ollama_translation_model: str = "qwen2.5-coder:7b"
     ollama_timeout: float = 300.0
 
