@@ -31,6 +31,8 @@ services:
     container_name: multiapi-agent
     ports:
       - "8002:8002"
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
     networks:
       - agents-net
 
