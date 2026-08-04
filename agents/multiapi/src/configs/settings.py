@@ -23,5 +23,8 @@ class Settings(BaseSettings):
     open_meteo_geocoding_url: str = "https://geocoding-api.open-meteo.com/v1/search"
     open_meteo_forecast_url: str = "https://api.open-meteo.com/v1/forecast"
 
+    #cambio valuta (senza api key)
+    frankfurter_base_url: str = "https://api.frankfurter.app"
+
 
 settings = Settings()
