@@ -36,7 +36,7 @@ class ExchangeProvider:
             res = self.session.get(
                 f"{settings.frankfurter_base_url}/latest",
                 params={"from": from_currency, "to": to_currency},
-                timeout=10,
+                timeout=20,
             )
             res.raise_for_status()
             data = res.json()

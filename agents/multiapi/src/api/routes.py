@@ -8,7 +8,7 @@ router = APIRouter()
 pipeline = MultiApiPipeline(verbose=True)
 """Creo la pipeline una sola volta quando parte il server e non ad ogni richiesta """
 
-#Definisco i 2 endpoint HTTP: healt e query
+#Definisco i 2 endpoint HTTP: health e query
 
 @router.get("/health")
 def health_check():

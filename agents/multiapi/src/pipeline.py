@@ -2,23 +2,31 @@ import json
 import re
 import logging
 from typing import Any
-from pathlib import Path
 
 import requests
 
 from configs.settings import settings
 from providers.weather_provider import WeatherProvider
 from providers.exchange_provider import ExchangeProvider
+from cache.response_cache import ResponseCache
+from correctors.llm_response_corrector import LlmResponseCorrector
 
 logger = logging.getLogger("multiapi_pipeline")
 
 
 class MultiApiPipeline:
-    """pipeline dell'agente multiapi: classifica l'intent, estrae i parametri e chiama il provider giusto."""
+    """pipeline dell'agente multiapi: classifica l'intent, estrae i parametri e chiama il provider giusto.
+
+    Integra:
+    - cache in-memory per evitare chiamate duplicate
+    - corrector per riprovare quando il LLM non restituisce JSON valido
+    """
 
     def __init__(self, verbose: bool = False):
         self.weather = WeatherProvider()
         self.exchange = ExchangeProvider()
+        self.cache = ResponseCache(capacity=settings.cache_capacity)
+        self.corrector = LlmResponseCorrector(max_retries=settings.max_llm_retries)
         self.verbose = verbose
         self._prompts_cache: dict[str, str] = {}
 
@@ -66,7 +74,10 @@ class MultiApiPipeline:
         return self._prompts_cache[filename]
 
     def _llm_extract_json(self, prompt_file: str, question: str) -> dict | None:
-        """helper generico: carica un prompt, lo invia al llm, parsa il json di risposta."""
+        """helper generico: carica un prompt, lo invia al llm, parsa il json di risposta.
+
+        Se il parse fallisce, attiva il corrector per riprovare con feedback.
+        """
         template = self._load_prompt(prompt_file)
         prompt = template.format(question=question)
         raw = self._llm_generate(prompt)
@@ -76,8 +87,13 @@ class MultiApiPipeline:
         try:
             return json.loads(cleaned)
         except (json.JSONDecodeError, AttributeError):
-            self._log(f"  [warn] impossibile parsare json: {cleaned}")
-            return None
+            self._log("  [warn] json non valido, attivazione corrector...")
+            return self.corrector.extract_json_with_retry(
+                llm_generate_fn=self._llm_generate,
+                clean_json_fn=self._clean_json,
+                original_prompt=prompt,
+                failed_response=raw,
+            )
 
     # ----- classificatore di intent -----
 
@@ -123,7 +139,7 @@ class MultiApiPipeline:
         self._log("  [warn] estrazione valute fallita")
         return {"from_currency": None, "to_currency": None}
 
-    # ----- pipeline -----
+    # ----- rami della pipeline -----
 
     def _run_weather(self, question: str) -> list[dict[str, Any]]:
         """esegue il ramo weather della pipeline."""
@@ -155,19 +171,33 @@ class MultiApiPipeline:
             self._log(f"  -> tasso recuperato: {params['from_currency']}/{params['to_currency']} = {result.get('rates')}")
         return [result]
 
+    # ----- pipeline principale -----
+
     def run(self, question: str) -> tuple[list[dict[str, Any]], str]:
-        """esegue la pipeline: classifica intent -> estrai parametri -> chiama provider -> risultati.
+        """esegue la pipeline: cache check -> classifica intent -> estrai parametri -> chiama provider.
 
         Returns:
             tupla (lista risultati, intent string).
         """
+        # step 0: controlla la cache
+        cached = self.cache.get(question)
+        if cached:
+            self._log("\n[info] [step] cache hit! risultati trovati in cache")
+            return cached["results"], cached["intent"]
+
+        # step 1: classifica intent
         intent = self._classify_intent(question)
 
+        # step 2: esegui il ramo appropriato
         if intent == "weather":
             results = self._run_weather(question)
         elif intent == "exchange_rate":
             results = self._run_exchange(question)
         else:
             results = [{"error": f"Intent '{intent}' non supportato. Prova con domande su meteo o tassi di cambio."}]
+
+        # step 3: salva in cache (solo se non c'è errore)
+        if results and "error" not in results[0]:
+            self.cache.set(question, intent, results)
 
         return results, intent

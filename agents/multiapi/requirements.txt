@@ -3,3 +3,4 @@ uvicorn>=0.52.0
 pydantic>=2.13.4
 pydantic-settings>=2.14.2
 requests>=2.34.2
+pytest>=9.1.1
