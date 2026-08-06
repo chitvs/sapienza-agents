@@ -17,10 +17,13 @@ class Settings(BaseSettings):
     # ollama
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
-    ollama_timeout: float = 180.0
+    ollama_timeout: float = 600.0
 
     # pipeline: dominio di fallback se la classificazione fallisce o restituisce 'unknown'
     default_domain: str = "routine"
+
+    # pipeline: numero massimo di tentativi di correzione se il draft non supera la validazione logica
+    max_draft_retries: int = 2
 
 
 settings = Settings()

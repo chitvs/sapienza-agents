@@ -4,9 +4,11 @@ import re
 import time
 
 import requests
+from pydantic import ValidationError
 
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse
 from configs.settings import settings
+from validators import validate_draft
 
 logger = logging.getLogger("planner_pipeline")
 
@@ -112,17 +114,39 @@ class PlannerPipeline:
 
     # ----- fase 2: drafting -----
 
-    def _draft(self, request: QueryRequest, domain: PlanDomain) -> dict:
-        """genera la bozza del piano via llm, con prompt specializzato per dominio."""
+    def _draft(self, request: QueryRequest, domain: PlanDomain) -> tuple[dict, int]:
+        """genera la bozza del piano via llm, con prompt specializzato per dominio.
+
+        Se il validatore logico segnala errori (durate/orari inconsistenti, day_index non
+        sequenziali, ecc.), tenta fino a `settings.max_draft_retries` correzioni: rimanda al
+        modello la bozza rotta e i relativi errori, chiedendogli di correggerla (stesso
+        pattern di self-correction usato da kg-agent per le query SPARQL).
+
+        Restituisce una tupla (draft, tentativi_di_correzione_usati) - il secondo valore
+        alimenta l'euristica di confidence in _finalize.
+        """
         self._log(f"\n[info] [step] drafting piano (dominio={domain})")
-        prompt_file = _DRAFT_PROMPTS[domain]
-        data = self._llm_extract_json(prompt_file, question=request.question)
+        draft = self._llm_extract_json(_DRAFT_PROMPTS[domain], question=request.question)
+        errors = validate_draft(draft, domain)
 
-        if data and "days" in data:
-            return data
+        attempt = 0
+        while errors and attempt < settings.max_draft_retries:
+            attempt += 1
+            self._log(f"  [warn] draft non conforme (tentativo correzione {attempt}/{settings.max_draft_retries}): {errors}")
+            draft = self._llm_extract_json(
+                "correct_draft.txt",
+                question=request.question,
+                errors="; ".join(errors),
+                broken_json=json.dumps(draft, ensure_ascii=False) if draft else "null",
+            )
+            errors = validate_draft(draft, domain)
 
-        self._log("  [warn] drafting fallito o incompleto, restituisco struttura vuota")
-        return {"title": request.question, "days": []}
+        if errors:
+            self._log(f"  [warn] drafting fallito dopo {attempt} correzioni, restituisco struttura vuota. Errori residui: {errors}")
+            return {"title": request.question, "days": []}, attempt
+
+        self._log(f"  -> draft valido{f' dopo {attempt} correzioni' if attempt else ' al primo tentativo'}")
+        return draft, attempt
 
     # ----- fase 3: enrichment (placeholder) -----
 
@@ -144,9 +168,20 @@ class PlannerPipeline:
 
     # ----- fase 4: finalizzazione -----
 
-    def _finalize(self, request: QueryRequest, domain: PlanDomain, draft: dict, elapsed_ms: float) -> QueryResponse:
-        days = [PlanDay(**d) for d in draft.get("days", [])]
-        confidence = 1.0 if days else 0.0
+    def _finalize(
+        self, request: QueryRequest, domain: PlanDomain, draft: dict, elapsed_ms: float, draft_attempts: int
+    ) -> QueryResponse:
+        try:
+            days = [PlanDay(**d) for d in draft.get("days", [])]
+        except ValidationError as err:
+            # rete di sicurezza: il validatore logico opera sul dict grezzo e non copre
+            # ogni possibile disallineamento di tipo con lo schema Pydantic; se succede
+            # comunque, non far esplodere la richiesta con un 500, restituisci un piano
+            # vuoto a bassa confidence (coerente con un drafting fallito).
+            self._log(f"  [warn] validazione pydantic fallita in finalize nonostante il validatore logico: {err}")
+            days = []
+
+        confidence = 0.0 if not days else round(max(0.5, 1.0 - 0.25 * draft_attempts), 2)
 
         return QueryResponse(
             question=request.question,
@@ -165,8 +200,8 @@ class PlannerPipeline:
         start_time = time.time()
 
         domain = self._classify_domain(request)
-        draft = self._draft(request, domain)
+        draft, draft_attempts = self._draft(request, domain)
         enriched = self._enrich(draft, request)
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
 
-        return self._finalize(request, domain, enriched, elapsed_ms)
+        return self._finalize(request, domain, enriched, elapsed_ms, draft_attempts)
