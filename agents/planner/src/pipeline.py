@@ -10,6 +10,13 @@ from configs.settings import settings
 
 logger = logging.getLogger("planner_pipeline")
 
+# mapping dominio -> prompt di drafting specializzato (punto 3 della roadmap)
+_DRAFT_PROMPTS: dict[str, str] = {
+    "study": "draft_study.txt",
+    "travel": "draft_travel.txt",
+    "routine": "draft_routine.txt",
+}
+
 
 class PlannerPipeline:
     """pipeline dell'agente planner: classifica il dominio, genera una bozza del piano,
@@ -29,8 +36,15 @@ class PlannerPipeline:
 
     # -- llm helpers (stesso pattern di multiapi, self-contained) ----
 
-    def _llm_generate(self, prompt: str, temperature: float = 0.0) -> str:
-        """chiama ollama /api/generate e restituisce la risposta grezza."""
+    def _llm_generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
+        """chiama ollama /api/generate e restituisce la risposta grezza.
+
+        json_mode attiva il vincolo nativo di ollama (`format: "json"`), che forza il
+        decoding a produrre testo JSON sintatticamente valido. Va usato IN AGGIUNTA alle
+        istruzioni nel prompt, non al loro posto: garantisce che l'output sia json valido,
+        non che contenga i campi attesi con i tipi giusti (quello resta compito della
+        validazione Pydantic a valle).
+        """
         url = f"{settings.ollama_host.rstrip('/')}/api/generate"
         payload = {
             "model": settings.ollama_model,
@@ -38,6 +52,9 @@ class PlannerPipeline:
             "stream": False,
             "options": {"temperature": temperature},
         }
+        if json_mode:
+            payload["format"] = "json"
+
         resp = requests.post(url, json=payload, timeout=settings.ollama_timeout)
         resp.raise_for_status()
         return resp.json().get("response", "").strip()
@@ -65,7 +82,7 @@ class PlannerPipeline:
         """helper generico: carica un prompt, lo invia al llm, parsa il json di risposta."""
         template = self._load_prompt(prompt_file)
         prompt = template.format(**format_kwargs)
-        raw = self._llm_generate(prompt)
+        raw = self._llm_generate(prompt, json_mode=True)
         cleaned = self._clean_json(raw)
         self._log(f"  -> risposta llm grezza: {raw}")
 
@@ -96,14 +113,10 @@ class PlannerPipeline:
     # ----- fase 2: drafting -----
 
     def _draft(self, request: QueryRequest, domain: PlanDomain) -> dict:
-        """genera la bozza grezza del piano via llm.
-
-        NB: prompt volutamente generico in questa fase - la scomposizione task-specific
-        per dominio e la gestione rigorosa dei vincoli temporali sono oggetto del punto 3
-        della roadmap (prompt engineering dedicato).
-        """
+        """genera la bozza del piano via llm, con prompt specializzato per dominio."""
         self._log(f"\n[info] [step] drafting piano (dominio={domain})")
-        data = self._llm_extract_json("draft_generic.txt", question=request.question, domain=domain)
+        prompt_file = _DRAFT_PROMPTS[domain]
+        data = self._llm_extract_json(prompt_file, question=request.question)
 
         if data and "days" in data:
             return data
