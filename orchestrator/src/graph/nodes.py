@@ -7,7 +7,7 @@ from src.config import settings
 from src.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
-llm = ChatOllama(base_url=settings.ollama_host, model=settings.ollama_model, temperature=0.0)
+llm = ChatOllama(base_url=settings.ollama_host, model=settings.ollama_model, temperature=0.0, format="json")
 
 async def supervisor_node(state: AgentState) -> dict:
     """nodo supervisor: analizza la domanda e seleziona gli agenti da attivare."""
@@ -17,18 +17,17 @@ async def supervisor_node(state: AgentState) -> dict:
         "Sei il supervisor di un sistema multi-agente. Analizza la domanda e decidi quali agenti attivare.\n"
         "Agenti disponibili:\n"
         "- 'kg_agent': per domande su entità, relazioni strutturate, fatti e conoscenze.\n"
-        "- 'planner_agent': per attività di pianificazione, scomposizione o piani complessi.\n"
+        "- 'planner_agent': per attività di pianificazione, scomposizione o piani complessi, quali creare un piano, un itinerario, una routine, un programma di studio.\n"
         "- 'multiapi_agent': per chiamate e integrazioni multi-API esterne.\n"
-        "Rispondi esclusivamente con un JSON array contenente i nomi degli agenti necessari, es: [\"kg_agent\"] oppure [\"planner_agent\", \"multiapi_agent\"]."
+        "Rispondi esclusivamente con un oggetto JSON in questo formato: {\"selected_agents\": [\"nome_agente\"]}"
     )
 
     response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=question)])
 
     try:
         content = response.content.strip()
-        if "```" in content:
-            content = content.split("```")[1].replace("json", "").strip()
-        selected = json.loads(content)
+        parsed_data = json.loads(content)
+        selected = parsed_data.get("selected_agents", [])
         if not isinstance(selected, list):
             selected = []
     except Exception as err:
@@ -50,7 +49,7 @@ async def kg_node(state: AgentState) -> dict:
 
 async def planner_node(state: AgentState) -> dict:
     """nodo che invoca direttamente il microservizio planner-agent via HTTP REST."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=600.0) as client:
         try:
             res = await client.post(f"{settings.planner_agent_url}/query", json={"question": state["question"]})
             res.raise_for_status()
