@@ -1,14 +1,14 @@
 from fastapi.testclient import TestClient
 from main import app
 import pytest
-import requests
+import httpx
 
 client = TestClient(app)
 
 
 def is_ollama_running():
     try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
+        return httpx.get("http://localhost:11434/", timeout=1).status_code == 200
     except Exception:
         return False
 
@@ -49,4 +49,4 @@ def test_query_domain_hint_bypasses_classification():
     """domain_hint deve saltare la classificazione; il drafting resta comunque a carico del llm."""
     res = client.post("/query", json={"question": "Struttura le mie giornate lavorative", "domain_hint": "routine"})
     assert res.status_code == 200
-    assert res.json()["domain"] == "routine"    
+    assert res.json()["domain"] == "routine"

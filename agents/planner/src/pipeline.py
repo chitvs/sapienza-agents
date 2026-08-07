@@ -3,7 +3,7 @@ import logging
 import re
 import time
 
-import requests
+import httpx
 from pydantic import ValidationError
 
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse
@@ -38,8 +38,8 @@ class PlannerPipeline:
 
     # -- llm helpers (stesso pattern di multiapi, self-contained) ----
 
-    def _llm_generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
-        """chiama ollama /api/generate e restituisce la risposta grezza.
+    async def _llm_generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
+        """chiama ollama /api/generate (in modo non bloccante) e restituisce la risposta grezza.
 
         json_mode attiva il vincolo nativo di ollama (`format: "json"`), che forza il
         decoding a produrre testo JSON sintatticamente valido. Va usato IN AGGIUNTA alle
@@ -57,9 +57,10 @@ class PlannerPipeline:
         if json_mode:
             payload["format"] = "json"
 
-        resp = requests.post(url, json=payload, timeout=settings.ollama_timeout)
-        resp.raise_for_status()
-        return resp.json().get("response", "").strip()
+        async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+            return resp.json().get("response", "").strip()
 
     @staticmethod
     def _clean_json(raw: str) -> str:
@@ -80,11 +81,11 @@ class PlannerPipeline:
             self._prompts_cache[filename] = path.read_text(encoding="utf-8")
         return self._prompts_cache[filename]
 
-    def _llm_extract_json(self, prompt_file: str, **format_kwargs) -> dict | None:
+    async def _llm_extract_json(self, prompt_file: str, **format_kwargs) -> dict | None:
         """helper generico: carica un prompt, lo invia al llm, parsa il json di risposta."""
         template = self._load_prompt(prompt_file)
         prompt = template.format(**format_kwargs)
-        raw = self._llm_generate(prompt, json_mode=True)
+        raw = await self._llm_generate(prompt, json_mode=True)
         cleaned = self._clean_json(raw)
         self._log(f"  -> risposta llm grezza: {raw}")
 
@@ -96,13 +97,13 @@ class PlannerPipeline:
 
     # ----- fase 1: classificazione del dominio -----
 
-    def _classify_domain(self, request: QueryRequest) -> PlanDomain:
+    async def _classify_domain(self, request: QueryRequest) -> PlanDomain:
         if request.domain_hint is not None:
             self._log(f"[info] dominio forzato da domain_hint: {request.domain_hint}")
             return request.domain_hint
 
         self._log("\n[info] [step] classificazione dominio via llm")
-        data = self._llm_extract_json("classify_domain.txt", question=request.question)
+        data = await self._llm_extract_json("classify_domain.txt", question=request.question)
 
         domain = data.get("domain") if data else None
         if domain in ("study", "travel", "routine"):
@@ -114,7 +115,7 @@ class PlannerPipeline:
 
     # ----- fase 2: drafting -----
 
-    def _draft(self, request: QueryRequest, domain: PlanDomain) -> tuple[dict, int]:
+    async def _draft(self, request: QueryRequest, domain: PlanDomain) -> tuple[dict, int]:
         """genera la bozza del piano via llm, con prompt specializzato per dominio.
 
         Se il validatore logico segnala errori (durate/orari inconsistenti, day_index non
@@ -126,14 +127,14 @@ class PlannerPipeline:
         alimenta l'euristica di confidence in _finalize.
         """
         self._log(f"\n[info] [step] drafting piano (dominio={domain})")
-        draft = self._llm_extract_json(_DRAFT_PROMPTS[domain], question=request.question)
+        draft = await self._llm_extract_json(_DRAFT_PROMPTS[domain], question=request.question)
         errors = validate_draft(draft, domain)
 
         attempt = 0
         while errors and attempt < settings.max_draft_retries:
             attempt += 1
             self._log(f"  [warn] draft non conforme (tentativo correzione {attempt}/{settings.max_draft_retries}): {errors}")
-            draft = self._llm_extract_json(
+            draft = await self._llm_extract_json(
                 "correct_draft.txt",
                 question=request.question,
                 errors="; ".join(errors),
@@ -196,11 +197,11 @@ class PlannerPipeline:
 
     # ----- entrypoint pubblico -----
 
-    def run(self, request: QueryRequest) -> QueryResponse:
+    async def run(self, request: QueryRequest) -> QueryResponse:
         start_time = time.time()
 
-        domain = self._classify_domain(request)
-        draft, draft_attempts = self._draft(request, domain)
+        domain = await self._classify_domain(request)
+        draft, draft_attempts = await self._draft(request, domain)
         enriched = self._enrich(draft, request)
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
 

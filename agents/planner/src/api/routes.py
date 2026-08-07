@@ -13,8 +13,8 @@ def health_check():
 
 
 @router.post("/query", response_model=QueryResponse)
-def query_planner(request: QueryRequest):
+async def query_planner(request: QueryRequest):
     try:
-        return pipeline.run(request)
+        return await pipeline.run(request)
     except Exception as err:
         raise HTTPException(status_code=500, detail=str(err))
