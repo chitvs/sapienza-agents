@@ -4,7 +4,6 @@ from configs.settings import settings
 def test_defaults():
     assert settings.ollama_host == "http://localhost:11434"
     assert settings.ollama_model == "llama3.2"
-    assert settings.default_domain == "routine"
     assert settings.max_draft_retries >= 1
 
 

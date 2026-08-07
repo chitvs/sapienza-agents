@@ -1,5 +1,9 @@
 """
-Schema Pydantic per l'agente Planner.
+Schema Pydantic per l'agente Planner (Minerva).
+Percorso di destinazione previsto: agents/planner/src/api/schemas.py
+
+Segue le convenzioni già in uso in kg-agent e multiapi-agent:
+QueryRequest / QueryResponse, Field con description, sintassi `str | None`.
 """
 
 from datetime import date as date_
@@ -7,11 +11,17 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-# domini supportati dal planner
+# domini supportati dal planner (usato anche per domain_hint: non ha senso forzare "unknown")
 PlanDomain = Literal["study", "travel", "routine"]
 
+# dominio effettivo restituito in output: può anche essere "unknown" se la richiesta
+# non rientra in nessuno dei domini gestiti dal planner
+ResponseDomain = PlanDomain | Literal["unknown"]
 
+
+# ---------------------------------------------------------------------------
 # INPUT
+# ---------------------------------------------------------------------------
 
 class QueryRequest(BaseModel):
     """richiesta in ingresso al planner-agent."""
@@ -40,7 +50,9 @@ class QueryRequest(BaseModel):
     )
 
 
+# ---------------------------------------------------------------------------
 # OUTPUT
+# ---------------------------------------------------------------------------
 
 class TimeSlot(BaseModel):
     """unità minima di time-boxing: un'attività allocata in un intervallo di tempo."""
@@ -87,7 +99,7 @@ class QueryResponse(BaseModel):
     """risposta strutturata del planner-agent, formato unificato per i 3 domini."""
 
     question: str
-    domain: PlanDomain
+    domain: ResponseDomain
     title: str = Field(..., description="titolo sintetico del piano generato")
     summary: str | None = Field(
         default=None, description="riassunto discorsivo del piano, utile al synthesizer dell'orchestratore"

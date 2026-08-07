@@ -1,4 +1,5 @@
 import asyncio
+
 import httpx
 import pytest
 from pipeline import PlannerPipeline
@@ -38,3 +39,13 @@ def test_routine_lavorativa():
     response = asyncio.run(pipeline.run(QueryRequest(question="Voglio strutturare meglio le mie giornate lavorative")))
     assert response.domain == "routine"
     assert len(response.days) == 7
+
+
+@pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
+def test_domanda_fuori_scope():
+    """esempio del prompt di classificazione: non deve produrre un piano forzato."""
+    pipeline = PlannerPipeline(verbose=True)
+    response = asyncio.run(pipeline.run(QueryRequest(question="Che tempo fa domani?")))
+    assert response.domain == "unknown"
+    assert response.days == []
+    assert response.confidence == 0.0

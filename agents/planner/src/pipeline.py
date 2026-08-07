@@ -6,7 +6,7 @@ import time
 import httpx
 from pydantic import ValidationError
 
-from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse
+from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse, ResponseDomain
 from configs.settings import settings
 from validators import validate_draft
 
@@ -97,7 +97,7 @@ class PlannerPipeline:
 
     # ----- fase 1: classificazione del dominio -----
 
-    async def _classify_domain(self, request: QueryRequest) -> PlanDomain:
+    async def _classify_domain(self, request: QueryRequest) -> ResponseDomain:
         if request.domain_hint is not None:
             self._log(f"[info] dominio forzato da domain_hint: {request.domain_hint}")
             return request.domain_hint
@@ -110,8 +110,12 @@ class PlannerPipeline:
             self._log(f"  -> dominio classificato: {domain}")
             return domain
 
-        self._log(f"  [warn] classificazione non valida/'unknown' ({domain}), fallback a '{settings.default_domain}'")
-        return settings.default_domain
+        # sia il caso esplicito 'unknown' del modello sia un fallimento di classificazione
+        # (json malformato, campo mancante, valore non riconosciuto) finiscono qui: MAI un
+        # fallback silenzioso su un dominio a caso, che forzerebbe il drafting a inventare
+        # un piano di studio/viaggio/routine per una domanda che non c'entra nulla.
+        self._log(f"  [warn] dominio non riconosciuto o fuori scope ({domain!r}), classificato come 'unknown'")
+        return "unknown"
 
     # ----- fase 2: drafting -----
 
@@ -195,12 +199,42 @@ class PlannerPipeline:
             execution_time_ms=elapsed_ms,
         )
 
+    # ----- risposta esplicita per richieste fuori scope -----
+
+    def _out_of_scope_response(self, request: QueryRequest, elapsed_ms: float) -> QueryResponse:
+        """risposta quando la richiesta non rientra in nessuno dei domini gestiti dal planner.
+
+        Evita di forzare la domanda in un dominio a caso (che produrrebbe un drafting
+        insensato/allucinato) e di sollevare un errore HTTP per un caso che non è un guasto
+        tecnico: stesso principio già adottato da multiapi-agent per gli intent non
+        supportati (200 con un payload che segnala esplicitamente il problema, lasciando al
+        synthesizer dell'orchestratore il compito di formulare una risposta discorsiva).
+        """
+        self._log("  [warn] richiesta fuori scope per il planner, nessun drafting eseguito")
+        return QueryResponse(
+            question=request.question,
+            domain="unknown",
+            title=request.question,
+            summary=(
+                "Questa richiesta non riguarda pianificazione di studio, itinerari di viaggio o "
+                "routine giornaliere: il planner-agent non genera un piano per questo tipo di domanda."
+            ),
+            days=[],
+            contingency_notes=None,
+            confidence=0.0,
+            execution_time_ms=elapsed_ms,
+        )
+
     # ----- entrypoint pubblico -----
 
     async def run(self, request: QueryRequest) -> QueryResponse:
         start_time = time.time()
 
         domain = await self._classify_domain(request)
+        if domain == "unknown":
+            elapsed_ms = round((time.time() - start_time) * 1000, 2)
+            return self._out_of_scope_response(request, elapsed_ms)
+
         draft, draft_attempts = await self._draft(request, domain)
         enriched = self._enrich(draft, request)
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
