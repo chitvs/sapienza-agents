@@ -8,6 +8,7 @@ import requests
 from configs.settings import settings
 from providers.weather_provider import WeatherProvider
 from providers.exchange_provider import ExchangeProvider
+from providers.country_provider import CountryProvider
 from cache.response_cache import ResponseCache
 from correctors.llm_response_corrector import LlmResponseCorrector
 
@@ -25,6 +26,7 @@ class MultiApiPipeline:
     def __init__(self, verbose: bool = False):
         self.weather = WeatherProvider()
         self.exchange = ExchangeProvider()
+        self.country = CountryProvider()
         self.cache = ResponseCache(capacity=settings.cache_capacity)
         self.corrector = LlmResponseCorrector(max_retries=settings.max_llm_retries)
         self.verbose = verbose
@@ -139,6 +141,18 @@ class MultiApiPipeline:
         self._log("  [warn] estrazione valute fallita")
         return {"from_currency": None, "to_currency": None}
 
+    def _extract_country(self, question: str) -> str | None:
+        """usa il llm per estrarre il nome del paese dalla domanda."""
+        self._log("\n[info] [step] estrazione paese via llm")
+        data = self._llm_extract_json("extract_country.txt", question)
+
+        if data and data.get("country"):
+            self._log(f"  -> paese estratto: {data['country']}")
+            return data["country"]
+
+        self._log("  [warn] estrazione paese fallita")
+        return None
+
     # ----- rami della pipeline -----
 
     def _run_weather(self, question: str) -> list[dict[str, Any]]:
@@ -171,6 +185,21 @@ class MultiApiPipeline:
             self._log(f"  -> tasso recuperato: {params['from_currency']}/{params['to_currency']} = {result.get('rates')}")
         return [result]
 
+    def _run_country(self, question: str) -> list[dict[str, Any]]:
+        """esegue il ramo country_info della pipeline."""
+        country = self._extract_country(question)
+        if not country:
+            return [{"error": "Non sono riuscito a identificare un paese nella domanda."}]
+
+        self._log(f"\n[info] [step] chiamata country provider per '{country}'")
+        result = self.country.fetch({"country": country})
+
+        if "error" in result:
+            self._log(f"  [warn] errore provider: {result['error']}")
+        else:
+            self._log(f"  -> info recuperate: {result.get('name')} (capitale: {result.get('capital')})")
+        return [result]
+
     # ----- pipeline principale -----
 
     def run(self, question: str) -> tuple[list[dict[str, Any]], str]:
@@ -193,8 +222,10 @@ class MultiApiPipeline:
             results = self._run_weather(question)
         elif intent == "exchange_rate":
             results = self._run_exchange(question)
+        elif intent == "country_info":
+            results = self._run_country(question)
         else:
-            results = [{"error": f"Intent '{intent}' non supportato. Prova con domande su meteo o tassi di cambio."}]
+            results = [{"error": f"Intent '{intent}' non supportato. Prova con domande su meteo, tassi di cambio o informazioni sui paesi."}]
 
         # step 3: salva in cache (solo se non c'è errore)
         if results and "error" not in results[0]:

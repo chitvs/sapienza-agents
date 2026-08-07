@@ -39,6 +39,16 @@ def test_query_exchange():
     assert "rates" in data["results"][0]
 
 
+@pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
+def test_query_country():
+    res = client.post("/query", json={"question": "Qual è la capitale della Francia?"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["intent"] == "country_info"
+    assert data["count"] > 0
+    assert "capital" in data["results"][0]
+
+
 def test_query_missing_question():
     res = client.post("/query", json={})
     assert res.status_code == 422  # validazione pydantic

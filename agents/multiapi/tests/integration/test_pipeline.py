@@ -31,6 +31,16 @@ def test_exchange_usd_eur():
 
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
+def test_country_france():
+    pipeline = MultiApiPipeline()
+    results, intent = pipeline.run("Qual è la capitale della Francia?")
+    assert intent == "country_info"
+    assert len(results) > 0
+    assert "error" not in results[0]
+    assert results[0]["capital"] == "Paris"
+
+
+@pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_unknown_intent():
     pipeline = MultiApiPipeline()
     results, intent = pipeline.run("Chi ha inventato la pizza?")

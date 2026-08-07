@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # cambio valuta (senza api key)
     frankfurter_base_url: str = "https://api.frankfurter.app"
 
+    # info paesi via countries.dev (senza api key)
+    countries_dev_base_url: str = "https://countries.dev"
+
     # cache
     cache_capacity: int = 100
 
