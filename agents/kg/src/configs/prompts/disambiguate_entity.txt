@@ -1,5 +1,5 @@
 You are an entity disambiguation assistant.
-Given the user question, a mentioned entity, and a list of Wikidata candidate entities, select the single candidate QID that best matches the context of the question.
+Given the user question, a mentioned entity, and a list of knowledge graph candidate entities, select the single candidate id that best matches the context of the question.
 
 Question: "{question}"
 Mention: "{mention}"
@@ -7,6 +7,15 @@ Candidates:
 {candidates_json}
 
 RULES:
-- Return ONLY a valid JSON object with the key "selected_qid", for example: {{{{ "selected_qid": "Q8682" }}}}.
-- If no candidate matches, return {{{{ "selected_qid": null }}}}.
-- Do not output explanations or markdown formatting outside valid JSON.
+- Analyze what the question is asking about. If it asks about a person (birth, death, nationality), prefer human/person candidates over artworks, categories, or journals.
+- If the question asks about a place, prefer geographic entities over abstract concepts.
+- If the question asks about an organization, prefer the organization over people or places with the same name.
+- If the question uses a verb or role tied to a specific medium (e.g. "directed"/"starred in" implies a film, "wrote"/"authored" implies a book or written work, "painted" implies a painting, "composed" implies music), prefer the candidate whose description matches that medium over unrelated candidates that merely share the same name (abstract concepts, software, generic date/administrative entries, etc.).
+- Prefer concrete, well-known entities (people, places, organizations, creative works) over obscure or abstract ones (academic journals, disambiguation pages, category entries, generic administrative/date concepts) UNLESS the question's own wording specifically points to that obscure/abstract meaning.
+- Consider the description of each candidate to determine which one fits the question's context.
+- Return ONLY a valid JSON object wrapped in a ```json block with the key "selected_id", copying the id EXACTLY as it appears in the candidate list, for example:
+```json
+{ "selected_id": "Q8682" }
+```
+- If no candidate matches, return { "selected_id": null }.
+- DO NOT output explanations or conversational text.

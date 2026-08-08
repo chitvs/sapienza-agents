@@ -1,33 +1,56 @@
+import threading
 import time
+
 from fastapi import APIRouter, HTTPException
+
 from api.schemas import QueryRequest, QueryResponse
+from configs.settings import settings
+from connectors.base_connector import KnowledgeGraphUnavailableError
 from pipeline import KGPipeline
 
 router = APIRouter()
-pipeline = KGPipeline()
+
+_pipelines: dict[str, KGPipeline] = {}
+_pipelines_lock = threading.Lock()
+
+def get_pipeline(target_kg: str) -> KGPipeline:
+    """Restituisce la pipeline del KG richiesto, creandola al primo utilizzo."""
+    if target_kg not in _pipelines:
+        with _pipelines_lock:
+            if target_kg not in _pipelines:
+                _pipelines[target_kg] = KGPipeline(target_kg=target_kg)
+    return _pipelines[target_kg]
 
 @router.get("/health")
-def health_check():
+def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "kg-agent"}
 
 @router.post("/query", response_model=QueryResponse)
-def query_kg(request: QueryRequest):
+def query_kg(request: QueryRequest) -> QueryResponse:
+    target_kg = request.target_kg or settings.default_target_kg
+
+    try:
+        pipeline = get_pipeline(target_kg)
+    except ValueError as err:
+        # kg non supportato
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
     try:
         start_time = time.time()
-        target_kg = request.target_kg or "wikidata"
-        pipeline.target_kg = target_kg
-        results, query = pipeline.run(request.question)
+        result = pipeline.run(request.question)
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
-        confidence_score = 1.0 if results else 0.0
-
-        return QueryResponse(
-            question=request.question,
-            target_kg=target_kg,
-            generated_query=query,
-            results=results,
-            count=len(results),
-            confidence=confidence_score,
-            execution_time_ms=elapsed_ms,
-        )
+    except KnowledgeGraphUnavailableError as err:
+        # il servizio esterno non ha risposto
+        raise HTTPException(status_code=503, detail=str(err)) from err
     except Exception as err:
-        raise HTTPException(status_code=500, detail=str(err))
+        raise HTTPException(status_code=500, detail=str(err)) from err
+
+    return QueryResponse(
+        question=request.question,
+        target_kg=target_kg,
+        generated_query=result.query,
+        results=result.results,
+        count=len(result.results),
+        confidence=result.confidence,
+        execution_time_ms=elapsed_ms,
+    )

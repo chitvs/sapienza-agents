@@ -1,0 +1,26 @@
+The previously generated SPARQL query produced an error when executed on the public DBpedia endpoint.
+
+User question: {question}
+
+Error type: {error_type}
+
+Failed query:
+{failed_query}
+
+Error message:
+{error_message}
+
+{schema_context}
+
+Correction guidelines based on error type ({error_type}):
+- SYNTAX_ERROR: fix the SPARQL syntax — check curly braces, dots between triple patterns, and aggregation aliases (e.g. (COUNT(?x) AS ?count)). A very common cause on DBpedia is a resource name containing parentheses or commas written in the dbr: short form: rewrite it as a full URI in angle brackets, e.g. <http://dbpedia.org/resource/Mercury_(planet)>.
+- MISSING_PREFIX: use only the prefixes predefined by the endpoint (dbr:, dbo:, dbp:, rdfs:, rdf:, owl:) and make sure every property actually exists in the schema context above.
+- TIMEOUT: simplify the query, remove unnecessary joins, or add LIMIT.
+- GENERAL_ERROR: check that the query is logically consistent with the question, and that each property is used in the right direction (subject and object may be swapped).
+
+Reminders specific to DBpedia:
+- There is NO automatic label service: ?xLabel does not exist. Bind labels explicitly with `?x rdfs:label ?name . FILTER(lang(?name) = "en")`, or simply return the resource, whose URI already carries the name.
+- rdf:type is not matched transitively over subclasses, so a type filter on a variable that is already reached through a specific property is redundant and often makes the query return nothing.
+- Nested SELECT subqueries must not be used: for superlatives use ORDER BY + LIMIT 1.
+
+CRITICAL INSTRUCTION: You MUST output ONLY the raw SPARQL query wrapped in a ```sparql block. DO NOT output any introductory text, explanations, or conversational replies. ONLY return the SPARQL query code.

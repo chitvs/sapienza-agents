@@ -1,19 +1,22 @@
-la query sparql precedentemente generata ha prodotto un errore durante l'esecuzione su wikidata.
+The previously generated SPARQL query produced an error when executed on Wikidata.
 
-domanda utente: {question}
+User question: {question}
 
-tipologia errore: {error_type}
+Error type: {error_type}
 
-query errata:
+Failed query:
 {failed_query}
 
-errore riscontrato:
+Error message:
 {error_message}
 
-linee guida per la correzione in base alla tipologia errore ({error_type}):
-- SYNTAX_ERROR: risolvi gli errori di sintassi SPARQL, verifica parentesi graffe, punti e virgole finali e alias delle aggregazioni (es. COUNT(?x) AS ?count).
-- MISSING_PREFIX: assicurati di usare i prefissi corretti (wd: per entità, wdt: per proprietà dirette).
-- TIMEOUT: semplifica la query, rimuovi join non necessari o aggiungi LIMIT.
-- GENERAL_ERROR: verifica la correttezza logica dei tripli SPARQL e la corrispondenza con la domanda.
+{schema_context}
 
-restituisci esclusivamente il codice sparql corretto (nessun blocco markdown, nessuna spiegazione).
+Correction guidelines based on error type ({error_type}):
+- SYNTAX_ERROR: fix SPARQL syntax errors, check curly braces, trailing semicolons, and aggregation aliases (e.g. COUNT(?x) AS ?count).
+- MISSING_PREFIX: ensure correct prefixes are used (wd: for entities, wdt: for direct properties).
+- TIMEOUT: simplify the query, remove unnecessary joins, or add LIMIT.
+- GENERAL_ERROR: verify logical correctness of triple patterns and alignment with the question.
+- NEVER use subqueries (SELECT inside WHERE or FILTER). Wikidata SPARQL does NOT support nested SELECT. Use ORDER BY + LIMIT instead.
+
+CRITICAL INSTRUCTION: You MUST output ONLY the raw SPARQL query wrapped in a ```sparql block. DO NOT output any introductory text, explanations, or conversational replies. ONLY return the SPARQL query code.

@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 class QueryRequest(BaseModel):
     question: str = Field(
@@ -9,7 +10,7 @@ class QueryRequest(BaseModel):
     )
     target_kg: str | None = Field(
         default="wikidata",
-        description="knowledge graph target da interrogare: 'wikidata'",
+        description="knowledge graph da interrogare: 'wikidata', 'dbpedia' o 'neo4j'",
     )
 
 class QueryResponse(BaseModel):

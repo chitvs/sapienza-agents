@@ -1,39 +1,63 @@
+from typing import Callable
+
+from configs.settings import settings
+from correctors.base_corrector import BaseCorrector
 from shared.ollama_client import OllamaClient
-from translators.sparql_translator import SPARQLTranslator
 
-class ErrorConditionedCorrector:
-    """correttore guidato da classificazione errori e re-prompting llm."""
+class ErrorConditionedCorrector(BaseCorrector):
+    """Corregge una query fallita classificando l'errore e ri-promptando l'LLM."""
 
-    def __init__(self, llm_client: OllamaClient | None = None):
-        self.llm_client = llm_client or OllamaClient()
+    def __init__(
+        self,
+        llm_client: OllamaClient | None = None,
+        prompt_filename: str = "correction.txt",
+        sanitizer: Callable[[str], str] | None = None,
+    ) -> None:
+        self.llm_client = llm_client or OllamaClient(
+            host=settings.ollama_host,
+            model_name=settings.ollama_model,
+            timeout=settings.ollama_timeout,
+            prompts_dir=settings.prompts_dir,
+        )
+        # prompt e sanitizer sono iniettabili perché dipendono dal linguaggio di query
+        self.prompt_filename = prompt_filename
+        if sanitizer is not None:
+            self.sanitizer = sanitizer
+        else:
+            from translators.sparql_translator import WikidataSPARQLTranslator
+
+            self.sanitizer = WikidataSPARQLTranslator.sanitize_sparql
 
     def classify_error(self, error_message: str) -> str:
-        """classifica la tipologia di errore riscontrata."""
+        """Classifica l'errore per scegliere le linee guida di correzione da applicare."""
         err_lower = error_message.lower()
-        if "syntax" in err_lower or "parse" in err_lower or "unexpected" in err_lower:
+        if any(k in err_lower for k in ("syntax", "parse", "unexpected")):
             return "SYNTAX_ERROR"
-        elif "prefix" in err_lower or "namespace" in err_lower or "undefined" in err_lower:
+        if any(k in err_lower for k in ("prefix", "namespace", "undefined")):
             return "MISSING_PREFIX"
-        elif "timeout" in err_lower or "time out" in err_lower or "timed out" in err_lower:
+        if any(k in err_lower for k in ("timeout", "time out", "timed out")):
             return "TIMEOUT"
-        else:
-            return "GENERAL_ERROR"
+        return "GENERAL_ERROR"
 
-    def correct(self, question: str, failed_query: str, error_message: str) -> str:
-        """corregge la query fallita caricando il prompt di correzione con la tipologia di errore."""
+    def correct(self, question: str, failed_query: str, error_message: str, schema_context: str = "") -> str:
+        """Rigenera la query fallita a partire dal tipo di errore riscontrato."""
         error_type = self.classify_error(error_message)
+        schema_section = f"contesto schema disponibile:\n{schema_context}" if schema_context else ""
+
         system_prompt = self.llm_client.load_prompt(
-            "correction.txt",
+            self.prompt_filename,
             question=question,
             failed_query=failed_query,
             error_message=error_message,
             error_type=error_type,
+            schema_context=schema_section,
         )
-
         corrected_raw = self.llm_client.chat(
             system_prompt=system_prompt,
-            user_content=f"Domanda: {question}\nTipologia Errore: {error_type}\nQuery Errata: {failed_query}\nErrore: {error_message}",
+            user_content=(
+                f"Question: {question}\nError Type: {error_type}\n"
+                f"Failed Query: {failed_query}\nError: {error_message}"
+            ),
             temperature=0.0,
         )
-        cleaned = OllamaClient.clean_code_block(corrected_raw)
-        return SPARQLTranslator.sanitize_sparql(cleaned)
+        return self.sanitizer(OllamaClient.clean_code_block(corrected_raw))

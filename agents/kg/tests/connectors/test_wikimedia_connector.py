@@ -33,3 +33,19 @@ def test_bounded_cache():
     assert len(connector._search_cache) == 2
     assert "k1" not in connector._search_cache
     assert "k3" in connector._search_cache
+
+def test_ground_results_keeps_source_uri():
+    """L'uri originale va conservato: senza, l'interfaccia non può linkare la fonte."""
+    connector = WikimediaConnector()
+    raw = [{"item": {"value": "http://www.wikidata.org/entity/Q937"},
+            "date": {"value": "+1879-03-14T00:00:00Z"}}]
+    grounded = connector.ground_results(raw)[0]
+    assert grounded["item"] == "Albert Einstein"
+    assert grounded["_sources"]["item"] == "http://www.wikidata.org/entity/Q937"
+    # i letterali non sono entità e non hanno fonte da linkare
+    assert "date" not in grounded["_sources"]
+
+def test_ground_results_without_entities_has_no_sources():
+    connector = WikimediaConnector()
+    grounded = connector.ground_results([{"count": {"value": "42"}}])[0]
+    assert grounded == {"count": "42"}

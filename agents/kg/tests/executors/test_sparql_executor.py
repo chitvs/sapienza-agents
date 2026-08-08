@@ -16,8 +16,9 @@ def test_execute():
         assert len(results) > 0
         assert results[0]["label"]["value"] == "Albert Einstein"
     except SPARQLExecutionError as e:
-        if "Timeout" in str(e) or "HTTP Error" in str(e):
-            pytest.skip("Wikidata SPARQL endpoint non raggiungibile")
+        err_str = str(e)
+        if "Timeout" in err_str or "HTTP 5" in err_str or "502" in err_str or "503" in err_str:
+            pytest.skip("Wikidata SPARQL endpoint non raggiungibile o errore server")
         raise
 
 def test_execute_syntax_error():

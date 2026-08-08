@@ -1,6 +1,6 @@
 import pytest
 import requests
-from translators.sparql_translator import SPARQLTranslator
+from translators.sparql_translator import WikidataSPARQLTranslator as SPARQLTranslator
 
 def is_ollama_running():
     try:
