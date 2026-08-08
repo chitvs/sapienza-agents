@@ -4,11 +4,12 @@ import httpx
 import pytest
 from pipeline import PlannerPipeline
 from api.schemas import QueryRequest
+from configs.settings import settings
 
 
 def is_ollama_running():
     try:
-        return httpx.get("http://localhost:11434/", timeout=1).status_code == 200
+        return httpx.get(settings.ollama_host, timeout=1).status_code == 200
     except Exception:
         return False
 

@@ -31,11 +31,27 @@ def validate_draft(draft: dict | None, domain: str) -> list[str]:
     if not draft:
         return ["il draft è vuoto o non è un oggetto JSON valido"]
 
+    errors: list[str] = []
+    
+    # 1. Controlli top-level (allineati con QueryResponse)
+    title = draft.get("title")
+    if not isinstance(title, str) or not title.strip():
+        errors.append("il campo 'title' è mancante o non è una stringa valida")
+
+    summary = draft.get("summary")
+    if summary is not None and not isinstance(summary, str):
+        errors.append("il campo 'summary' deve essere una stringa")
+        
+    contingency_notes = draft.get("contingency_notes")
+    if contingency_notes is not None:
+        if not isinstance(contingency_notes, list) or not all(isinstance(x, str) for x in contingency_notes):
+            errors.append("il campo 'contingency_notes' deve essere una lista di stringhe")
+
     days = draft.get("days")
     if not days or not isinstance(days, list):
-        return ["il campo 'days' è mancante, vuoto o non è una lista"]
+        errors.append("il campo 'days' è mancante, vuoto o non è una lista")
+        return errors # Inutile proseguire se mancano i giorni
 
-    errors: list[str] = []
     seen_indices: set[int] = set()
 
     for day in days:
@@ -43,24 +59,48 @@ def validate_draft(draft: dict | None, domain: str) -> list[str]:
         if not isinstance(day_index, int) or day_index < 1:
             errors.append(f"day_index non valido: {day_index!r}")
             continue
+            
         if day_index in seen_indices:
             errors.append(f"day_index {day_index} duplicato")
         seen_indices.add(day_index)
+
+        # Controlli di tipo su day (allineati con PlanDay)
+        label = day.get("label")
+        if label is not None and not isinstance(label, str):
+            errors.append(f"giorno {day_index}: il campo 'label' deve essere una stringa")
 
         date_value = day.get("date")
         if date_value is not None and not _DATE_RE.match(str(date_value)):
             errors.append(f"giorno {day_index}: campo 'date' malformato (atteso YYYY-MM-DD): {date_value!r}")
 
         slots = day.get("slots") or []
-        if not slots:
-            errors.append(f"giorno {day_index}: nessuno slot presente")
+        if not slots or not isinstance(slots, list):
+            errors.append(f"giorno {day_index}: nessuno slot presente o formato non valido")
             continue
 
         total_minutes = 0
         timed_slots: list[tuple[int, int, str]] = []  # (inizio, fine, task) per slot con orario definito
 
         for slot in slots:
-            task = slot.get("task", "?")
+            # Controlli di tipo su slot (allineati con TimeSlot)
+            task = slot.get("task")
+            if not isinstance(task, str) or not task.strip():
+                errors.append(f"giorno {day_index}: il campo 'task' è mancante o non è una stringa")
+                task = str(task) if task else "?"  # Fallback per i messaggi di errore successivi
+                
+            category = slot.get("category")
+            if category is not None and not isinstance(category, str):
+                errors.append(f"giorno {day_index} ('{task}'): il campo 'category' deve essere una stringa")
+
+            subtasks = slot.get("subtasks")
+            if subtasks is not None:
+                if not isinstance(subtasks, list) or not all(isinstance(x, str) for x in subtasks):
+                    errors.append(f"giorno {day_index} ('{task}'): il campo 'subtasks' deve essere una lista di stringhe")
+
+            notes = slot.get("notes")
+            if notes is not None and not isinstance(notes, str):
+                errors.append(f"giorno {day_index} ('{task}'): il campo 'notes' deve essere una stringa")
+
             duration = slot.get("duration_minutes")
             if not isinstance(duration, int) or duration <= 0:
                 errors.append(f"giorno {day_index}: duration_minutes non valido per '{task}': {duration!r}")
@@ -69,7 +109,7 @@ def validate_draft(draft: dict | None, domain: str) -> list[str]:
 
             start_time = slot.get("start_time")
             if start_time is not None:
-                if not _TIME_RE.match(str(start_time)):
+                if not isinstance(start_time, str) or not _TIME_RE.match(start_time):
                     errors.append(f"giorno {day_index}: start_time malformato per '{task}': {start_time!r}")
                     continue
                 start_min = _parse_time(start_time)

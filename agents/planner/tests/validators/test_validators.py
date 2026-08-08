@@ -105,3 +105,57 @@ def test_malformed_date_flagged():
     draft = {"days": [{"day_index": 1, "date": "12-06-2026", "slots": [{"task": "x", "duration_minutes": 30}]}]}
     errors = validate_draft(draft, "travel")
     assert any("'date' malformato" in e for e in errors)
+
+
+def test_invalid_title_type_flagged():
+    draft = {
+        "title": 123, # Errore: numero invece di stringa
+        "days": [
+            {"day_index": 1, "slots": [{"task": "Lettura", "duration_minutes": 30}]}
+        ]
+    }
+    errors = validate_draft(draft, "study")
+    assert any("non è una stringa" in e for e in errors)
+
+def test_invalid_task_type_flagged():
+    draft = {
+        "title": "Piano di studio",
+        "days": [
+            {
+                "day_index": 1, 
+                "slots": [{"task": 404, "duration_minutes": 30}] # Errore: numero
+            }
+        ]
+    }
+    errors = validate_draft(draft, "study")
+    assert any("non è una stringa" in e for e in errors)
+
+def test_invalid_subtasks_flagged():
+    draft = {
+        "title": "Piano di studio",
+        "days": [
+            {
+                "day_index": 1, 
+                "slots": [{
+                    "task": "Lettura", 
+                    "duration_minutes": 30,
+                    "subtasks": "dovrebbe essere una lista, non una stringa" # Errore
+                }]
+            }
+        ]
+    }
+    errors = validate_draft(draft, "study")
+    assert any("lista di stringhe" in e for e in errors)
+
+def test_invalid_category_type_flagged():
+    draft = {
+        "title": "Piano di studio",
+        "days": [
+            {
+                "day_index": 1, 
+                "slots": [{"task": "Ripasso", "duration_minutes": 30, "category": True}] # Errore: booleano
+            }
+        ]
+    }
+    errors = validate_draft(draft, "study")
+    assert any("deve essere una stringa" in e for e in errors)
