@@ -25,5 +25,12 @@ class Settings(BaseSettings):
     # pipeline: numero massimo di tentativi di correzione se il draft non supera la validazione logica
     max_draft_retries: int = 2
 
+    # context gathering (Step 5): agenti esterni interrogati per il dominio 'travel'.
+    # default 'localhost' pensati per sviluppo locale; sovrascritti via env var
+    # (KG_AGENT_URL / MULTIAPI_AGENT_URL) dagli hostname interni alla rete docker-compose.
+    kg_agent_url: str = "http://localhost:8000"
+    multiapi_agent_url: str = "http://localhost:8002"
+    external_call_timeout: float = 5.0  # per singola chiamata, non cumulativo
+
 
 settings = Settings()

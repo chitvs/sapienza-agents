@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse, ResponseDomain
 from configs.settings import settings
+from tools import query_kg, query_multiapi
 from validators import validate_draft
 
 logger = logging.getLogger("planner_pipeline")
@@ -21,10 +23,10 @@ _DRAFT_PROMPTS: dict[str, str] = {
 
 
 class PlannerPipeline:
-    """pipeline dell'agente planner: classifica il dominio, genera una bozza del piano,
-    predispone l'arricchimento e finalizza la risposta.
+    """pipeline dell'agente planner: classifica il dominio, recupera contesto esterno in
+    modo deterministico, genera una bozza del piano e finalizza la risposta.
 
-    Fasi: classify_domain -> draft -> enrich (placeholder) -> finalize
+    Fasi: classify_domain -> gather_context -> draft -> finalize
     """
 
     def __init__(self, verbose: bool = False):
@@ -117,10 +119,52 @@ class PlannerPipeline:
         self._log(f"  [warn] dominio non riconosciuto o fuori scope ({domain!r}), classificato come 'unknown'")
         return "unknown"
 
-    # ----- fase 2: drafting -----
+    # ----- fase 2: recupero contesto esterno (deterministico, per dominio) -----
 
-    async def _draft(self, request: QueryRequest, domain: PlanDomain) -> tuple[dict, int]:
+    async def _gather_context(self, domain: PlanDomain, request: QueryRequest) -> tuple[dict, list[str]]:
+        """recupera contesto esterno in modo deterministico in base al dominio già
+        classificato: zero chiamate LLM per decidere quali tool usare (nessun tool-calling
+        dinamico).
+
+        Restituisce (context, errors): errors è una lista di descrizioni di fallimento,
+        non un semplice bool/flag generico - stesso principio già in uso in validators.py -
+        così ogni voce può essere appesa direttamente a contingency_notes senza sintesi
+        intermedia.
+        """
+        context: dict = {}
+        if request.context:
+            context.update(request.context)
+
+        errors: list[str] = []
+
+        if domain == "travel":
+            self._log("\n[info] [step] recupero contesto esterno (kg-agent + multiapi-agent)")
+            kg_result, multiapi_result = await asyncio.gather(
+                query_kg(request.question), query_multiapi(request.question)
+            )
+            for key, result in (("kg_agent", kg_result), ("multiapi_agent", multiapi_result)):
+                if "error" in result:
+                    errors.append(result["error"])
+                    self._log(f"  [warn] {key}: {result['error']}")
+                else:
+                    # sovrascrive eventuali chiavi in conflitto già presenti da request.context
+                    context[key] = result
+        # domain in ("study", "routine"): pass-through esplicito, nessuna chiamata di rete.
+        # 'study' non fa pre-calcolo (vedi nota "paradosso study" nella roadmap): i parametri
+        # necessari (settimane disponibili, giorni esclusi, budget orario) esistono solo nel
+        # testo libero della domanda. 'routine' non ha bisogno di dati esterni per definizione.
+
+        return context, errors
+
+    # ----- fase 3: drafting -----
+
+    async def _draft(self, request: QueryRequest, domain: PlanDomain, context: dict) -> tuple[dict, int]:
         """genera la bozza del piano via llm, con prompt specializzato per dominio.
+
+        Il contesto recuperato da `_gather_context` viene iniettato nel prompt tramite il
+        placeholder `{context}`, serializzato con json.dumps (non str(dict): evita virgolette
+        singole / None non-JSON che confonderebbero un modello che deve leggerlo come fatto
+        strutturato).
 
         Se il validatore logico segnala errori (durate/orari inconsistenti, day_index non
         sequenziali, ecc.), tenta fino a `settings.max_draft_retries` correzioni: rimanda al
@@ -131,7 +175,11 @@ class PlannerPipeline:
         alimenta l'euristica di confidence in _finalize.
         """
         self._log(f"\n[info] [step] drafting piano (dominio={domain})")
-        draft = await self._llm_extract_json(_DRAFT_PROMPTS[domain], question=request.question)
+        draft = await self._llm_extract_json(
+            _DRAFT_PROMPTS[domain],
+            question=request.question,
+            context=json.dumps(context, ensure_ascii=False, indent=2),
+        )
         errors = validate_draft(draft, domain)
 
         attempt = 0
@@ -153,28 +201,17 @@ class PlannerPipeline:
         self._log(f"  -> draft valido{f' dopo {attempt} correzioni' if attempt else ' al primo tentativo'}")
         return draft, attempt
 
-    # ----- fase 3: enrichment (placeholder) -----
-
-    def _enrich(self, draft: dict, request: QueryRequest) -> dict:
-        """placeholder per l'arricchimento con dati esterni (meteo, entità dal KG, ecc.).
-
-        Per ora si limita a propagare l'eventuale `context` ricevuto in input dentro
-        `external_data` di ogni giorno, senza alcuna chiamata reale. Da sostituire quando
-        il planner (o l'orchestratore) potrà interrogare kg-agent/multiapi-agent.
-        """
-        if not request.context:
-            return draft
-
-        self._log("\n[info] [step] enrichment (placeholder, nessuna chiamata esterna)")
-        for day in draft.get("days", []):
-            day.setdefault("external_data", {})
-            day["external_data"].update(request.context)
-        return draft
-
     # ----- fase 4: finalizzazione -----
 
     def _finalize(
-        self, request: QueryRequest, domain: PlanDomain, draft: dict, elapsed_ms: float, draft_attempts: int
+        self,
+        request: QueryRequest,
+        domain: PlanDomain,
+        draft: dict,
+        elapsed_ms: float,
+        draft_attempts: int,
+        context: dict,
+        context_errors: list[str],
     ) -> QueryResponse:
         try:
             days = [PlanDay(**d) for d in draft.get("days", [])]
@@ -186,7 +223,25 @@ class PlannerPipeline:
             self._log(f"  [warn] validazione pydantic fallita in finalize nonostante il validatore logico: {err}")
             days = []
 
-        confidence = 0.0 if not days else round(max(0.5, 1.0 - 0.25 * draft_attempts), 2)
+        # ogni fallimento di _gather_context resta descritto singolarmente (non una riga
+        # sintetica unica), appeso alle eventuali contingency_notes già presenti nel draft.
+        contingency_notes = list(draft.get("contingency_notes") or [])
+        contingency_notes.extend(context_errors)
+
+        if not days:
+            confidence = 0.0
+        else:
+            # formula additiva con floor: parte da 1.0, -0.25 per ogni tentativo di
+            # correzione del draft, -0.1 flat se la lista errori non è vuota (non per-singolo-
+            # errore: la lista abilita un affinamento futuro a penalità proporzionale senza
+            # dover ritoccare la firma della funzione, ma non è applicato qui).
+            # nota accettata, non un bug: se draft_attempts == settings.max_draft_retries
+            # (oggi 2), il floor a 0.5 scatta già di suo - la penalità di rete resta
+            # visibile solo quando i tentativi di correzione sono 0 o 1.
+            confidence = 1.0 - 0.25 * draft_attempts
+            if context_errors:
+                confidence -= 0.1
+            confidence = round(max(0.5, confidence), 2)
 
         return QueryResponse(
             question=request.question,
@@ -194,9 +249,10 @@ class PlannerPipeline:
             title=draft.get("title") or request.question,
             summary=draft.get("summary"),
             days=days,
-            contingency_notes=draft.get("contingency_notes"),
+            contingency_notes=contingency_notes or None,
             confidence=confidence,
             execution_time_ms=elapsed_ms,
+            gathered_context=context or None,
         )
 
     # ----- risposta esplicita per richieste fuori scope -----
@@ -235,8 +291,8 @@ class PlannerPipeline:
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
             return self._out_of_scope_response(request, elapsed_ms)
 
-        draft, draft_attempts = await self._draft(request, domain)
-        enriched = self._enrich(draft, request)
+        context, context_errors = await self._gather_context(domain, request)
+        draft, draft_attempts = await self._draft(request, domain, context)
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
 
-        return self._finalize(request, domain, enriched, elapsed_ms, draft_attempts)
+        return self._finalize(request, domain, draft, elapsed_ms, draft_attempts, context, context_errors)

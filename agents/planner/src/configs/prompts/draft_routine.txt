@@ -6,6 +6,10 @@ FOCUS:
 - This system does not yet model recurring schedules: represent the routine as a single representative week using day_index 1 to 7 (Monday to Sunday). Differentiate weekday days from weekend days in the "label" field if the routine differs between them (e.g. work days vs rest days). If the routine is identical every day, repeat the same structure across all 7 days anyway.
 - Keep the plan realistic: leave reasonable gaps for meals/breaks/transitions between blocks rather than back-to-back activities all day.
 
+EXTERNAL CONTEXT (optional, provided by upstream agents):
+{context}
+If the context above is empty (e.g. "{{}}"), ignore it and proceed using only the user request below. If it contains data, treat it as verified fact and use it to ground the plan, without inventing further details beyond what is provided.
+
 Return ONLY a valid JSON object with this exact structure (no explanations, no markdown):
 {{
   "title": "<short title>",

@@ -7,6 +7,10 @@ FOCUS:
 - Distribute topics progressively across the available days (do not cram everything into the first days), and place review/self-assessment sessions toward the end of the plan rather than only on the very last day.
 - If the user does not specify how much material there is, use a reasonable generic decomposition (e.g. by macro-topic) without inventing specific book chapters or facts you cannot know.
 
+EXTERNAL CONTEXT (optional, provided by upstream agents):
+{context}
+If the context above is empty (e.g. "{{}}"), ignore it and proceed using only the user request below. If it contains data, treat it as verified fact and use it to ground the plan, without inventing further details beyond what is provided.
+
 Return ONLY a valid JSON object with this exact structure (no explanations, no markdown):
 {{
   "title": "<short title>",

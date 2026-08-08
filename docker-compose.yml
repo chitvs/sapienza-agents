@@ -23,6 +23,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - KG_AGENT_URL=http://kg-agent:8000
+      - MULTIAPI_AGENT_URL=http://multiapi-agent:8002
     networks:
       - agents-net
 

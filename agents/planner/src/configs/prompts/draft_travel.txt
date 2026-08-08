@@ -7,6 +7,10 @@ FOCUS:
 - Do NOT invent specific facts you cannot know, such as exact opening hours, addresses, ticket prices, or real distances/travel times between places - describe such activities generically instead (e.g. "Visita al centro storico") rather than presenting a fabricated detail as fact.
 - If the user gave explicit calendar dates, use them in the "date" field; otherwise leave "date" null and rely only on "day_index".
 
+EXTERNAL CONTEXT (optional, retrieved from kg-agent/multiapi-agent by upstream tools):
+{context}
+If the context above is empty (e.g. "{{}}"), ignore it and proceed using only the user request below. If it contains data (e.g. entities, weather, schedules), treat it as verified fact and use it to ground the itinerary, without inventing further details beyond what is provided.
+
 Return ONLY a valid JSON object with this exact structure (no explanations, no markdown):
 {{
   "title": "<short title>",

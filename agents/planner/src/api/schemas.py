@@ -44,8 +44,8 @@ class QueryRequest(BaseModel):
         default=None,
         description=(
             "contesto opzionale precompilato da altri agenti dell'orchestratore "
-            "(es. entità dal KG, meteo/orari dal Multi-API). Placeholder per la futura "
-            "fase di enrichment; ignorato se assente."
+            "(es. entità dal KG, meteo/orari dal Multi-API). Usato come base di partenza "
+            "da _gather_context; ignorato se assente."
         ),
     )
 
@@ -89,10 +89,6 @@ class PlanDay(BaseModel):
         default=None, description="etichetta descrittiva del giorno (es. 'Arrivo a Roma', 'Ripasso capitoli 1-3')"
     )
     slots: list[TimeSlot] = Field(default_factory=list)
-    external_data: dict[str, Any] | None = Field(
-        default=None,
-        description="placeholder per dati esterni arricchiti in fase di enrichment (es. meteo per itinerari di viaggio)",
-    )
 
 
 class QueryResponse(BaseModel):
@@ -111,3 +107,11 @@ class QueryResponse(BaseModel):
     )
     confidence: float = 1.0
     execution_time_ms: float | None = None
+    gathered_context: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "risposte grezze recuperate da kg-agent/multiapi-agent (dominio 'travel'), sotto le "
+            "chiavi 'kg_agent'/'multiapi_agent', più l'eventuale request.context di partenza. "
+            "None se non è stato recuperato/fornito alcun contesto."
+        ),
+    )
