@@ -39,9 +39,13 @@ async def supervisor_node(state: AgentState) -> dict:
 
 async def kg_node(state: AgentState) -> dict:
     """nodo che invoca direttamente il microservizio kg-agent via HTTP REST."""
+    payload = {"question": state["question"]}
+    if state.get("target_kg"):
+        payload["target_kg"] = state["target_kg"]
+
     async with httpx.AsyncClient(timeout=330.0) as client:
         try:
-            res = await client.post(f"{settings.kg_agent_url}/query", json={"question": state["question"]})
+            res = await client.post(f"{settings.kg_agent_url}/query", json=payload)
             res.raise_for_status()
             return {"kg_results": res.json()}
         except Exception as err:
