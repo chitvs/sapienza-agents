@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sapienza agents</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>sapienza agents</h1>
+<p class="subtitle">interroga il sistema multi-agente in linguaggio naturale</p>
+
+<form id="form">
+  <input type="text" id="question" placeholder="Who directed The Matrix?" autocomplete="off" required>
+  <select id="mode">
+    <option value="orchestrator">orchestratore</option>
+    <option value="kg">solo agente kg</option>
+  </select>
+  <select id="kg">
+    <option value="wikidata">wikidata</option>
+    <option value="dbpedia">dbpedia</option>
+    <option value="neo4j">neo4j (cinema)</option>
+  </select>
+  <button type="submit" id="submit">chiedi</button>
+</form>
+
+<div id="output"></div>
+
+<script src="app.js"></script>
+
+</body>
+</html>
