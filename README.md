@@ -71,9 +71,8 @@ docker compose logs -f kg-agent
 
 quando compare `modelli pronti.` il sistema è utilizzabile. dagli avvii successivi i modelli sono nel volume `hf-cache` e il precaricamento richiede una ventina di secondi.
 
-> ![NOTE]
+> [!NOTE]
 > Per quanto riguarda i comandi `docker`, potrebbe essere necessario lanciarli con `sudo`, qualora l'utente non appartenga al gruppo docker.
-![NOTE]
 
 ### Verifica
 
