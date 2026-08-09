@@ -26,6 +26,21 @@ from configs.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# librerie che a livello INFO registrano una riga per ogni richiesta http: a modelli già
+# in cache sono una ventina di righe per avvio, che seppelliscono la traccia della pipeline
+_NOISY_LIBRARIES = ("httpx", "httpcore", "urllib3", "huggingface_hub", "filelock")
+
+def _configure_logging() -> None:
+    """Configura il logger radice."""
+    logging.basicConfig(
+        level=settings.log_level.upper(),
+        format="%(asctime)s [%(levelname)s] %(message)s",
+    )
+    for name in _NOISY_LIBRARIES:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+_configure_logging()
+
 def _warmup_models() -> None:
     """Carica in anticipo i modelli locali, altrimenti caricati alla prima domanda."""
     # GLiNER e i due modelli sentence-transformers pesano insieme oltre un gigabyte:

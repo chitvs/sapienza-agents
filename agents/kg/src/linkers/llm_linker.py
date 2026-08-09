@@ -88,13 +88,10 @@ class LLMLinker(BaseLinker):
             logger.warning("filtro menzioni llm fallito: %s", err)
         return candidates
 
-    def _normalize_mention(self, mention: str) -> str:
-        """Rimuove i suffissi possessivi da una menzione ("Shakespeare's" -> "Shakespeare")."""
-        mention = re.sub(r"[''']s$", "", mention)
-        # la 's' finale si toglie solo dai nomi composti: "Paris" e "Charles" la hanno per natura
-        if mention != mention.rstrip("s") and len(mention) > 3 and len(mention.split()) >= 2:
-            mention = mention.rstrip("s")
-        return mention.strip()
+    @staticmethod
+    def _normalize_mention(mention: str) -> str:
+        """Rimuove il suffisso possessivo da una menzione ("Shakespeare's" -> "Shakespeare")."""
+        return re.sub(r"['’ʼ]s?$", "", mention).strip()
 
     def _fallback_extract_proper_nouns(self, text: str) -> list[str]:
         """Estrae i nomi propri raggruppando le parole maiuscole consecutive."""
@@ -125,14 +122,16 @@ class LLMLinker(BaseLinker):
         if json_match and json_match.group(1) in valid_id_map:
             return valid_id_map[json_match.group(1)]
 
-        # ultima spiaggia: si cercano gli id dei candidati nel testo grezzo, non un
-        # pattern di formato, così la logica resta valida per qualunque KG
-        last_pos, last_id = -1, None
-        for cand_id in valid_id_map:
-            for match in re.finditer(rf"(?<!\w){re.escape(cand_id)}(?!\w)", raw_output):
-                if match.start() > last_pos:
-                    last_pos, last_id = match.start(), cand_id
-        return valid_id_map[last_id] if last_id else None
+        # ultima spiaggia: si cercano gli id dei candidati nel testo grezzo, non un pattern
+        # di formato, così la logica resta valida per qualunque KG. Se il modello ne nomina
+        # più d'uno la scelta non è deducibile: la posizione nel testo non è una decisione, e
+        # un output che ragiona cita per ultimo proprio il candidato che ha scartato.
+        mentioned = [
+            cand_id
+            for cand_id in valid_id_map
+            if re.search(rf"(?<!\w){re.escape(cand_id)}(?!\w)", raw_output)
+        ]
+        return valid_id_map[mentioned[0]] if len(mentioned) == 1 else None
 
     def _disambiguate_candidates(
         self, question: str, mention: str, candidates: list[EntityCandidate]
@@ -167,6 +166,10 @@ class LLMLinker(BaseLinker):
         except Exception as err:
             logger.warning("disambiguazione llm fallita per '%s': %s", mention, err)
 
+        # il primo candidato è l'esito migliore del motore di ricerca del KG: è il ripiego
+        # giusto sia quando il modello rifiuta esplicitamente sia quando non si capisce cosa
+        # abbia scelto. Registrarlo permette di misurare quanto spesso accade.
+        logger.info("disambiguazione non conclusiva per '%s': uso il primo candidato", mention)
         return valid_cands[0]
 
     def link(self, text: str) -> list[LinkedEntity]:

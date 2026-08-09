@@ -15,6 +15,9 @@ class SPARQLTranslator(BaseTranslator):
     property_prefix: str = ""
     class_filter_pattern: str = r"\?(\w+)\s+(?:a|rdf:type)\s+[\w:]+\s*\.\s*"
     label_hint: str = "rdfs:label with an English language filter"
+    # solo Wikidata genera le etichette da sé: altrove ?xLabel è una variabile mai legata,
+    # che l'endpoint proietta senza valore invece di segnalare un errore
+    has_label_service: bool = False
 
     def __init__(
         self,
@@ -61,8 +64,7 @@ class SPARQLTranslator(BaseTranslator):
         )
         # alcuni modelli generano "FROM {" al posto di "WHERE {"
         query = re.sub(r"\bFROM\s*\{", r"WHERE {", query, flags=re.IGNORECASE)
-        query = SPARQLTranslator._dedupe_select_vars(query)
-        return SPARQLTranslator._remove_subquery_filters(query)
+        return SPARQLTranslator._dedupe_select_vars(query)
 
     @staticmethod
     def _dedupe_select_vars(query: str) -> str:
@@ -89,45 +91,11 @@ class SPARQLTranslator(BaseTranslator):
             flags=re.IGNORECASE,
         )
 
-    @staticmethod
-    def _remove_subquery_filters(query: str) -> str:
-        """Rimuove i FILTER che contengono una SELECT annidata, sintassi non ammessa."""
-        result: list[str] = []
-        i = 0
-        upper = query.upper()
-        while i < len(query):
-            is_filter_kw = (
-                upper[i:i + 6] == "FILTER"
-                and (i == 0 or not query[i - 1].isalnum())
-                and (i + 6 >= len(query) or not query[i + 6].isalnum() or query[i + 6] in "( \t\n")
-            )
-            if is_filter_kw:
-                j = i + 6
-                while j < len(query) and query[j] in " \t\n\r":
-                    j += 1
-                if j < len(query) and query[j] == "(":
-                    # scansione con contatore di profondità per trovare la parentesi di chiusura
-                    depth = 1
-                    k = j + 1
-                    while k < len(query) and depth > 0:
-                        if query[k] == "(":
-                            depth += 1
-                        elif query[k] == ")":
-                            depth -= 1
-                        k += 1
-                    if "SELECT" in query[i:k].upper():
-                        i = k
-                        while i < len(query) and query[i] in " \t\n\r":
-                            i += 1
-                        continue
-            result.append(query[i])
-            i += 1
-        return "".join(result)
-
     def postprocess(self, query: str, question: str) -> str:
         """Riparazioni post-generazione; le sottoclassi possono estenderla."""
         query = self._fix_unbound_select_label(query)
-        return self._fix_intermediate_hop_label(query)
+        query = self._fix_intermediate_hop_label(query)
+        return self._dedupe_select_vars(query)
 
     def translate(self, question: str, schema_context: str = "") -> str:
         system_prompt = self.llm_client.load_prompt(
@@ -165,6 +133,29 @@ class SPARQLTranslator(BaseTranslator):
         return object_vars - subject_vars
 
     @classmethod
+    def _constraint_vars(cls, query: str) -> set[str]:
+        """Variabili usate per ordinare, raggruppare o filtrare: sono criteri di selezione, non risposte."""
+        constraint_vars: set[str] = set()
+        for chunk in re.findall(r"(?:ORDER\s+BY|GROUP\s+BY|HAVING|FILTER)\b[^{}]*", query, flags=re.IGNORECASE):
+            constraint_vars.update(re.findall(r"\?(\w+)", chunk))
+        return constraint_vars
+
+    @classmethod
+    def _replace_in_projection(cls, query: str, var: str, replacement: str) -> str:
+        """Riscrive una variabile nella sola SELECT: nel WHERE cambierebbe il grafo interrogato."""
+        select_match = re.search(r"\bSELECT\b(.*?)\bWHERE\b", query, flags=re.IGNORECASE | re.DOTALL)
+        if not select_match:
+            return query
+        start, end = select_match.span(1)
+        projection = re.sub(rf"\?{re.escape(var)}\b", replacement, query[start:end])
+        return query[:start] + projection + query[end:]
+
+    @classmethod
+    def _project(cls, var: str) -> str:
+        """Compone la proiezione di una variabile secondo le convenzioni del KG."""
+        return f"?{var}Label" if cls.has_label_service else f"?{var}"
+
+    @classmethod
     def _split_select_where(cls, query: str) -> tuple[list[str], str] | None:
         """Estrae le variabili della SELECT e il corpo del WHERE, o None se la query è malformata."""
         select_match = re.search(r"SELECT\s+(.*?)\s+WHERE\s*\{", query, flags=re.IGNORECASE | re.DOTALL)
@@ -185,18 +176,21 @@ class SPARQLTranslator(BaseTranslator):
         body_vars = set(re.findall(r"\?(\w+)", where_body))
 
         for var in select_vars:
-            if not var.endswith("Label") or var[: -len("Label")] in body_vars:
+            if not var.endswith("Label"):
                 continue
+            if var in body_vars or var[: -len("Label")] in body_vars:
+                continue
+
             candidates = {v for v in body_vars if not v.endswith("Label")}
             if len(candidates) == 1:
-                query = re.sub(rf"\?{re.escape(var)}\b", f"?{next(iter(candidates))}", query)
+                query = cls._replace_in_projection(query, var, f"?{next(iter(candidates))}")
             elif len(candidates) > 1:
                 # con più candidati non si sa quale sia la risposta: si selezionano tutte
                 # le foglie, perché dati incerti valgono più di zero righe.
-                leaves = cls._leaf_vars(where_body) & candidates
+                leaves = (cls._leaf_vars(where_body) & candidates) - cls._constraint_vars(query)
                 if leaves:
-                    replacement = " ".join(f"?{leaf}Label" for leaf in sorted(leaves))
-                    query = re.sub(rf"\?{re.escape(var)}\b", replacement, query)
+                    replacement = " ".join(cls._project(leaf) for leaf in sorted(leaves))
+                    query = cls._replace_in_projection(query, var, replacement)
         return query
 
     @classmethod
@@ -210,7 +204,7 @@ class SPARQLTranslator(BaseTranslator):
         subject_vars = {
             subj[1:] for subj, _ in cls._triple_regex().findall(where_body) if subj.startswith("?")
         }
-        leaf_vars = cls._leaf_vars(where_body)
+        leaf_vars = cls._leaf_vars(where_body) - cls._constraint_vars(query)
 
         for var in select_vars:
             base = var[: -len("Label")] if var.endswith("Label") else var
@@ -220,8 +214,8 @@ class SPARQLTranslator(BaseTranslator):
             # si interviene solo con una foglia univoca, per restare conservativi
             if len(other_leaves) == 1:
                 leaf = next(iter(other_leaves))
-                replacement = f"{leaf}Label" if var.endswith("Label") else leaf
-                query = re.sub(rf"\?{re.escape(var)}\b", f"?{replacement}", query)
+                replacement = cls._project(leaf) if var.endswith("Label") else f"?{leaf}"
+                query = cls._replace_in_projection(query, var, replacement)
         return query
 
     @classmethod
@@ -282,6 +276,7 @@ class WikidataSPARQLTranslator(SPARQLTranslator):
     property_prefix = "wdt:"
     class_filter_pattern = r"\?(\w+)\s+wdt:P31\s+wd:Q\d+\s*\.\s*"
     label_hint = "SERVICE wikibase:label (?xLabel / ?xDescription)"
+    has_label_service = True
 
     @staticmethod
     def sanitize_sparql(query: str) -> str:

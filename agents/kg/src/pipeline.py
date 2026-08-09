@@ -229,7 +229,7 @@ class KGPipeline:
             row["_provenance"] = {"source_kg": self.target_kg, "timestamp": timestamp}
 
         confidence = self._compute_confidence(grounded_results, correction_attempts, react_retry_used)
-        if self.cache:
+        if self.cache and grounded_results:
             self.cache.set(
                 question=question,
                 query=current_query,

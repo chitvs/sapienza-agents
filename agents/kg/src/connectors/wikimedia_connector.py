@@ -17,6 +17,8 @@ WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 # forma degli uri con cui l'endpoint restituisce i riferimenti a entità
 WIKIDATA_ENTITY_NS = "wikidata.org/entity/Q"
 
+_ISO_DATETIME = re.compile(r"^[+-]?\d{4,}-\d{2}-\d{2}T[\d:]+Z$")
+
 class WikimediaConnector(BaseConnector):
     """Connettore verso le API REST di Wikidata, con cache in-memory e richieste batch."""
 
@@ -285,8 +287,8 @@ class WikimediaConnector(BaseConnector):
                     # l'uri originale si conserva a parte: permette all'interfaccia di
                     # rendere il valore un link verificabile alla fonte
                     sources[var_name] = val
-                elif val.startswith(("+", "-")) and "T" in val and "Z" in val:
-                    # date ISO 8601 Wikidata: +1879-03-14T00:00:00Z -> 1879-03-14
+                elif _ISO_DATETIME.match(val):
+                    # +1879-03-14T00:00:00Z -> 1879-03-14, tenendo il segno degli anni a.C.
                     grounded_row[var_name] = val.lstrip("+").split("T")[0]
                 else:
                     grounded_row[var_name] = val

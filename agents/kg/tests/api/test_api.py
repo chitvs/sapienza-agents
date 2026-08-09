@@ -16,9 +16,31 @@ def test_health():
     assert res.status_code == 200
     assert res.json() == {"status": "ok", "service": "kg-agent"}
 
+def test_unsupported_kg_is_rejected():
+    res = client.post("/query", json={"question": "x", "target_kg": "yago"})
+    assert res.status_code == 400
+    assert "yago" in res.json()["detail"]
+
+def test_missing_prerequisite_explains_itself(monkeypatch):
+    """
+    L'indice FAISS è un artefatto di build: se manca, il messaggio che spiega come generarlo
+    deve arrivare al client, non perdersi in un 500 senza corpo.
+    """
+    import api.routes as routes
+
+    def build_fallito(*args, **kwargs):
+        raise FileNotFoundError("Indice FAISS delle proprietà non trovato. Eseguire 'python scripts/ingest_wikidata.py'.")
+
+    monkeypatch.setattr(routes, "KGPipeline", build_fallito)
+    monkeypatch.setattr(routes, "_pipelines", {})
+
+    res = client.post("/query", json={"question": "x", "target_kg": "wikidata"})
+    assert res.status_code == 503
+    assert "ingest_wikidata.py" in res.json()["detail"]
+
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_query():
-    res = client.post("/query", json={"question": "Qual è la data di nascita di Albert Einstein?"})
+    res = client.post("/query", json={"question": "What is the birth date of Albert Einstein?"})
     assert res.status_code == 200
     data = res.json()
     assert data["count"] > 0

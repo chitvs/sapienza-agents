@@ -1,4 +1,71 @@
+import pytest
+
 from cache.semantic_cache import SemanticQueryCache
+from pipeline import KGPipeline
+from pruners.base_pruner import PrunedSchema
+
+class _FakeProvider:
+    """Provider con componenti finti: serve a esercitare la politica di caching senza rete né LLM."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def get_connector(self):
+        class Connector:
+            def ground_results(self, raw):
+                return list(raw)
+        return Connector()
+
+    def get_translator(self):
+        class Client:
+            model_name = "finto"
+
+        class Translator:
+            llm_client = Client()
+
+            def translate(self, question, schema_context=""):
+                return "SELECT ?x WHERE { ?x ?p ?o }"
+
+            def generate_feedback_prompt(self, query, schema_context, error_context=""):
+                return schema_context
+        return Translator()
+
+    def get_executor(self):
+        rows = self.rows
+
+        class Executor:
+            def execute(self, query):
+                return list(rows)
+        return Executor()
+
+    def get_pruner(self):
+        class Pruner:
+            def prune(self, seed_entity_ids, connector_or_client=None, max_items=20, question="", max_hops=2):
+                return PrunedSchema(context_text="schema finto")
+        return Pruner()
+
+    def get_corrector(self):
+        return None
+
+    def get_linker(self):
+        class Linker:
+            def link(self, text):
+                return []
+        return Linker()
+
+@pytest.mark.parametrize(
+    "righe, atteso_in_cache",
+    [([], False), ([{"x": "valore"}], True)],
+)
+def test_only_non_empty_results_are_cached(righe, atteso_in_cache):
+    """
+    Un risultato vuoto può nascere da un guasto transitorio assorbito dai retry: metterlo in
+    cache lo renderebbe definitivo per la domanda e per ogni parafrasi sopra soglia.
+    """
+    cache = SemanticQueryCache()
+    pipeline = KGPipeline(provider=_FakeProvider(righe), cache=cache, target_kg="wikidata")
+    pipeline.run("Who is the mayor of Rome?")
+    assert (cache.get("Who is the mayor of Rome?") is not None) is atteso_in_cache
 
 def test_cache_hit_exact():
     cache = SemanticQueryCache(capacity=5)

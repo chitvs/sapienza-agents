@@ -1,4 +1,24 @@
+import pytest
+
 from connectors.wikimedia_connector import WikimediaConnector
+
+@pytest.mark.parametrize(
+    "valore, atteso",
+    [
+        # l'endpoint sparql non antepone il segno, l'api wbgetentities sì: entrambe le forme
+        # sono la stessa data e devono arrivare all'utente leggibili
+        ("1879-03-14T00:00:00Z", "1879-03-14"),
+        ("+1879-03-14T00:00:00Z", "1879-03-14"),
+        ("-0044-03-15T00:00:00Z", "-0044-03-15"),
+        # non sono date e non vanno toccate
+        ("The Matrix", "The Matrix"),
+        ("21", "21"),
+        ("1879-03-14", "1879-03-14"),
+    ],
+)
+def test_iso_dates_are_made_readable(valore, atteso):
+    grounded = WikimediaConnector().ground_results([{"v": {"value": valore}}])
+    assert grounded[0]["v"] == atteso
 
 def test_search_entity():
     connector = WikimediaConnector()

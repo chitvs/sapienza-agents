@@ -22,14 +22,19 @@ def test_unbound_select_label_is_redirected_wikidata():
     assert "?birthPlaceLabel" in fixed
 
 def test_unbound_select_label_is_redirected_dbpedia():
-    """stessa euristica, sintassi dbpedia."""
+    """
+    Stessa euristica, sintassi dbpedia: la variabile va proiettata nuda. Il suffisso Label
+    è magia di SERVICE wikibase:label, che dbpedia non ha: lì ?xLabel non sarebbe legata da
+    nulla e Virtuoso proietterebbe righe senza valore invece di segnalare un errore.
+    """
     query = """SELECT ?cityLabel WHERE {
       dbr:Albert_Einstein dbo:spouse ?spouse.
       ?spouse dbo:birthPlace ?birthPlace.
     }"""
     fixed = DBpediaSPARQLTranslator._fix_unbound_select_label(query)
     assert "?cityLabel" not in fixed
-    assert "?birthPlaceLabel" in fixed
+    assert "?birthPlaceLabel" not in fixed
+    assert "?birthPlace" in fixed
 
 def test_intermediate_hop_is_redirected_to_leaf_wikidata():
     query = """SELECT ?capitalLabel WHERE {
@@ -45,7 +50,49 @@ def test_intermediate_hop_is_redirected_to_leaf_dbpedia():
       ?capital dbo:populationTotal ?population.
     }"""
     fixed = DBpediaSPARQLTranslator._fix_intermediate_hop_label(query)
-    assert "?populationLabel" in fixed
+    assert "?populationLabel" not in fixed
+    assert "?population" in fixed
+
+@pytest.mark.parametrize(
+    "translator, query",
+    [
+        (
+            WikidataSPARQLTranslator,
+            "SELECT ?countryLabel WHERE { ?country wdt:P31 wd:Q6256. ?country wdt:P2046 ?area. }"
+            " ORDER BY DESC(?area) LIMIT 1",
+        ),
+        (
+            DBpediaSPARQLTranslator,
+            "SELECT ?mountain WHERE { ?mountain a dbo:Mountain . ?mountain dbo:elevation ?elevation . }"
+            " ORDER BY DESC(?elevation) LIMIT 1",
+        ),
+        (
+            WikidataSPARQLTranslator,
+            "SELECT ?cityLabel WHERE { ?city wdt:P31 wd:Q515. ?city wdt:P1082 ?pop. FILTER(?pop > 250000) }",
+        ),
+    ],
+)
+def test_ordering_and_filter_variables_are_never_projected(translator, query):
+    """
+    In un superlativo o in un filtro la foglia è il criterio di selezione, non la risposta.
+    Proiettarla farebbe rispondere con la superficie invece che con il nome del paese, e
+    siccome le righe non sarebbero vuote nessun retry se ne accorgerebbe.
+    """
+    assert translator.__new__(translator).postprocess(query, "x") == query
+
+def test_bound_label_variable_is_left_alone():
+    """
+    Se ?xLabel è già legata nel WHERE la query è corretta: riscriverla produrrebbe una
+    tripla che confronta una risorsa con la propria etichetta, cioè zero righe.
+    """
+    query = "SELECT ?nameLabel WHERE { dbr:The_Matrix dbo:director ?director . ?director rdfs:label ?nameLabel . }"
+    assert DBpediaSPARQLTranslator._fix_unbound_select_label(query) == query
+
+def test_where_body_is_never_rewritten():
+    """Le riparazioni riguardano la proiezione: toccare il WHERE cambierebbe il grafo interrogato."""
+    query = "SELECT ?capitalLabel WHERE { wd:Q17 wdt:P36 ?capital. ?capital wdt:P1082 ?population. }"
+    fixed = WikidataSPARQLTranslator._fix_intermediate_hop_label(query)
+    assert "WHERE { wd:Q17 wdt:P36 ?capital. ?capital wdt:P1082 ?population. }" in fixed
 
 @pytest.mark.parametrize(
     "translator, query",

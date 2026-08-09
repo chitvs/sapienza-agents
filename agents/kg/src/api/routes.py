@@ -34,6 +34,10 @@ def query_kg(request: QueryRequest) -> QueryResponse:
     except ValueError as err:
         # kg non supportato
         raise HTTPException(status_code=400, detail=str(err)) from err
+    except Exception as err:
+        raise HTTPException(
+            status_code=503, detail=f"knowledge graph '{target_kg}' non disponibile: {err}"
+        ) from err
 
     try:
         start_time = time.time()

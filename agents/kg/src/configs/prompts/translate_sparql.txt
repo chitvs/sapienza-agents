@@ -15,7 +15,7 @@ SPARQL syntax rules:
 - CRITICAL: When the question asks for an attribute (a date, a number, a place, etc.) of something reached only after traversing through an intermediate entity, that intermediate entity is NOT the answer: keep chaining triple patterns until you reach the variable holding the actual value the question asks for, and SELECT that final variable (or its Label), NOT the label of the intermediate entity you passed through along the way. See Example 4.
 - CRITICAL: If the user asks for a definition, explanation, or "who is" / "what is", you MUST return the Wikidata description. Use this pattern:
   SELECT ?targetDescription WHERE { BIND(wd:Q123 AS ?target) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }
-- NEVER use subqueries (SELECT inside WHERE or FILTER). Wikidata SPARQL 1.1 does NOT support nested SELECT statements. Instead, use ORDER BY + LIMIT 1 for superlatives (e.g., "highest", "largest", "most").
+- For superlatives ("highest", "largest", "most") use ORDER BY + LIMIT 1: simpler and cheaper than a nested SELECT. A subquery IS valid SPARQL 1.1 as a group pattern `{ SELECT ... }`, but a SELECT is not a scalar expression: never put one inside FILTER, use EXISTS / NOT EXISTS there.
 - SUPERLATIVES: For questions like "the highest mountain" or "the most populated country", use: ORDER BY DESC(?value) LIMIT 1.
 - AGGREGATION & COUNT: Use COUNT or COUNT(DISTINCT ?var) with explicit variable aliases (e.g. SELECT (COUNT(?item) AS ?count)). For grouped queries, use GROUP BY and ORDER BY.
 - MULTI-HOP TRAVERSAL: Chain triple patterns across intermediate variables to connect multiple entities or properties as specified in the schema context.

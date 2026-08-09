@@ -11,6 +11,24 @@ def is_ollama_running():
     except Exception:
         return False
 
+@pytest.mark.parametrize(
+    "mention, atteso",
+    [
+        ("Shakespeare's", "Shakespeare"),
+        ("Shakespeare’s", "Shakespeare"),
+        ("the Beatles'", "the Beatles"),
+        # la 's' finale appartiene al nome: toglierla cercherebbe un'altra entità
+        ("Tom Hanks", "Tom Hanks"),
+        ("United States", "United States"),
+        ("The Rolling Stones", "The Rolling Stones"),
+        ("Blue Cross", "Blue Cross"),
+        ("Paris", "Paris"),
+    ],
+)
+def test_normalize_mention_preserves_proper_nouns(mention, atteso):
+    """Il possessivo va rimosso, il plurale no: sono due cose diverse."""
+    assert LLMLinker._normalize_mention(mention) == atteso
+
 def test_extract_proper_nouns_standalone():
     """Test the regex-based fallback extraction of proper nouns."""
     linker = LLMLinker.__new__(LLMLinker)

@@ -41,4 +41,7 @@ class Settings(BaseSettings):
     default_target_kg: str = "wikidata"
     max_correction_retries: int = 3
 
+    # INFO espone l'intera tracciatura della pipeline; WARNING la silenzia senza toccare il codice
+    log_level: str = "INFO"
+
 settings = Settings()

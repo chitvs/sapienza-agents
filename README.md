@@ -34,10 +34,19 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 
 ### Preparazione
 
-gli indici ontologici di wikidata e dbpedia sono artefatti di build e vanno generati:
+le dipendenze python dell'agente kg si installano una volta sola:
 
 ```bash
 cd agents/kg
+uv venv
+uv pip install -r requirements.txt
+```
+
+il passaggio non è facoltativo: `uv venv` crea `agents/kg/.venv`, che tutti i comandi `uv run` successivi useranno da soli. senza, `uv run` esegue con l'ambiente che trova e i comandi qui sotto si fermano su `ModuleNotFoundError`.
+
+gli indici ontologici di wikidata e dbpedia sono artefatti di build e vanno generati:
+
+```bash
 uv run python scripts/ingest_wikidata.py     # ~3300 proprietà, ~500 classi
 uv run python scripts/ingest_dbpedia.py      # ~3000 proprietà, ~800 classi
 ```
