@@ -1,8 +1,16 @@
 # personal files
 todo.md
+docs/
 .vscode
 
 # python stuff
 __pycache__/
 .pytest_cache/
 .venv/
+
+# environment files
+.env
+
+# generated build artifacts
+agents/kg/data/*
+!agents/kg/data/.gitkeep

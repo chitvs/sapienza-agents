@@ -1,6 +1,8 @@
 import json
+import re
 import httpx
 import logging
+from typing import Any
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.config import settings
@@ -8,6 +10,41 @@ from src.graph.state import AgentState
 
 logger = logging.getLogger(__name__)
 llm = ChatOllama(base_url=settings.ollama_host, model=settings.ollama_model, temperature=0.0)
+
+def _parse_json(content: str) -> Any:
+    """estrae il json dalla risposta del modello, che spesso lo incapsula in un blocco markdown."""
+    text = content.strip()
+    if "```" in text:
+        text = re.sub(r"^json\b", "", text.split("```")[1].strip(), flags=re.IGNORECASE).strip()
+    return json.loads(text)
+
+async def translate_node(state: AgentState) -> dict:
+    """nodo di normalizzazione linguistica: traduce la domanda in inglese e registra la lingua originale."""
+    question = state["question"]
+
+    # serve al solo kg-agent, che è monolingue: ancora le menzioni su etichette inglesi e
+    # recupera lo schema con un modello di embedding monolingue, quindi una domanda in
+    # italiano ne degraderebbe entity linking e retrieval prima ancora della traduzione in
+    # query. planner e multiapi continuano a ricevere la domanda originale.
+    system_prompt = (
+        "Identifica la lingua della domanda dell'utente e traducila in inglese.\n"
+        "Se è già in inglese riportala invariata. Mantieni i nomi propri esattamente come sono scritti.\n"
+        "Rispondi esclusivamente con un JSON: {\"language\": \"<lingua, in inglese>\", \"question\": \"<domanda in inglese>\"}"
+    )
+
+    try:
+        response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=question)])
+        data = _parse_json(response.content)
+        question_en = str(data.get("question") or "").strip() or question
+        language = str(data.get("language") or "").strip() or "English"
+    except Exception as err:
+        # una traduzione fallita degrada la risposta, non averne blocca la domanda
+        logger.warning("Traduzione della domanda fallita: %s", err)
+        question_en, language = question, "English"
+
+    if question_en != question:
+        logger.info("Domanda tradotta da %s: %r -> %r", language, question, question_en)
+    return {"question_en": question_en, "language": language}
 
 async def supervisor_node(state: AgentState) -> dict:
     """nodo supervisor: analizza la domanda e seleziona gli agenti da attivare."""
@@ -25,10 +62,7 @@ async def supervisor_node(state: AgentState) -> dict:
     response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=question)])
 
     try:
-        content = response.content.strip()
-        if "```" in content:
-            content = content.split("```")[1].replace("json", "").strip()
-        selected = json.loads(content)
+        selected = _parse_json(response.content)
         if not isinstance(selected, list):
             selected = []
     except Exception as err:
@@ -39,9 +73,14 @@ async def supervisor_node(state: AgentState) -> dict:
 
 async def kg_node(state: AgentState) -> dict:
     """nodo che invoca direttamente il microservizio kg-agent via HTTP REST."""
+    # il kg-agent è monolingue: riceve sempre la versione inglese della domanda
+    payload = {"question": state.get("question_en") or state["question"]}
+    if state.get("target_kg"):
+        payload["target_kg"] = state["target_kg"]
+
     async with httpx.AsyncClient(timeout=330.0) as client:
         try:
-            res = await client.post(f"{settings.kg_agent_url}/query", json={"question": state["question"]})
+            res = await client.post(f"{settings.kg_agent_url}/query", json=payload)
             res.raise_for_status()
             return {"kg_results": res.json()}
         except Exception as err:
@@ -84,9 +123,13 @@ async def synthesizer_node(state: AgentState) -> dict:
 
     context_str = "\n".join(evidences) if evidences else "Nessuna evidenza trovata dagli agenti."
 
+    # le evidenze arrivano in inglese dagli agenti, ma la risposta deve tornare
+    # all'utente nella lingua in cui ha scritto
+    language = state.get("language") or "the language of the question"
     system_prompt = (
         "Sei un assistente AI integrato. Rispondi alla domanda dell'utente in modo chiaro, naturale e professionale "
-        "basandoti esclusivamente sulle seguenti evidenze raccolte dagli agenti."
+        "basandoti esclusivamente sulle seguenti evidenze raccolte dagli agenti.\n"
+        f"Le evidenze possono essere in inglese: scrivi comunque la risposta in {language}."
     )
     user_content = f"Domanda: {question}\n\nEvidenze:\n{context_str}"
 
