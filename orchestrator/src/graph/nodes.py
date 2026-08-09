@@ -39,7 +39,7 @@ async def supervisor_node(state: AgentState) -> dict:
 
 async def kg_node(state: AgentState) -> dict:
     """nodo che invoca direttamente il microservizio kg-agent via HTTP REST."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=330.0) as client:
         try:
             res = await client.post(f"{settings.kg_agent_url}/query", json={"question": state["question"]})
             res.raise_for_status()
@@ -50,7 +50,7 @@ async def kg_node(state: AgentState) -> dict:
 
 async def planner_node(state: AgentState) -> dict:
     """nodo che invoca direttamente il microservizio planner-agent via HTTP REST."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=330.0) as client:
         try:
             res = await client.post(f"{settings.planner_agent_url}/query", json={"question": state["question"]})
             res.raise_for_status()
@@ -61,7 +61,7 @@ async def planner_node(state: AgentState) -> dict:
 
 async def multiapi_node(state: AgentState) -> dict:
     """nodo che invoca direttamente il microservizio multiapi-agent via HTTP REST."""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=330.0) as client:
         try:
             res = await client.post(f"{settings.multiapi_agent_url}/query", json={"question": state["question"]})
             res.raise_for_status()

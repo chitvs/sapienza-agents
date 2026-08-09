@@ -1,2 +1,8 @@
 # personal files
 todo.md
+.vscode
+
+# python stuff
+__pycache__/
+.pytest_cache/
+.venv/
