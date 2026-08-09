@@ -1,6 +1,7 @@
 # personal files
 todo.md
 .vscode
+.env
 
 # python stuff
 __pycache__/

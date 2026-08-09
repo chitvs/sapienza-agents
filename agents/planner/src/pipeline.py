@@ -41,14 +41,45 @@ class PlannerPipeline:
     # -- llm helpers (stesso pattern di multiapi, self-contained) ----
 
     async def _llm_generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
-        """chiama ollama /api/generate (in modo non bloccante) e restituisce la risposta grezza.
+        """Prova il provider configurato; se è gemini e fallisce, ripiega su ollama."""
+        if settings.llm_provider.lower() == "gemini":
+            try:
+                return await self._generate_gemini(prompt, temperature, json_mode)
+            except Exception as err:
+                self._log(f"  [warn] gemini non disponibile ({err.__class__.__name__}: {err}), fallback su ollama")
+                return await self._generate_ollama(prompt, temperature, json_mode)
+        return await self._generate_ollama(prompt, temperature, json_mode)
 
-        json_mode attiva il vincolo nativo di ollama (`format: "json"`), che forza il
-        decoding a produrre testo JSON sintatticamente valido. Va usato IN AGGIUNTA alle
-        istruzioni nel prompt, non al loro posto: garantisce che l'output sia json valido,
-        non che contenga i campi attesi con i tipi giusti (quello resta compito della
-        validazione Pydantic a valle).
-        """
+    async def _generate_gemini(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
+        if not settings.gemini_api_key:
+            raise ValueError("GEMINI_API_KEY non configurata")
+
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}"
+        )
+        generation_config = {"temperature": temperature}
+        if json_mode:
+            generation_config["response_mime_type"] = "application/json"
+
+        payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": generation_config}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+
+            candidates = data.get("candidates", [])
+            if not candidates:
+                block_reason = data.get("promptFeedback", {}).get("blockReason")
+                self._log(f"  [warn] gemini: nessuna candidate, blockReason={block_reason!r}")
+                return ""
+
+            parts = candidates[0].get("content", {}).get("parts", [])
+            return parts[0].get("text", "").strip() if parts else ""
+
+    async def _generate_ollama(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
+        """Chiama Ollama locale via HTTP REST."""
         url = f"{settings.ollama_host.rstrip('/')}/api/generate"
         payload = {
             "model": settings.ollama_model,
@@ -64,6 +95,7 @@ class PlannerPipeline:
             resp.raise_for_status()
             return resp.json().get("response", "").strip()
 
+    
     @staticmethod
     def _clean_json(raw: str) -> str:
         """rimuove eventuali blocchi markdown (```json ... ```) dalla risposta llm."""
