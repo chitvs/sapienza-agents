@@ -115,7 +115,13 @@ form.addEventListener("submit", async event => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(body),
     });
-    const data = await response.json();
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+    }
     if (!response.ok) throw new Error(data.detail || `errore ${response.status}`);
     output.innerHTML = mode === "kg" ? renderKg(data) : renderOrchestrator(data);
   } catch (err) {
