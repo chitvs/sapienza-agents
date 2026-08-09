@@ -14,6 +14,9 @@ from connectors.base_connector import (
 logger = logging.getLogger(__name__)
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 
+# forma degli uri con cui l'endpoint restituisce i riferimenti a entità
+WIKIDATA_ENTITY_NS = "wikidata.org/entity/Q"
+
 class WikimediaConnector(BaseConnector):
     """Connettore verso le API REST di Wikidata, con cache in-memory e richieste batch."""
 
@@ -259,7 +262,7 @@ class WikimediaConnector(BaseConnector):
         for row in raw_results:
             for var_data in row.values():
                 val = self._extract_value(var_data)
-                if "wikidata.org/entity/Q" in val or "dbpedia.org/resource/" in val:
+                if WIKIDATA_ENTITY_NS in val:
                     entity_ids.add(val.split("/")[-1])
 
         resolved_labels: dict[str, str] = {}
@@ -276,7 +279,7 @@ class WikimediaConnector(BaseConnector):
                 val = self._extract_value(var_data)
 
                 # il valore è un riferimento a un'entità, non un letterale
-                if "wikidata.org/entity/Q" in val or "dbpedia.org/resource/" in val:
+                if WIKIDATA_ENTITY_NS in val:
                     entity_id = val.split("/")[-1]
                     grounded_row[var_name] = resolved_labels.get(entity_id, val)
                     # l'uri originale si conserva a parte: permette all'interfaccia di

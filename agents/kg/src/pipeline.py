@@ -16,6 +16,7 @@ class PipelineResult(NamedTuple):
     results: list[dict]
     query: str
     confidence: float
+    cached: bool = False
 
 def build_provider(target_kg: str) -> BaseProvider:
     """Istanzia il provider del KG richiesto. Solleva ValueError se il KG non è supportato."""
@@ -187,7 +188,7 @@ class KGPipeline:
             if cached:
                 self._log("  -> cache hit! restituisco i risultati salvati.")
                 cached_query, cached_results, cached_confidence = cached
-                return PipelineResult(cached_results, cached_query, cached_confidence)
+                return PipelineResult(cached_results, cached_query, cached_confidence, cached=True)
 
         self._log("\n[info] [step] entity linking")
         entities = self.linker.link(question)

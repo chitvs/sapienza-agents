@@ -105,6 +105,12 @@ L'agente kg traduce domande in linguaggio naturale in query eseguite su un knowl
 
 Wikidata e dbpedia hanno ontologie troppo grandi per stare in un prompt, quindi lo schema rilevante viene selezionato con una ricerca semantica su indice faiss. Lo schema di un grafo neo4j è invece piccolo e chiuso: viene letto per intero tramite introspezione, senza indici da costruire.
 
+### Lingua
+
+L'agente kg lavora in inglese. L'entity linking cerca le etichette inglesi dei knowledge graph e il retrieval dello schema usa `bge-small-en-v1.5`, che è monolingue: una domanda in un'altra lingua degrada il linking e il recupero delle proprietà prima ancora di arrivare alla traduzione in query.
+
+La traduzione è quindi responsabilità dell'orchestratore, che normalizza la domanda in inglese prima di interpellare l'agente kg e riporta la risposta finale nella lingua in cui è stata posta. Gli altri agenti continuano a ricevere la domanda originale. Nell'interfaccia web questo vale per la modalità orchestratore; interrogando l'agente kg direttamente, la domanda va scritta in inglese.
+
 ### Struttura del codice
 
 ```text
@@ -171,7 +177,7 @@ interroga il microservizio:
 ```bash
 curl -X POST "http://localhost:8000/query" \
     -H "Content-Type: application/json" \
-    -d '{"question": "Qual è la data di nascita di Albert Einstein?"}'
+    -d '{"question": "What is the birth date of Albert Einstein?"}'
 ```
 
 per interrogare un knowledge graph diverso da wikidata:

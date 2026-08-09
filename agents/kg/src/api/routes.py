@@ -53,4 +53,5 @@ def query_kg(request: QueryRequest) -> QueryResponse:
         count=len(result.results),
         confidence=result.confidence,
         execution_time_ms=elapsed_ms,
+        cached=result.cached,
     )

@@ -23,6 +23,8 @@ def health():
 async def run_query(req: QueryRequest):
     initial_state = {
         "question": req.question,
+        "question_en": "",
+        "language": "",
         "target_kg": req.target_kg,
         "selected_agents": [],
         "kg_results": None,

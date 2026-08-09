@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 class QueryRequest(BaseModel):
     question: str = Field(
         ...,
-        description="domanda in linguaggio naturale",
-        json_schema_extra={"examples": ["Qual è la data di nascita di Albert Einstein?"]},
+        description="domanda in linguaggio naturale, in inglese",
+        json_schema_extra={"examples": ["What is the birth date of Albert Einstein?"]},
     )
     target_kg: str | None = Field(
         default="wikidata",
@@ -21,3 +21,4 @@ class QueryResponse(BaseModel):
     count: int
     confidence: float = 1.0
     execution_time_ms: float | None = None
+    cached: bool = False

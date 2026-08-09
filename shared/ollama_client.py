@@ -28,14 +28,6 @@ class OllamaClient:
 
         self.session = requests.Session()
 
-    def is_available(self) -> bool:
-        """verifica se il server ollama è attivo e raggiungibile."""
-        try:
-            res = self.session.get(f"{self.host}/", timeout=3)
-            return res.status_code == 200
-        except Exception:
-            return False
-
     @staticmethod
     def clean_code_block(raw_output: str) -> str:
         """rimuove i blocchi di codice markdown (```sparql ... ``` o ```json ... ```) dall'output del modello."""
@@ -75,20 +67,6 @@ class OllamaClient:
         for key, value in kwargs.items():
             template = template.replace("{" + key + "}", str(value))
         return template
-
-    def generate(self, prompt: str, temperature: float = 0.0) -> str:
-        """invia un prompt al modello ollama e restituisce la risposta."""
-        url = f"{self.host}/api/generate"
-        payload = {
-            "model": self.model_name,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": temperature, "num_ctx": 8192},
-        }
-
-        response = self.session.post(url, json=payload, timeout=self.timeout)
-        response.raise_for_status()
-        return response.json().get("response", "")
 
     def chat(self, system_prompt: str, user_content: str, temperature: float = 0.0) -> str:
         """invia messaggi di chat al modello ollama con un prompt di sistema."""

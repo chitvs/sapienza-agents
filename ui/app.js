@@ -70,6 +70,7 @@ function renderKg(data) {
     ["risultati", data.count ?? 0],
     ["confidenza", (data.confidence ?? 0).toFixed(2)],
     ["tempo", formatSeconds(data.execution_time_ms)],
+    ...(data.cached ? [["cache", "risultato riusato"]] : []),
   ]);
   const table = (data.count && data.results)
     ? renderTable(data.results)

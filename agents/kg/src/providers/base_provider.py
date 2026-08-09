@@ -63,9 +63,3 @@ class BaseProvider(ABC):
 
     def get_corrector(self) -> BaseCorrector | None:
         return self.corrector
-
-    def get_llm_client(self) -> Any:
-        return self.llm_client
-
-    def get_linking_llm_client(self) -> Any:
-        return self.linking_client

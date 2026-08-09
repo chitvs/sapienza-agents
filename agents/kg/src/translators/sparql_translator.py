@@ -91,7 +91,7 @@ class SPARQLTranslator(BaseTranslator):
 
     @staticmethod
     def _remove_subquery_filters(query: str) -> str:
-        """Rimuove i FILTER contenenti subquery SELECT, non supportate da SPARQL 1.1."""
+        """Rimuove i FILTER che contengono una SELECT annidata, sintassi non ammessa."""
         result: list[str] = []
         i = 0
         upper = query.upper()

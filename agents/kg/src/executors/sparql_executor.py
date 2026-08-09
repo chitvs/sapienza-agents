@@ -24,7 +24,7 @@ class SPARQLExecutor(BaseExecutor):
         self.timeout = timeout
         self.session = requests.Session()
         self.session.headers.update({
-            "User-Agent": "kg-agent",
+            "User-Agent": "kg-agent/1.0 (https://github.com/chitvs/sapienza-agents)",
             "Accept": "application/sparql-results+json",
         })
 
