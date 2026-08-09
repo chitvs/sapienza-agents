@@ -46,7 +46,7 @@ poi si avvia neo4j e si carica il dataset del dominio cinema:
 
 ```bash
 cd ../..
-sudo docker compose up -d neo4j
+docker compose up -d neo4j
 cd agents/kg
 uv run python scripts/setup_neo4j_movies.py
 ```
@@ -58,7 +58,7 @@ il dataset è il movie graph ufficiale di neo4j. Resta nel volume `neo4j-data`, 
 dalla root del repository:
 
 ```bash
-sudo docker compose up -d ui
+docker compose up -d
 ```
 
 avvia l'intera catena in ordine: neo4j, poi kg-agent, poi orchestratore, infine l'interfaccia.
@@ -66,10 +66,14 @@ avvia l'intera catena in ordine: neo4j, poi kg-agent, poi orchestratore, infine 
 il primo avvio è lento. il kg-agent precarica i modelli locali e al primo giro li scarica da huggingface: circa 2.7 gb, di cui 2 gb per il solo gliner, con le richieste non autenticate limitate in banda. finché non ha finito il servizio non risponde all'healthcheck e i servizi che dipendono da lui restano in attesa. per seguirlo:
 
 ```bash
-sudo docker compose logs -f kg-agent
+docker compose logs -f kg-agent
 ```
 
 quando compare `modelli pronti.` il sistema è utilizzabile. dagli avvii successivi i modelli sono nel volume `hf-cache` e il precaricamento richiede una ventina di secondi.
+
+> ![NOTE]
+> Per quanto riguarda i comandi `docker`, potrebbe essere necessario lanciarli con `sudo`, qualora l'utente non appartenga al gruppo docker.
+![NOTE]
 
 ### Verifica
 
