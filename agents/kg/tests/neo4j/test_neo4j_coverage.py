@@ -3,10 +3,10 @@ Copertura estesa della pipeline Neo4j sul movie graph.
 
 I test in test_neo4j_integration.py verificano che la pipeline funzioni; questi servono
 a misurarne il vero soffitto, esercitando dimensioni che i primi non toccano: tutte le
-relazioni dello schema (non solo ACTED_IN e DIRECTED), le proprieta' sulle relazioni,
-i filtri su intervalli numerici, le catene a tre livelli e le entita' con nomi ambigui.
+relazioni dello schema (non solo ACTED_IN e DIRECTED), le proprietà sulle relazioni,
+i filtri su intervalli numerici, le catene a tre livelli e le entità con nomi ambigui.
 E' lecito che qualcuno fallisca: servono a scoprire dove sta il limite, non a
-confermare cio' che gia' sappiamo funzionare.
+confermare ciò che già sappiamo funzionare.
 """
 import pytest
 import requests
@@ -31,7 +31,7 @@ def is_neo4j_ready() -> bool:
             database=settings.neo4j_database,
             timeout=5.0,
         )
-        rows = executor.run_internal("MATCH (m:Movie) RETURN count(m) AS c", {})
+        rows = executor.execute_trusted("MATCH (m:Movie) RETURN count(m) AS c", {})
         executor.close()
         return bool(rows) and rows[0].get("c", 0) > 0
     except Exception:
@@ -72,7 +72,7 @@ def test_person_to_person_relationship(pipeline: KGPipeline) -> None:
 @requires_stack
 def test_relationship_property(pipeline: KGPipeline) -> None:
     """
-    La proprieta' 'rating' vive sulla RELAZIONE REVIEWED, non su un nodo: richiede di
+    La proprietà 'rating' vive sulla RELAZIONE REVIEWED, non su un nodo: richiede di
     legare la relazione a una variabile ([r:REVIEWED]) invece di attraversarla e basta.
     """
     result = pipeline.run("What rating did Jessica Thompson give to The Replacements?")
@@ -80,7 +80,7 @@ def test_relationship_property(pipeline: KGPipeline) -> None:
 
 @requires_stack
 def test_roles_property_on_relationship(pipeline: KGPipeline) -> None:
-    """stessa dimensione, su una proprieta' di tipo lista (roles)."""
+    """stessa dimensione, su una proprietà di tipo lista (roles)."""
     result = pipeline.run("Which role did Keanu Reeves play in The Matrix?")
     assert len(result.results) > 0
 
@@ -92,7 +92,7 @@ def test_numeric_range_filter(pipeline: KGPipeline) -> None:
 
 @requires_stack
 def test_person_born_after_year(pipeline: KGPipeline) -> None:
-    """filtro numerico su una proprieta' di persona."""
+    """filtro numerico su una proprietà di persona."""
     result = pipeline.run("Which people were born after 1970?")
     assert len(result.results) > 0
 
@@ -111,8 +111,8 @@ def test_count_distinct_people(pipeline: KGPipeline) -> None:
 @requires_stack
 def test_ambiguous_title_prefix(pipeline: KGPipeline) -> None:
     """
-    'The Matrix' e' prefisso di 'The Matrix Reloaded' e 'The Matrix Revolutions': la
-    ricerca dell'entita' deve preferire il titolo esatto ai sequel.
+    'The Matrix' è prefisso di 'The Matrix Reloaded' e 'The Matrix Revolutions': la
+    ricerca dell'entità deve preferire il titolo esatto ai sequel.
     """
     result = pipeline.run("When was The Matrix released?")
     assert len(result.results) > 0
@@ -126,12 +126,12 @@ def test_person_who_both_acted_and_directed(pipeline: KGPipeline) -> None:
 
 @requires_stack
 def test_movie_with_most_actors(pipeline: KGPipeline) -> None:
-    """superlativo su un'aggregazione, non su una proprieta' diretta."""
+    """superlativo su un'aggregazione, non su una proprietà diretta."""
     result = pipeline.run("Which movie has the most actors?")
     assert len(result.results) > 0
 
 @requires_stack
 def test_tagline_property(pipeline: KGPipeline) -> None:
-    """proprieta' testuale poco frequente, per verificare che non venga ignorata."""
+    """proprietà testuale poco frequente, per verificare che non venga ignorata."""
     result = pipeline.run("What is the tagline of The Matrix?")
     assert len(result.results) > 0

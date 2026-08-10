@@ -11,7 +11,7 @@ import requests
 from connectors.base_connector import KnowledgeGraphUnavailableError
 from connectors.dbpedia_connector import DBpediaConnector
 from connectors.neo4j_connector import Neo4jConnector
-from connectors.wikimedia_connector import WikimediaConnector
+from connectors.wikidata_connector import WikidataConnector
 
 class BrokenSession:
     """Sessione HTTP che simula un endpoint irraggiungibile."""
@@ -23,18 +23,18 @@ class BrokenSession:
         raise requests.ConnectionError("connessione rifiutata")
 
 class BrokenExecutor:
-    def run_internal(self, query, params=None):
+    def execute_trusted(self, query, params=None):
         raise RuntimeError("bolt non raggiungibile")
 
 def test_wikidata_search_declares_the_failure():
-    connector = WikimediaConnector()
+    connector = WikidataConnector()
     connector.session = BrokenSession()
     with pytest.raises(KnowledgeGraphUnavailableError) as err:
         connector.search_entity("Albert Einstein")
     assert err.value.kg == "wikidata"
 
 def test_wikidata_entity_fetch_declares_the_failure():
-    connector = WikimediaConnector()
+    connector = WikidataConnector()
     connector.session = BrokenSession()
     with pytest.raises(KnowledgeGraphUnavailableError):
         connector.get_entities(["Q937"])
@@ -60,7 +60,7 @@ def test_neo4j_schema_failure_is_not_silent():
 def test_empty_answer_is_not_a_failure():
     """Una risposta legittimamente vuota resta vuota e non solleva."""
     class EmptyExecutor:
-        def run_internal(self, query, params=None):
+        def execute_trusted(self, query, params=None):
             return []
 
     assert Neo4jConnector(executor=EmptyExecutor()).search_entity("inesistente") == []

@@ -11,6 +11,7 @@ SPARQL syntax rules for DBpedia:
 - CRITICAL: When the question asks for an attribute of something reached only after traversing an intermediate entity, that intermediate entity is NOT the answer: keep chaining triple patterns until you reach the variable holding the value the question actually asks for, and SELECT that final variable. See Example 4.
 - CRITICAL: Only use the dbo: properties and dbo: classes that appear in the schema context. Do NOT invent property names from your own knowledge: a property that does not exist simply matches nothing and the query returns zero rows.
 - Do NOT add a type filter (?x a dbo:Something) on a variable that is already reached through a specific property — it is redundant and, because rdf:type is not matched transitively over subclasses, it often makes a correct query return nothing. Use a type filter only to constrain a variable that would otherwise range freely, as in a superlative.
+- YES/NO QUESTIONS ("Did/Does/Is/Are/Was/Has ...?"): the answer is a truth value, so the query MUST be an ASK with no projection, never a SELECT. Example: ASK { dbr:X dbo:award dbr:Y. }
 - For superlatives use ORDER BY + LIMIT 1 rather than a nested SELECT. A subquery is valid as a group pattern `{ SELECT ... }`, but never inside FILTER: there a SELECT is not a valid expression, use EXISTS / NOT EXISTS.
 - AGGREGATION: use COUNT with an explicit alias, e.g. SELECT (COUNT(DISTINCT ?film) AS ?count).
 - Use OPTIONAL for attributes that may be missing, and LIMIT to bound large result sets.

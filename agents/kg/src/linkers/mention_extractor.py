@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from configs.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,6 @@ _ENTITY_LABELS = [
 # sostantivi di ruolo ("coach" a volte scora più in alto di "penicillin"), quindi la
 # precisione è delegata al filtro LLM successivo invece di inseguire una soglia che,
 # per costruzione, non esiste.
-_SCORE_THRESHOLD = 0.35
 
 _MODEL: Any = None
 
@@ -38,7 +38,7 @@ def extract_entity_mentions(text: str) -> list[str]:
     """Estrae le menzioni di entità dal testo tramite NER zero-shot, senza duplicati."""
     # essendo un modello di span-extraction e non generativo, non può restituire
     # entità che non compaiono letteralmente nel testo
-    entities = _get_model().predict_entities(text, _ENTITY_LABELS, threshold=_SCORE_THRESHOLD)
+    entities = _get_model().predict_entities(text, _ENTITY_LABELS, threshold=settings.gliner_score_threshold)
 
     seen: set[str] = set()
     mentions: list[str] = []

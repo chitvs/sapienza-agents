@@ -14,10 +14,12 @@ class OllamaClient:
         model_name: str = "qwen2.5-coder:7b",
         prompts_dir: Path | str | None = None,
         timeout: float = 300.0,
+        num_ctx: int = 8192,
     ):
         self.host = (host or "http://localhost:11434").rstrip("/")
         self.model_name = model_name or "qwen2.5-coder:7b"
         self.timeout = timeout
+        self.num_ctx = num_ctx
 
         if prompts_dir is not None:
             self.prompts_dir = Path(prompts_dir)
@@ -50,12 +52,8 @@ class OllamaClient:
         return cleaned
 
     def load_prompt(self, prompt_filename: str, **kwargs) -> str:
-        """
-        carica un prompt da file e sostituisce solo i placeholder {nome} espliciti
-        passati come kwargs, senza usare str.format(): i prompt contengono spesso
-        esempi di codice (SPARQL, JSON) con parentesi graffe letterali che altrimenti
-        andrebbero escapate manualmente e sarebbero un'inevitabile fonte di bug.
-        """
+        """Sostituisce i soli placeholder {nome} passati come kwargs: str.format() romperebbe
+        le graffe letterali negli esempi SPARQL e JSON contenuti nei prompt."""
         if not self.prompts_dir:
             raise ValueError("prompts_dir non è stato configurato.")
 
@@ -68,9 +66,20 @@ class OllamaClient:
             template = template.replace("{" + key + "}", str(value))
         return template
 
-    def chat(self, system_prompt: str, user_content: str, temperature: float = 0.0) -> str:
+    def chat(
+        self,
+        system_prompt: str,
+        user_content: str,
+        temperature: float = 0.0,
+        top_p: float | None = None,
+    ) -> str:
         """invia messaggi di chat al modello ollama con un prompt di sistema."""
         url = f"{self.host}/api/chat"
+        options: dict = {"temperature": temperature, "num_ctx": self.num_ctx}
+        # ollama applica comunque il proprio top_p di default (0.9): lo si invia solo
+        # quando è richiesto esplicitamente, per non fissare un valore anche a temperatura 0
+        if top_p is not None:
+            options["top_p"] = top_p
         payload = {
             "model": self.model_name,
             "messages": [
@@ -78,7 +87,7 @@ class OllamaClient:
                 {"role": "user", "content": user_content},
             ],
             "stream": False,
-            "options": {"temperature": temperature, "num_ctx": 8192},
+            "options": options,
         }
 
         response = self.session.post(url, json=payload, timeout=self.timeout)

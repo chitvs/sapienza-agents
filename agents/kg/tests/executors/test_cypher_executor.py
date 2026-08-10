@@ -1,9 +1,9 @@
 """
 Test del guard di sola lettura del CypherExecutor.
 
-Non richiedono un'istanza Neo4j: verificano la validazione statica della query, che e'
+Non richiedono un'istanza Neo4j: verificano la validazione statica della query, che è
 la barriera di sicurezza fra l'output dell'llm e il database dell'utente e va quindi
-testata sempre, non solo quando c'e' un db attivo.
+testata sempre, non solo quando c'è un db attivo.
 """
 import pytest
 from executors.cypher_executor import CypherExecutor, CypherExecutionError

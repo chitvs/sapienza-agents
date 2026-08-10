@@ -8,14 +8,14 @@ def is_ollama_running():
     except Exception:
         return False
 
-def test_sanitize_sparql_aggregations():
+def test_sanitize_aggregations():
     translator = SPARQLTranslator.__new__(SPARQLTranslator)
     raw = "SELECT COUNT (?item) WHERE { wd:Q458 wdt:P527 ?item . }"
-    sanitized = translator.sanitize_sparql(raw)
+    sanitized = translator.sanitize(raw)
     assert "SELECT (COUNT(?item) AS ?count) WHERE" in sanitized
 
     raw_distinct = "SELECT COUNT ( DISTINCT ?item ) WHERE { wd:Q458 wdt:P527 ?item . }"
-    sanitized_distinct = translator.sanitize_sparql(raw_distinct)
+    sanitized_distinct = translator.sanitize(raw_distinct)
     assert "COUNT(DISTINCT ?item)" in sanitized_distinct or "COUNT( DISTINCT ?item )" in sanitized_distinct
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")

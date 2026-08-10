@@ -1,30 +1,13 @@
 import re
 
 from shared.ollama_client import OllamaClient
-from configs.settings import settings
 from translators.base_translator import BaseTranslator
 
 class CypherTranslator(BaseTranslator):
     """Traduttore Text2Cypher basato su LLM per grafi Neo4j."""
 
-    def __init__(
-        self,
-        llm_client: OllamaClient | None = None,
-        model_name: str | None = None,
-        host: str | None = None,
-    ) -> None:
-        if llm_client is not None:
-            self.llm_client = llm_client
-        else:
-            self.llm_client = OllamaClient(
-                host=host or settings.ollama_host,
-                model_name=model_name or settings.ollama_translation_model,
-                timeout=settings.ollama_timeout,
-                prompts_dir=settings.prompts_dir,
-            )
-
     @staticmethod
-    def sanitize_cypher(query: str) -> str:
+    def sanitize(query: str) -> str:
         """Normalizza gli errori di forma più comuni nell'output dell'LLM."""
         # il punto e virgola finale è rifiutato dentro una transazione esplicita
         query = query.strip().rstrip(";").strip()
@@ -32,7 +15,13 @@ class CypherTranslator(BaseTranslator):
         query = re.sub(r"\(\s+", "(", query)
         return re.sub(r"\s+\)", ")", query)
 
-    def translate(self, question: str, schema_context: str = "") -> str:
+    def translate(
+        self,
+        question: str,
+        schema_context: str = "",
+        temperature: float = 0.0,
+        top_p: float | None = None,
+    ) -> str:
         system_prompt = self.llm_client.load_prompt(
             "translate_cypher.txt",
             schema=schema_context,
@@ -41,11 +30,12 @@ class CypherTranslator(BaseTranslator):
         raw_output = self.llm_client.chat(
             system_prompt=system_prompt,
             user_content=question,
-            temperature=0.0,
+            temperature=temperature,
+            top_p=top_p,
         )
-        return self.sanitize_cypher(OllamaClient.clean_code_block(raw_output))
+        return self.postprocess(self.sanitize(OllamaClient.clean_code_block(raw_output)), question)
 
-    def generate_feedback_prompt(self, query: str, schema_context: str, error_context: str = "") -> str:
+    def generate_feedback_prompt(self, query: str, schema_context: str) -> str:
         hints: list[str] = [
             "The query was syntactically valid but matched nothing, so the problem is in "
             "WHAT it matches, not in how it is written. You MUST change something: "

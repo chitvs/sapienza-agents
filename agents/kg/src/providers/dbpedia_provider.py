@@ -30,6 +30,6 @@ class DBpediaProvider(BaseProvider):
         self.corrector = ErrorConditionedCorrector(
             self.llm_client,
             prompt_filename="correction_dbpedia.txt",
-            sanitizer=DBpediaSPARQLTranslator.sanitize_sparql,
+            sanitizer=DBpediaSPARQLTranslator.sanitize,
         )
         self.linker = LLMLinker(connector=self.connector, llm_client=self.linking_client)

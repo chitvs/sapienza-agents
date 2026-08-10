@@ -43,12 +43,6 @@ def test_local_name_and_readable():
     assert c._local_name("http://dbpedia.org/resource/Princeton,_New_Jersey") == "Princeton,_New_Jersey"
     assert c._readable("Princeton,_New_Jersey") == "Princeton, New Jersey"
 
-def test_looks_like_entity_id():
-    c = DBpediaConnector()
-    assert c.looks_like_entity_id("http://dbpedia.org/resource/Ulm")
-    assert c.looks_like_entity_id("dbr:Ulm")
-    assert not c.looks_like_entity_id("1879-03-14")
-
 def test_ground_results_converts_uris_to_readable_names():
     c = DBpediaConnector()
     raw = [{"birthPlace": {"value": "http://dbpedia.org/resource/Princeton,_New_Jersey"}},

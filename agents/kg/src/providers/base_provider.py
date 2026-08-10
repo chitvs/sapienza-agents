@@ -31,14 +31,9 @@ class BaseProvider(ABC):
         # traduzione e linking usano modelli diversi ma spesso coincidono con quello
         # generale: la cache evita sessioni HTTP duplicate verso lo stesso modello
         if model_name not in self._clients:
-            from shared.ollama_client import OllamaClient
+            from llm import build_llm_client
 
-            self._clients[model_name] = OllamaClient(
-                host=settings.ollama_host,
-                model_name=model_name,
-                timeout=settings.ollama_timeout,
-                prompts_dir=settings.prompts_dir,
-            )
+            self._clients[model_name] = build_llm_client(model_name)
         return self._clients[model_name]
 
     @abstractmethod

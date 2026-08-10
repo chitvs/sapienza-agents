@@ -91,30 +91,24 @@ class VectorPruner(BasePruner):
     def prune(
         self,
         seed_entity_ids: list[str],
-        connector_or_client: Any = None,
+        connector: Any = None,
         max_items: int = 20,
         question: str = "",
-        max_hops: int = 2, # ignorato: qui lo schema si cerca, non si attraversa
     ) -> PrunedSchema:
         """Costruisce il contesto unendo entità seed, proprietà verificate e match semantici."""
         context_lines: list[str] = []
-        entity_prefix, property_prefix = self._prefixes(connector_or_client)
+        entity_prefix, property_prefix = self._prefixes(connector)
 
         def entity_ref(eid: str) -> str:
-            if connector_or_client is not None and hasattr(connector_or_client, "format_entity_ref"):
-                return connector_or_client.format_entity_ref(eid)
+            if connector is not None:
+                return connector.format_entity_ref(eid)
             return f"{entity_prefix}{eid}"
 
         # proprietà realmente presenti sulle entità seed, per distinguere verificate da suggerite
         existing_pids: set[str] = set()
 
-        if seed_entity_ids and connector_or_client:
-            if hasattr(connector_or_client, "get_entities"):
-                entities_dict = connector_or_client.get_entities(seed_entity_ids)
-            elif hasattr(connector_or_client, "get_entity"):
-                entities_dict = {eid: connector_or_client.get_entity(eid) for eid in seed_entity_ids}
-            else:
-                entities_dict = {}
+        if seed_entity_ids and connector:
+            entities_dict = connector.get_entities(seed_entity_ids)
 
             for eid in seed_entity_ids:
                 entity_data = entities_dict.get(eid)

@@ -1,6 +1,5 @@
 import re
 from shared.ollama_client import OllamaClient
-from configs.settings import settings
 from translators.base_translator import BaseTranslator
 
 class SPARQLTranslator(BaseTranslator):
@@ -12,31 +11,14 @@ class SPARQLTranslator(BaseTranslator):
     prompt_filename: str = "translate_sparql.txt"
     entity_ref_pattern: str = r"\w+:\w+"
     property_ref_pattern: str = r"\w+:\w+"
-    property_prefix: str = ""
     class_filter_pattern: str = r"\?(\w+)\s+(?:a|rdf:type)\s+[\w:]+\s*\.\s*"
     label_hint: str = "rdfs:label with an English language filter"
     # solo Wikidata genera le etichette da sé: altrove ?xLabel è una variabile mai legata,
     # che l'endpoint proietta senza valore invece di segnalare un errore
     has_label_service: bool = False
 
-    def __init__(
-        self,
-        llm_client: OllamaClient | None = None,
-        model_name: str | None = None,
-        host: str | None = None,
-    ) -> None:
-        if llm_client is not None:
-            self.llm_client = llm_client
-        else:
-            self.llm_client = OllamaClient(
-                host=host or settings.ollama_host,
-                model_name=model_name or settings.ollama_translation_model,
-                timeout=settings.ollama_timeout,
-                prompts_dir=settings.prompts_dir,
-            )
-
     @staticmethod
-    def sanitize_sparql(query: str) -> str:
+    def sanitize(query: str) -> str:
         """Corregge gli errori di sintassi SPARQL più comuni nell'output dell'LLM."""
         # "? occupation" -> "?occupation"
         query = re.sub(r"\?\s+([a-zA-Z_]\w*)", r"?\1", query)
@@ -97,7 +79,13 @@ class SPARQLTranslator(BaseTranslator):
         query = self._fix_intermediate_hop_label(query)
         return self._dedupe_select_vars(query)
 
-    def translate(self, question: str, schema_context: str = "") -> str:
+    def translate(
+        self,
+        question: str,
+        schema_context: str = "",
+        temperature: float = 0.0,
+        top_p: float | None = None,
+    ) -> str:
         system_prompt = self.llm_client.load_prompt(
             self.prompt_filename,
             schema=schema_context,
@@ -106,10 +94,11 @@ class SPARQLTranslator(BaseTranslator):
         raw_output = self.llm_client.chat(
             system_prompt=system_prompt,
             user_content=question,
-            temperature=0.0,
+            temperature=temperature,
+            top_p=top_p,
         )
         cleaned = OllamaClient.clean_code_block(raw_output)
-        return self.postprocess(self.sanitize_sparql(cleaned), question)
+        return self.postprocess(self.sanitize(cleaned), question)
 
     @classmethod
     def _triple_regex(cls) -> re.Pattern[str]:
@@ -219,7 +208,7 @@ class SPARQLTranslator(BaseTranslator):
         return query
 
     @classmethod
-    def relax_class_filters(cls, query: str) -> str | None:
+    def relax_constraints(cls, query: str) -> str | None:
         """Rimuove i filtri di tipo ridondanti; restituisce None se non ce ne sono di sicuri."""
         # Il predicato di tipo richiede un match esatto, non transitivo sulle sottoclassi:
         # su una variabile già raggiunta da una proprietà il filtro è ridondante e può
@@ -248,7 +237,7 @@ class SPARQLTranslator(BaseTranslator):
         """Estrae le proprietà citate nella query secondo la sintassi del KG."""
         return sorted(set(re.findall(rf"(?:{cls.property_ref_pattern})", query)))
 
-    def generate_feedback_prompt(self, query: str, schema_context: str, error_context: str = "") -> str:
+    def generate_feedback_prompt(self, query: str, schema_context: str) -> str:
         used_props = self._used_properties(query)
         avoid_line = ""
         if used_props:
@@ -270,18 +259,16 @@ class SPARQLTranslator(BaseTranslator):
 class WikidataSPARQLTranslator(SPARQLTranslator):
     """Traduttore Text2SPARQL per Wikidata: prefissi wd:/wdt: ed etichette via SERVICE wikibase:label."""
 
-    prompt_filename = "translate_sparql.txt"
     entity_ref_pattern = r"wd:Q\d+"
     property_ref_pattern = r"wdt:P\d+|p:P\d+|ps:P\d+|pq:P\d+"
-    property_prefix = "wdt:"
     class_filter_pattern = r"\?(\w+)\s+wdt:P31\s+wd:Q\d+\s*\.\s*"
     label_hint = "SERVICE wikibase:label (?xLabel / ?xDescription)"
     has_label_service = True
 
     @staticmethod
-    def sanitize_sparql(query: str) -> str:
+    def sanitize(query: str) -> str:
         """Come la versione base, ma rimette SERVICE wikibase:label dentro il WHERE se ne è uscito."""
-        query = SPARQLTranslator.sanitize_sparql(query)
+        query = SPARQLTranslator.sanitize(query)
         service_match = re.search(
             r"(\})\s*(SERVICE\s+wikibase:label\s*\{[^}]*\})\s*(.*)$", query, re.IGNORECASE | re.DOTALL
         )
@@ -319,6 +306,5 @@ class DBpediaSPARQLTranslator(SPARQLTranslator):
     # le risorse possono contenere accenti, punti e parentesi (es. dbr:Mercury_(planet))
     entity_ref_pattern = r"dbr:[^\s.;,)]+|dbo:[A-Za-z]\w*"
     property_ref_pattern = r"dbo:\w+|dbp:\w+"
-    property_prefix = "dbo:"
     class_filter_pattern = r"\?(\w+)\s+(?:a|rdf:type)\s+(?:dbo|yago|owl):\w+\s*\.\s*"
     label_hint = 'rdfs:label with FILTER(lang(?label) = "en")'

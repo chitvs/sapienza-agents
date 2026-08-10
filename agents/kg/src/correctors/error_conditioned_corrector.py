@@ -1,7 +1,7 @@
 from typing import Callable
 
-from configs.settings import settings
 from correctors.base_corrector import BaseCorrector
+from llm import build_llm_client
 from shared.ollama_client import OllamaClient
 
 class ErrorConditionedCorrector(BaseCorrector):
@@ -13,12 +13,7 @@ class ErrorConditionedCorrector(BaseCorrector):
         prompt_filename: str = "correction.txt",
         sanitizer: Callable[[str], str] | None = None,
     ) -> None:
-        self.llm_client = llm_client or OllamaClient(
-            host=settings.ollama_host,
-            model_name=settings.ollama_model,
-            timeout=settings.ollama_timeout,
-            prompts_dir=settings.prompts_dir,
-        )
+        self.llm_client = llm_client or build_llm_client()
         # prompt e sanitizer sono iniettabili perché dipendono dal linguaggio di query
         self.prompt_filename = prompt_filename
         if sanitizer is not None:
@@ -26,7 +21,7 @@ class ErrorConditionedCorrector(BaseCorrector):
         else:
             from translators.sparql_translator import WikidataSPARQLTranslator
 
-            self.sanitizer = WikidataSPARQLTranslator.sanitize_sparql
+            self.sanitizer = WikidataSPARQLTranslator.sanitize
 
     def classify_error(self, error_message: str) -> str:
         """Classifica l'errore per scegliere le linee guida di correzione da applicare."""

@@ -1,17 +1,10 @@
 import re
-import logging
 from typing import Any
 
-from executors.base_executor import BaseExecutor
+from executors.base_executor import BaseExecutor, QueryExecutionError
 
-logger = logging.getLogger(__name__)
-
-class CypherExecutionError(Exception):
+class CypherExecutionError(QueryExecutionError):
     """Errore durante la validazione o l'esecuzione di una query Cypher."""
-
-    def __init__(self, message: str, query: str) -> None:
-        super().__init__(message)
-        self.query = query
 
 class CypherExecutor(BaseExecutor):
     """Esegue query Cypher su Neo4j, rifiutando tutto ciò che non sia sola lettura."""
@@ -89,7 +82,9 @@ class CypherExecutor(BaseExecutor):
                 with session.begin_transaction(timeout=self.timeout) as tx:
                     return [record.data() for record in tx.run(query, params or {})]
         except ServiceUnavailable as err:
-            raise CypherExecutionError(f"neo4j non raggiungibile su {self.uri}: {err}", query=query) from err
+            raise CypherExecutionError(
+                f"neo4j non raggiungibile su {self.uri}: {err}", query=query, retryable=True
+            ) from err
         except Neo4jError as err:
             raise CypherExecutionError(str(err), query=query) from err
         except CypherExecutionError:
@@ -97,7 +92,7 @@ class CypherExecutor(BaseExecutor):
         except Exception as err:
             raise CypherExecutionError(f"errore durante l'esecuzione: {err}", query=query) from err
 
-    def run_internal(self, query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    def execute_trusted(self, query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Esegue una query di servizio scritta da noi, saltando il controllo anti-allucinazione."""
         self.assert_read_only(query)
         return self._run_with_params(query, params)

@@ -22,11 +22,8 @@ def test_unbound_select_label_is_redirected_wikidata():
     assert "?birthPlaceLabel" in fixed
 
 def test_unbound_select_label_is_redirected_dbpedia():
-    """
-    Stessa euristica, sintassi dbpedia: la variabile va proiettata nuda. Il suffisso Label
-    è magia di SERVICE wikibase:label, che dbpedia non ha: lì ?xLabel non sarebbe legata da
-    nulla e Virtuoso proietterebbe righe senza valore invece di segnalare un errore.
-    """
+    """Stessa euristica su dbpedia, dove la variabile va proiettata nuda: senza SERVICE
+    wikibase:label ?xLabel non è legata e Virtuoso proietta righe vuote invece di un errore."""
     query = """SELECT ?cityLabel WHERE {
       dbr:Albert_Einstein dbo:spouse ?spouse.
       ?spouse dbo:birthPlace ?birthPlace.
@@ -73,11 +70,8 @@ def test_intermediate_hop_is_redirected_to_leaf_dbpedia():
     ],
 )
 def test_ordering_and_filter_variables_are_never_projected(translator, query):
-    """
-    In un superlativo o in un filtro la foglia è il criterio di selezione, non la risposta.
-    Proiettarla farebbe rispondere con la superficie invece che con il nome del paese, e
-    siccome le righe non sarebbero vuote nessun retry se ne accorgerebbe.
-    """
+    """In un superlativo o in un filtro la foglia è il criterio di selezione, non la risposta:
+    proiettarla darebbe righe non vuote e quindi sbagliate senza che nessun retry se ne accorga."""
     assert translator.__new__(translator).postprocess(query, "x") == query
 
 def test_bound_label_variable_is_left_alone():
@@ -112,7 +106,7 @@ def test_redundant_class_filter_on_reached_variable_is_removed(translator, query
     La variabile è già raggiunta da una proprietà specifica: il filtro di tipo è
     ridondante e può essere rimosso quando la query non restituisce righe.
     """
-    relaxed = translator.relax_class_filters(query)
+    relaxed = translator.relax_constraints(query)
     assert relaxed is not None
     assert "P31" not in relaxed and " a dbo:City" not in relaxed
 
@@ -130,12 +124,9 @@ def test_redundant_class_filter_on_reached_variable_is_removed(translator, query
     ],
 )
 def test_class_filter_on_free_variable_is_never_removed(translator, query):
-    """
-    In un superlativo la variabile iterata non ha archi entranti: il filtro di tipo è
-    l'unico vincolo che la definisce. Rimuoverlo darebbe una risposta sbagliata al posto
-    di nessuna risposta, che è un esito peggiore.
-    """
-    assert translator.relax_class_filters(query) is None
+    """In un superlativo la variabile iterata non ha archi entranti e il filtro di tipo è
+    l'unico vincolo che la definisce: rimuoverlo darebbe una risposta sbagliata invece di zero."""
+    assert translator.relax_constraints(query) is None
 
 def test_duplicate_select_variables_are_removed():
     """
@@ -146,19 +137,19 @@ def test_duplicate_select_variables_are_removed():
         "SELECT ?elevation ?elevation WHERE { ?elevation a dbo:Mountain . "
         "?elevation dbo:elevation ?elevation . } ORDER BY DESC(?elevation) LIMIT 1"
     )
-    fixed = DBpediaSPARQLTranslator.sanitize_sparql(query)
+    fixed = DBpediaSPARQLTranslator.sanitize(query)
     assert fixed.count("?elevation ?elevation") == 0
     assert "SELECT ?elevation WHERE" in fixed
 
 def test_distinct_is_preserved_when_deduplicating():
-    fixed = WikidataSPARQLTranslator.sanitize_sparql("SELECT DISTINCT ?x ?x WHERE { ?x wdt:P31 wd:Q5. }")
+    fixed = WikidataSPARQLTranslator.sanitize("SELECT DISTINCT ?x ?x WHERE { ?x wdt:P31 wd:Q5. }")
     assert "SELECT DISTINCT ?x WHERE" in fixed
 
 def test_distinct_variables_are_left_alone():
     query = "SELECT ?mountain ?elevation WHERE { ?mountain dbo:elevation ?elevation. }"
-    assert "?mountain ?elevation" in DBpediaSPARQLTranslator.sanitize_sparql(query)
+    assert "?mountain ?elevation" in DBpediaSPARQLTranslator.sanitize(query)
 
 def test_aggregation_alias_is_not_touched():
     """Le espressioni con alias non vanno riscritte: non sono un elenco di variabili."""
     query = "SELECT (COUNT(?film) AS ?count) WHERE { ?film dbo:director dbr:X. }"
-    assert "(COUNT(?film) AS ?count)" in DBpediaSPARQLTranslator.sanitize_sparql(query)
+    assert "(COUNT(?film) AS ?count)" in DBpediaSPARQLTranslator.sanitize(query)

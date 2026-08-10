@@ -3,6 +3,8 @@ from typing import Any
 
 import numpy as np
 
+from cache.base_cache import BaseCache
+from configs.settings import settings
 from embeddings import get_embedding_model
 
 # Marcatori di domanda aggregata: identificano la forma della risposta attesa (un numero),
@@ -12,12 +14,14 @@ _AGGREGATION_MARKERS = (
     r"quanti", r"quante", r"numero di",
 )
 
-class SemanticQueryCache:
+class SemanticCache(BaseCache):
     """Cache in-memory che riconosce domande parafrasate confrontando gli embedding."""
 
-    def __init__(self, capacity: int = 100, similarity_threshold: float = 0.92) -> None:
-        self.capacity = capacity
-        self.similarity_threshold = similarity_threshold
+    def __init__(self, capacity: int | None = None, similarity_threshold: float | None = None) -> None:
+        self.capacity = capacity if capacity is not None else settings.cache_capacity
+        self.similarity_threshold = (
+            similarity_threshold if similarity_threshold is not None else settings.cache_similarity_threshold
+        )
         self._entries: list[dict[str, Any]] = []
 
     @staticmethod
@@ -26,13 +30,20 @@ class SemanticQueryCache:
         normalized = re.sub(r"\s+", " ", (question or "").lower())
         return any(re.search(marker, normalized) for marker in _AGGREGATION_MARKERS)
 
+    @staticmethod
+    def _numeric_tokens(question: str) -> tuple[str, ...]:
+        """Numeri citati nella domanda: distinguono l'entità ma quasi non spostano l'embedding."""
+        return tuple(sorted(re.findall(r"\d+", question or "")))
+
     def _embed(self, text: str) -> np.ndarray:
         model = get_embedding_model()
         vec = model.encode([text], convert_to_numpy=True)[0]
         norm = np.linalg.norm(vec)
         return vec / norm if norm > 0 else vec
 
-    def _find_match(self, embedding: np.ndarray, is_aggregation: bool) -> dict[str, Any] | None:
+    def _find_match(
+        self, embedding: np.ndarray, is_aggregation: bool, numbers: tuple[str, ...]
+    ) -> dict[str, Any] | None:
         best_entry: dict[str, Any] | None = None
         best_sim = -1.0
         for entry in self._entries:
@@ -40,6 +51,12 @@ class SemanticQueryCache:
             # mentre una vera parafrasi ne dista 0.9442. Nessuna soglia può separarli,
             # quindi domande con intento diverso non sono mai equivalenti.
             if entry["is_aggregation"] != is_aggregation:
+                continue
+            # Seconda partizione, per la stessa ragione: i modelli di embedding sono quasi
+            # ciechi ai numeri, e un numero è spesso ciò che distingue due entità. "when kung
+            # fu panda was released" e la stessa domanda su "kung fu panda 3" distano 0.9375,
+            # una parafrasi vera 0.9567: la differenza va imposta fuori dall'embedding.
+            if entry["numbers"] != numbers:
                 continue
             sim = float(np.dot(embedding, entry["embedding"]))
             if sim > best_sim:
@@ -52,7 +69,11 @@ class SemanticQueryCache:
         """Restituisce (query, risultati, confidence) della domanda più simile sopra soglia."""
         if not self._entries:
             return None
-        match = self._find_match(self._embed(question), self._is_aggregation_question(question))
+        match = self._find_match(
+            self._embed(question),
+            self._is_aggregation_question(question),
+            self._numeric_tokens(question),
+        )
         if match is None:
             return None
         return match["query"], match["results"], match["confidence"]
@@ -61,8 +82,9 @@ class SemanticQueryCache:
         """Memorizza l'esito, aggiornando la voce esistente se la domanda era già in cache."""
         embedding = self._embed(question)
         is_aggregation = self._is_aggregation_question(question)
+        numbers = self._numeric_tokens(question)
 
-        existing = self._find_match(embedding, is_aggregation)
+        existing = self._find_match(embedding, is_aggregation, numbers)
         if existing is not None:
             existing.update(
                 question=question,
@@ -74,12 +96,13 @@ class SemanticQueryCache:
             return
 
         if len(self._entries) >= self.capacity:
-            self._entries.pop(0) # FIFO
+            self._entries.pop(0)
 
         self._entries.append({
             "question": question,
             "embedding": embedding,
             "is_aggregation": is_aggregation,
+            "numbers": numbers,
             "query": query,
             "results": results,
             "confidence": confidence,

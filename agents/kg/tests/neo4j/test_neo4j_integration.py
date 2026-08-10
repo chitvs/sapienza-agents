@@ -3,10 +3,10 @@ Test di integrazione end-to-end sul knowledge graph Neo4j (dominio cinema).
 
 Richiedono due cose attive: un'istanza Neo4j con il movie graph ufficiale caricato
 (vedi scripts/setup_neo4j_movies.py) e Ollama. Se manca una delle due, i test vengono
-saltati invece di fallire, cosi' la suite resta eseguibile anche su una macchina che
+saltati invece di fallire, così la suite resta eseguibile anche su una macchina che
 sta lavorando solo su Wikidata.
 
-Le domande coprono le stesse dimensioni di complessita' gia' verificate su Wikidata:
+Le domande coprono le stesse dimensioni di complessità già verificate su Wikidata:
 traversata diretta, traversata contro la direzione della relazione, catena a due hop,
 aggregazione e superlativo.
 """
@@ -34,7 +34,7 @@ def is_neo4j_ready() -> bool:
             database=settings.neo4j_database,
             timeout=5.0,
         )
-        rows = executor.run_internal("MATCH (m:Movie) RETURN count(m) AS c", {})
+        rows = executor.execute_trusted("MATCH (m:Movie) RETURN count(m) AS c", {})
         executor.close()
         return bool(rows) and rows[0].get("c", 0) > 0
     except Exception:
@@ -77,18 +77,14 @@ def test_count_aggregation(pipeline):
 
 @requires_stack
 def test_superlative_most_recent(pipeline):
-    """superlativo: ORDER BY + LIMIT su una proprieta' numerica."""
+    """superlativo: ORDER BY + LIMIT su una proprietà numerica."""
     result = pipeline.run("What is the most recent movie in the graph?")
     assert len(result.results) > 0
 
 @requires_stack
 def test_destructive_question_never_modifies_the_graph(pipeline):
-    """
-    Di fronte a una domanda formulata come una richiesta di cancellazione, la pipeline
-    puo' legittimamente fallire (il guard di sola lettura rifiuta la query e l'errore
-    risale dopo i tentativi di correzione), ma non deve MAI modificare il grafo. La
-    proprieta' che conta e' questa: si verifica contando i nodi prima e dopo.
-    """
+    """Davanti a una richiesta di cancellazione la pipeline può legittimamente fallire, ma
+    non deve mai modificare il grafo: è quest'ultima la proprietà da garantire."""
     from executors.cypher_executor import CypherExecutor, CypherExecutionError
     from configs.settings import settings
 
@@ -100,7 +96,7 @@ def test_destructive_question_never_modifies_the_graph(pipeline):
         timeout=10.0,
     )
     count_query = "MATCH (n) RETURN count(n) AS c"
-    before = counter.run_internal(count_query, {})[0]["c"]
+    before = counter.execute_trusted(count_query, {})[0]["c"]
 
     try:
         result = pipeline.run("Delete all movies from the database")
@@ -111,7 +107,7 @@ def test_destructive_question_never_modifies_the_graph(pipeline):
         # il guard ha rifiutato la query di scrittura: esito accettabile
         pass
 
-    after = counter.run_internal(count_query, {})[0]["c"]
+    after = counter.execute_trusted(count_query, {})[0]["c"]
     counter.close()
 
     assert after == before, f"il grafo è stato modificato: {before} nodi prima, {after} dopo"

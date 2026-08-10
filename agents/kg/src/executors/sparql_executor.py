@@ -3,14 +3,12 @@ from typing import Any
 
 import requests
 
-from executors.base_executor import BaseExecutor
+from executors.base_executor import BaseExecutor, QueryExecutionError
 
-class SPARQLExecutionError(Exception):
+_TRANSIENT_STATUS = {429, 502, 503, 504}
+
+class SPARQLExecutionError(QueryExecutionError):
     """Errore durante la validazione o l'esecuzione di una query SPARQL."""
-
-    def __init__(self, message: str, query: str) -> None:
-        super().__init__(message)
-        self.query = query
 
 class SPARQLExecutor(BaseExecutor):
     """Esegue query SPARQL su un endpoint remoto."""
@@ -45,14 +43,17 @@ class SPARQLExecutor(BaseExecutor):
             )
             response.raise_for_status()
         except requests.HTTPError as err:
-            detail = f"HTTP {err.response.status_code}" if err.response is not None else "HTTP Error"
+            status = err.response.status_code if err.response is not None else None
+            detail = f"HTTP {status}" if status else "HTTP Error"
             if err.response is not None:
                 detail += f": {err.response.text[:500]}"
-            raise SPARQLExecutionError(detail, query=query) from err
+            raise SPARQLExecutionError(detail, query=query, retryable=status in _TRANSIENT_STATUS) from err
         except requests.Timeout as err:
-            raise SPARQLExecutionError("timeout superato durante l'esecuzione della query", query=query) from err
+            raise SPARQLExecutionError(
+                "timeout superato durante l'esecuzione della query", query=query, retryable=True
+            ) from err
         except requests.RequestException as err:
-            raise SPARQLExecutionError(f"errore di connessione: {err}", query=query) from err
+            raise SPARQLExecutionError(f"errore di connessione: {err}", query=query, retryable=True) from err
 
         data = response.json()
         # le query ASK restituiscono un booleano invece dei binding

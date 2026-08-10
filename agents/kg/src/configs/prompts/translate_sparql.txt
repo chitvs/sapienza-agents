@@ -17,6 +17,8 @@ SPARQL syntax rules:
   SELECT ?targetDescription WHERE { BIND(wd:Q123 AS ?target) SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }
 - For superlatives ("highest", "largest", "most") use ORDER BY + LIMIT 1: simpler and cheaper than a nested SELECT. A subquery IS valid SPARQL 1.1 as a group pattern `{ SELECT ... }`, but a SELECT is not a scalar expression: never put one inside FILTER, use EXISTS / NOT EXISTS there.
 - SUPERLATIVES: For questions like "the highest mountain" or "the most populated country", use: ORDER BY DESC(?value) LIMIT 1.
+- YES/NO QUESTIONS: when the whole question can be answered with "yes" or "no", the answer is a truth value and the query MUST be an ASK, never a SELECT. An ASK takes no projection and no SERVICE wikibase:label, because there are no labels to resolve. See Example 5.
+  The opening auxiliary ("Did/Does/Is/Are/Was/Has ...") is a hint, NOT the test: apply it only after checking that "yes" or "no" would actually answer the question. "Is samurai champloo an original work or an adaptation?" opens like a yes/no question but offers two alternatives, so the answer is one of them and the query stays a SELECT. Same for any question of the form "Is X a Y or a Z?", or one asking which/how many/when inside a yes/no wrapper.
 - AGGREGATION & COUNT: Use COUNT or COUNT(DISTINCT ?var) with explicit variable aliases (e.g. SELECT (COUNT(?item) AS ?count)). For grouped queries, use GROUP BY and ORDER BY.
 - MULTI-HOP TRAVERSAL: Chain triple patterns across intermediate variables to connect multiple entities or properties as specified in the schema context.
 - GENERAL: Use OPTIONAL for optional attributes and LIMIT for constrained result sets.
@@ -72,6 +74,17 @@ SELECT ?populationLabel WHERE {
 }
 ```
 Note: the question asks for a population NUMBER, not for the capital's name. ?capital is only an intermediate hop used to reach ?population — the final SELECT targets ?populationLabel, NOT ?capitalLabel, even though ?capital was bound first. Apply this same reasoning to ANY chain: always identify which bound variable actually holds the value the question is asking for, no matter how many hops it takes to reach it, and SELECT that one.
+
+Example 5 (Yes/no question -> ASK, no projection and no label service):
+Question: "Did Haruki Murakami receive the Nobel Prize in Literature?"
+Context: entity: wd:Q37922 (Nobel Prize in Literature), wd:Q37767 (Haruki Murakami) | properties: wdt:P166 (award received)
+SPARQL:
+```sparql
+ASK {
+  wd:Q37767 wdt:P166 wd:Q37922.
+}
+```
+Note: the question asks IF something holds, so the answer is true or false. A SELECT would answer a different question, and would return no rows when the fact is absent instead of answering "no".
 
 CRITICAL INSTRUCTION: You MUST output ONLY the raw SPARQL query wrapped in a ```sparql block. DO NOT output any introductory text, explanations, or conversational replies. ONLY return the SPARQL query code.
 Schema context:

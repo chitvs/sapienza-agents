@@ -4,8 +4,10 @@ import time
 from datetime import datetime, timezone
 from typing import NamedTuple
 
-from cache.semantic_cache import SemanticQueryCache
+from cache.base_cache import BaseCache
+from cache.semantic_cache import SemanticCache
 from configs.settings import settings
+from executors.base_executor import QueryExecutionError
 from linkers.base_linker import BaseLinker
 from providers.base_provider import BaseProvider
 
@@ -46,7 +48,7 @@ class KGPipeline:
         self,
         provider: BaseProvider | None = None,
         linker: BaseLinker | None = None,
-        cache: SemanticQueryCache | None = None,
+        cache: BaseCache | None = None,
         target_kg: str = settings.default_target_kg,
         verbose: bool = False,
     ) -> None:
@@ -58,7 +60,7 @@ class KGPipeline:
         self.pruner = self.provider.get_pruner()
         self.corrector = self.provider.get_corrector()
         self.linker = linker or self.provider.get_linker()
-        self.cache = cache or SemanticQueryCache()
+        self.cache = cache or SemanticCache()
         self.verbose = verbose
 
     def _log(self, msg: str) -> None:
@@ -85,16 +87,15 @@ class KGPipeline:
                 raw_results = self.executor.execute(current_query)
                 self._log(f"  -> esecuzione riuscita al tentativo {attempt + 1}. trovate {len(raw_results)} righe grezze.")
                 break
-            except Exception as err:
+            except QueryExecutionError as err:
                 last_error = err
                 self._log(f"  [warn] errore durante l'esecuzione (tentativo {attempt + 1}/{max_retries + 1}): {err}")
                 if not (attempt < max_retries and self.corrector):
                     raise
 
-                # su rate limit e timeout la query è valida: basta attendere e riprovare
-                err_str = str(err).lower()
-                if any(k in err_str for k in ("429", "timeout", "rate limit", "502", "503")):
-                    self._log(f"  [retry] rate limit o timeout rilevato, attesa {2.0 * (attempt + 1)}s...")
+                # la query è valida e il guasto è transitorio: si ripete identica
+                if err.retryable:
+                    self._log(f"  [retry] guasto transitorio dell'endpoint, attesa {2.0 * (attempt + 1)}s...")
                     time.sleep(2.0 * (attempt + 1))
                     continue
 
@@ -121,10 +122,9 @@ class KGPipeline:
 
         self._log("\n[info] [step] react validation: risultati vuoti")
 
-        # tentativo economico prima di scomodare l'LLM: un filtro di tipo superfluo è una
-        # causa strutturale frequente di zero righe (vedi relax_class_filters)
-        relax = getattr(self.translator, "relax_class_filters", None)
-        relaxed_query = relax(current_query) if relax else None
+        # tentativo economico prima di scomodare l'LLM: un vincolo superfluo è una causa
+        # strutturale frequente di zero righe (vedi relax_constraints)
+        relaxed_query = self.translator.relax_constraints(current_query)
         if relaxed_query:
             self._log_query("  -> rilevato filtro di classe superfluo, riprovo alleggerita:", relaxed_query)
             try:
@@ -133,7 +133,7 @@ class KGPipeline:
                 )
                 if relaxed_results:
                     return relaxed_results, relaxed_query, True
-            except Exception as err:
+            except QueryExecutionError as err:
                 self._log(f"  [warn] query alleggerita fallita: {err}")
 
         self._log("\n[info] [step] rigenerazione query con feedback")
@@ -141,7 +141,12 @@ class KGPipeline:
             query=current_query,
             schema_context=schema_context,
         )
-        retry_query = self.translator.translate(question=question, schema_context=feedback)
+        retry_query = self.translator.translate(
+            question=question,
+            schema_context=feedback,
+            temperature=settings.retry_temperature,
+            top_p=settings.retry_top_p,
+        )
         self._log_query("  -> query rigenerata:", retry_query)
 
         try:
@@ -150,7 +155,7 @@ class KGPipeline:
             )
             if retry_results:
                 return retry_results, retry_query, True
-        except Exception as err:
+        except QueryExecutionError as err:
             self._log(f"  [warn] rigenerazione fallita: {err}")
 
         return raw_results, current_query, True
@@ -200,8 +205,8 @@ class KGPipeline:
         relation_query = self._relation_query(question, entities)
         pruned_schema = self.pruner.prune(
             seed_entity_ids=seed_ids,
-            connector_or_client=self.connector,
-            max_items=25,
+            connector=self.connector,
+            max_items=settings.schema_max_items,
             question=relation_query or question,
         )
         schema_context = pruned_schema.context_text

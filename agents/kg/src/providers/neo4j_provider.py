@@ -38,6 +38,6 @@ class Neo4jProvider(BaseProvider):
         self.corrector = ErrorConditionedCorrector(
             self.llm_client,
             prompt_filename="correction_cypher.txt",
-            sanitizer=CypherTranslator.sanitize_cypher,
+            sanitizer=CypherTranslator.sanitize,
         )
         self.linker = LLMLinker(connector=self.connector, llm_client=self.linking_client)

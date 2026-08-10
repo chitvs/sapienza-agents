@@ -59,7 +59,7 @@ class Neo4jConnector(BaseConnector):
 
     def _run(self, query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         """Esegue una query di servizio del connettore."""
-        return self.executor.run_internal(query, params)
+        return self.executor.execute_trusted(query, params)
 
     def search_entity(self, text: str, limit: int = 5) -> list[EntityCandidate]:
         """Cerca nodi per nome, dando la precedenza al match esatto su quello parziale."""

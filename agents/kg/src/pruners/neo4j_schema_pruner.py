@@ -1,9 +1,6 @@
-import logging
 from typing import Any
 
 from pruners.base_pruner import BasePruner, PrunedSchema
-
-logger = logging.getLogger(__name__)
 
 class Neo4jSchemaPruner(BasePruner):
     """Espone al modello l'intero schema del grafo, letto per introspezione."""
@@ -43,29 +40,18 @@ class Neo4jSchemaPruner(BasePruner):
     def prune(
         self,
         seed_entity_ids: list[str],
-        connector_or_client: Any = None,
+        connector: Any = None,
         max_items: int = 40,  # ignorato: lo schema si legge per intero
         question: str = "",
-        max_hops: int = 2,  # ignorato: lo schema si legge, non si attraversa
     ) -> PrunedSchema:
         """Costruisce il contesto unendo lo schema del grafo e le entità già risolte."""
-        schema: dict[str, Any] = {}
-        if connector_or_client is not None and hasattr(connector_or_client, "get_schema"):
-            try:
-                schema = connector_or_client.get_schema()
-            except Exception as err:
-                logger.warning("lettura schema neo4j fallita: %s", err)
+        schema = connector.get_schema() if connector is not None else {}
 
         context_lines = self._format_schema(schema)
 
-        if seed_entity_ids and connector_or_client is not None and hasattr(connector_or_client, "get_entity"):
+        if seed_entity_ids and connector is not None:
             seed_lines: list[str] = []
-            for seed_id in seed_entity_ids:
-                try:
-                    entity_data = connector_or_client.get_entity(seed_id)
-                except Exception as err:
-                    logger.warning("lettura entità seed '%s' fallita: %s", seed_id, err)
-                    continue
+            for entity_data in connector.get_entities(seed_entity_ids).values():
                 if not entity_data or not getattr(entity_data, "label", ""):
                     continue
 

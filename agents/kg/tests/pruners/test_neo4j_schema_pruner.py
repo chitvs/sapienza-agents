@@ -3,7 +3,7 @@ Test dello schema pruner Neo4j con un connettore finto.
 
 Girano senza istanza Neo4j: verificano che lo schema introspezionato venga tradotto in
 un contesto testuale corretto per l'llm, in particolare che le direzioni delle relazioni
-siano rese esplicitamente, dato che sbagliare direzione e' la causa piu' comune di query
+siano rese esplicitamente, dato che sbagliare direzione è la causa più comune di query
 Cypher che eseguono senza errori ma restituiscono zero righe.
 """
 from connectors.base_connector import EntityData
@@ -41,21 +41,21 @@ class FakeNeo4jConnector:
         )
 
 def test_schema_is_fully_listed():
-    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector_or_client=FakeNeo4jConnector())
+    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector=FakeNeo4jConnector())
     text = schema.context_text
 
     assert "(:Person)" in text
     assert "(:Movie)" in text
-    # le proprieta' di ogni label devono essere elencate, sono cio' che l'llm puo' usare in RETURN
+    # le proprietà di ogni label devono essere elencate, sono ciò che l'llm può usare in RETURN
     assert "title" in text
     assert "born" in text
 
 def test_property_types_are_shown():
     """
-    Senza il tipo, il modello puo' scrivere filtri assurdi (es. {released: true} su una
-    proprieta' intera) che producono zero righe da una query sintatticamente valida.
+    Senza il tipo, il modello può scrivere filtri assurdi (es. {released: true} su una
+    proprietà intera) che producono zero righe da una query sintatticamente valida.
     """
-    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector_or_client=FakeNeo4jConnector())
+    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector=FakeNeo4jConnector())
     assert "released: INTEGER" in schema.context_text
     assert "title: STRING" in schema.context_text
 
@@ -66,21 +66,21 @@ def test_properties_without_types_still_render():
         def get_schema(self):
             return {"labels": {"Movie": ["title", "released"]}, "relationships": []}
 
-    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector_or_client=NoTypesConnector())
+    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector=NoTypesConnector())
     assert "title" in schema.context_text
 
 def test_relationship_direction_is_explicit():
-    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector_or_client=FakeNeo4jConnector())
+    schema = Neo4jSchemaPruner().prune(seed_entity_ids=[], connector=FakeNeo4jConnector())
     assert "(:Person)-[:ACTED_IN]->(:Movie)" in schema.context_text
     assert "(:Person)-[:DIRECTED]->(:Movie)" in schema.context_text
 
 def test_seed_entities_are_included():
     schema = Neo4jSchemaPruner().prune(
-        seed_entity_ids=["node-1"], connector_or_client=FakeNeo4jConnector()
+        seed_entity_ids=["node-1"], connector=FakeNeo4jConnector()
     )
     assert "Tom Hanks" in schema.context_text
 
 def test_missing_connector_does_not_crash():
     """senza connettore il pruner deve restituire un contesto vuoto, non sollevare."""
-    schema = Neo4jSchemaPruner().prune(seed_entity_ids=["x"], connector_or_client=None)
+    schema = Neo4jSchemaPruner().prune(seed_entity_ids=["x"], connector=None)
     assert schema.context_text == ""

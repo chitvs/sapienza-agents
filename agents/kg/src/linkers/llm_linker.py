@@ -1,11 +1,14 @@
 import json
 import logging
+import math
 import re
 from typing import Any
 
 from connectors.base_connector import BaseConnector, EntityCandidate
+from embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
 from linkers.base_linker import BaseLinker, LinkedEntity
-from linkers.gliner_extractor import extract_entity_mentions
+from linkers.mention_extractor import extract_entity_mentions
+from llm import build_llm_client
 from shared.ollama_client import OllamaClient
 from configs.settings import settings
 
@@ -29,20 +32,12 @@ class LLMLinker(BaseLinker):
         model_name: str | None = None,
     ) -> None:
         if connector is None:
-            from connectors.wikimedia_connector import WikimediaConnector
+            from connectors.wikidata_connector import WikidataConnector
 
-            connector = WikimediaConnector()
+            connector = WikidataConnector()
         self.connector = connector
 
-        if llm_client is not None:
-            self.llm_client = llm_client
-        else:
-            self.llm_client = OllamaClient(
-                host=settings.ollama_host,
-                model_name=model_name or settings.ollama_linking_model,
-                timeout=settings.ollama_timeout,
-                prompts_dir=settings.prompts_dir,
-            )
+        self.llm_client = llm_client or build_llm_client(model_name or settings.ollama_linking_model)
 
     def _extract_mentions(self, text: str) -> list[str]:
         """Estrae le menzioni di entità, con fallback progressivi se GLiNER non produce nulla."""
@@ -167,18 +162,60 @@ class LLMLinker(BaseLinker):
         except Exception as err:
             logger.warning("disambiguazione llm fallita per '%s': %s", mention, err)
 
-        # si ripiega sul primo candidato del motore di ricerca, che però non è affidabile:
-        # per "Divine Comedy" è un film iraniano del 2025, per "Titanic" il transatlantico.
         # Si registra la risposta grezza perché dal log non si distingue altrimenti un rifiuto
         # esplicito del modello da un output che il parser non ha saputo interpretare, e le
         # due cose richiedono rimedi opposti.
+        fallback = self._rank_candidates(question, valid_cands)
         logger.info(
-            "disambiguazione non conclusiva per '%s': uso il primo candidato (%s). risposta grezza: %r",
+            "disambiguazione non conclusiva per '%s': ripiego sul candidato meglio classificato (%s). risposta grezza: %r",
             mention,
-            valid_cands[0].id,
+            fallback.id,
             (raw_output or "")[:200],
         )
-        return valid_cands[0]
+        return fallback
+
+    @staticmethod
+    def _rescale(values: list[float]) -> list[float]:
+        """Riporta i punteggi in [0,1] dentro l'insieme dei candidati, per poterli sommare."""
+        low, high = min(values), max(values)
+        return [0.5] * len(values) if high == low else [(v - low) / (high - low) for v in values]
+
+    def _context_scores(self, question: str, candidates: list[EntityCandidate]) -> list[float]:
+        """Affinità fra la domanda e la descrizione di ciascun candidato."""
+        try:
+            model = get_embedding_model(RETRIEVAL_MODEL_NAME)
+            descriptions = [c.description or "" for c in candidates]
+            vectors = model.encode(
+                [BGE_QUERY_INSTRUCTION + question] + descriptions,
+                convert_to_numpy=True,
+                normalize_embeddings=True,
+            )
+            return self._rescale([
+                float(s) if descriptions[i] else 0.0 for i, s in enumerate(vectors[1:] @ vectors[0])
+            ])
+        except Exception as err:
+            logger.warning("affinità semantica dei candidati non calcolabile: %s", err)
+            return [0.5] * len(candidates)
+
+    def _prominence_scores(self, candidates: list[EntityCandidate]) -> list[float]:
+        """Notorietà di ciascun candidato secondo il KG, in scala logaritmica."""
+        prominence = self.connector.candidate_prominence(candidates)
+        if not prominence:
+            return [0.5] * len(candidates)
+        # fra 2 e 20 sitelink la differenza di notorietà è reale, fra 200 e 220 è rumore
+        return self._rescale([math.log1p(prominence.get(c.id, 0.0)) for c in candidates])
+
+    def _rank_candidates(self, question: str, candidates: list[EntityCandidate]) -> EntityCandidate:
+        """Sceglie un candidato combinando notorietà, posizione nella ricerca e affinità col contesto."""
+        if len(candidates) == 1:
+            return candidates[0]
+
+        context = self._context_scores(question, candidates)
+        prominence = self._prominence_scores(candidates)
+        search_rank = self._rescale([1.0 / math.log2(i + 2) for i in range(len(candidates))])
+
+        scores = [(c + p + r) / 3 for c, p, r in zip(context, prominence, search_rank)]
+        return candidates[max(range(len(candidates)), key=lambda i: scores[i])]
 
     def link(self, text: str) -> list[LinkedEntity]:
         """Estrae le menzioni dal testo e le associa agli id del knowledge graph."""
@@ -187,7 +224,7 @@ class LLMLinker(BaseLinker):
 
         for mention in self._extract_mentions(text):
             mention = self._normalize_mention(mention)
-            candidates = self.connector.search_entity(mention, limit=15)
+            candidates = self.connector.search_entity(mention, limit=settings.linker_candidates)
             best_cand = self._disambiguate_candidates(text, mention, candidates)
 
             if best_cand and best_cand.id not in seen_ids:

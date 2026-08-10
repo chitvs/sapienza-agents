@@ -17,6 +17,23 @@ function escape(text) {
   return div.innerHTML;
 }
 
+function escapeAttr(text) {
+  // textContent non tocca gli apici: dentro un attributo servono anche quelli,
+  // altrimenti un valore che ne contiene uno chiude l'attributo e ne apre altri
+  return escape(text).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function safeUrl(uri) {
+  // gli uri arrivano dal knowledge graph, non da noi: uno schema "javascript:"
+  // eseguirebbe codice al clic, quindi si ammettono solo http e https assoluti
+  try {
+    const parsed = new URL(String(uri));
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function renderMeta(entries) {
   const cells = entries.map(([label, value]) => `<span>${escape(label)}: ${escape(value)}</span>`);
   return `<div class="meta">${cells.join("")}</div>`;
@@ -40,9 +57,9 @@ function renderCell(row, column) {
   const value = row[column];
   if (value === null || value === undefined) return "";
   const text = escape(String(value));
-  const uri = row._sources ? row._sources[column] : null;
+  const uri = row._sources ? safeUrl(row._sources[column]) : null;
   return uri
-    ? `${text}<a class="src" href="${escape(uri)}" target="_blank" rel="noopener">fonte</a>`
+    ? `${text}<a class="src" href="${escapeAttr(uri)}" target="_blank" rel="noopener">fonte</a>`
     : text;
 }
 

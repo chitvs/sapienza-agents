@@ -4,7 +4,7 @@ Copertura estesa della pipeline DBpedia.
 I test in test_dbpedia_integration.py verificano che la pipeline funzioni; questi ne
 misurano il soffitto reale su dimensioni non ancora toccate: relazioni percorse in
 senso inverso, risorse il cui URI contiene caratteri da racchiudere fra parentesi
-angolari, superlativi con filtro di tipo, proprieta' multivalore e catene a tre hop.
+angolari, superlativi con filtro di tipo, proprietà multivalore e catene a tre hop.
 E' lecito che qualcuno fallisca: servono a scoprire i limiti, non a confermarli.
 """
 from pathlib import Path
@@ -49,7 +49,7 @@ def test_inverse_relation(pipeline: KGPipeline) -> None:
 @requires_stack
 def test_resource_with_parentheses_in_uri(pipeline: KGPipeline) -> None:
     """
-    'Mercury (planet)' ha un URI con parentesi, che in forma dbr: non e' un nome
+    'Mercury (planet)' ha un URI con parentesi, che in forma dbr: non è un nome
     prefissato valido: la query deve usare l'URI completo fra parentesi angolari.
     """
     result = pipeline.run("What is the mass of the planet Mercury?")
@@ -57,27 +57,27 @@ def test_resource_with_parentheses_in_uri(pipeline: KGPipeline) -> None:
 
 @requires_stack
 def test_superlative_with_type_filter(pipeline: KGPipeline) -> None:
-    """superlativo su una variabile libera: qui il filtro di tipo e' necessario."""
+    """superlativo su una variabile libera: qui il filtro di tipo è necessario."""
     result = pipeline.run("What is the highest mountain?")
     assert len(result.results) > 0
 
 @requires_stack
 def test_date_property(pipeline: KGPipeline) -> None:
-    """proprieta' di tipo data, che va restituita come letterale e non risolta come risorsa."""
+    """proprietà di tipo data, che va restituita come letterale e non risolta come risorsa."""
     result = pipeline.run("When was Albert Einstein born?")
     assert len(result.results) > 0
     assert any("1879" in str(row) for row in result.results)
 
 @requires_stack
 def test_death_place(pipeline: KGPipeline) -> None:
-    """il valore e' una risorsa con virgola nell'URI (Princeton,_New_Jersey)."""
+    """il valore è una risorsa con virgola nell'URI (Princeton,_New_Jersey)."""
     result = pipeline.run("Where did Albert Einstein die?")
     assert len(result.results) > 0
     assert any("Princeton" in str(row) for row in result.results)
 
 @requires_stack
 def test_multi_valued_property(pipeline: KGPipeline) -> None:
-    """proprieta' con piu' valori: il sistema non deve assumerne uno solo."""
+    """proprietà con più valori: il sistema non deve assumerne uno solo."""
     result = pipeline.run("Which actors starred in The Matrix?")
     assert len(result.results) > 0
 
@@ -101,14 +101,14 @@ def test_count_with_inverse_relation(pipeline: KGPipeline) -> None:
 
 @requires_stack
 def test_country_population(pipeline: KGPipeline) -> None:
-    """proprieta' numerica su un'entita' geografica."""
+    """proprietà numerica su un'entità geografica."""
     result = pipeline.run("What is the population of Italy?")
     assert len(result.results) > 0
 
 @requires_stack
 def test_ambiguous_entity_name(pipeline: KGPipeline) -> None:
     """
-    'Mercury' e' ambiguo (pianeta, elemento, casa discografica, Freddie Mercury): la
+    'Mercury' è ambiguo (pianeta, elemento, casa discografica, Freddie Mercury): la
     disambiguazione deve usare il contesto della domanda.
     """
     result = pipeline.run("Who was the lead singer of Queen?")

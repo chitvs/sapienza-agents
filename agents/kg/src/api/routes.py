@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException
 from api.schemas import QueryRequest, QueryResponse
 from configs.settings import settings
 from connectors.base_connector import KnowledgeGraphUnavailableError
+from executors.base_executor import QueryExecutionError
 from pipeline import KGPipeline
 
 router = APIRouter()
@@ -15,6 +16,7 @@ _pipelines_lock = threading.Lock()
 
 def get_pipeline(target_kg: str) -> KGPipeline:
     """Restituisce la pipeline del KG richiesto, creandola al primo utilizzo."""
+    target_kg = (target_kg or "").strip().lower()
     if target_kg not in _pipelines:
         with _pipelines_lock:
             if target_kg not in _pipelines:
@@ -44,8 +46,9 @@ def query_kg(request: QueryRequest) -> QueryResponse:
         result = pipeline.run(request.question)
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
     except KnowledgeGraphUnavailableError as err:
-        # il servizio esterno non ha risposto
         raise HTTPException(status_code=503, detail=str(err)) from err
+    except QueryExecutionError as err:
+        raise HTTPException(status_code=503 if err.retryable else 500, detail=str(err)) from err
     except Exception as err:
         raise HTTPException(status_code=500, detail=str(err)) from err
 

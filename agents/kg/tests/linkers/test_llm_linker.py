@@ -1,7 +1,7 @@
 import pytest
 import requests
 from connectors.base_connector import EntityCandidate
-from connectors.wikimedia_connector import WikimediaConnector
+from connectors.wikidata_connector import WikidataConnector
 from linkers.base_linker import LinkedEntity
 from linkers.llm_linker import LLMLinker
 
@@ -53,7 +53,7 @@ def test_disambiguate_candidates_json_parsing():
             return '{"selected_id": "Q126916"}'
 
     linker.llm_client = MockLLM()
-    linker.connector = WikimediaConnector()
+    linker.connector = WikidataConnector()
     cands = [
         EntityCandidate(id="Q126916", label="Minerva", description="Roman goddess"),
         EntityCandidate(id="Q15817918", label="Minerva", description="journal"),
@@ -63,7 +63,7 @@ def test_disambiguate_candidates_json_parsing():
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_disambiguate_candidates_context():
-    connector = WikimediaConnector()
+    connector = WikidataConnector()
     linker = LLMLinker(connector=connector)
     cands = [
         EntityCandidate(id="Q126916", label="Minerva", description="Roman goddess of wisdom"),
@@ -77,7 +77,7 @@ def test_disambiguate_candidates_context():
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_link():
-    connector = WikimediaConnector()
+    connector = WikidataConnector()
     linker = LLMLinker(connector=connector)
     entities = linker.link("Qual è la data di nascita di Albert Einstein?")
     assert len(entities) > 0

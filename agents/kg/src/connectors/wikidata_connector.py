@@ -19,7 +19,7 @@ WIKIDATA_ENTITY_NS = "wikidata.org/entity/Q"
 
 _ISO_DATETIME = re.compile(r"^[+-]?\d{4,}-\d{2}-\d{2}T[\d:]+Z$")
 
-class WikimediaConnector(BaseConnector):
+class WikidataConnector(BaseConnector):
     """Connettore verso le API REST di Wikidata, con cache in-memory e richieste batch."""
 
     entity_prefix = "wd:"
@@ -36,13 +36,6 @@ class WikimediaConnector(BaseConnector):
         self._property_label_cache: dict[str, tuple[str, bool]] = {}
         self._entity_cache: dict[str, EntityData] = {}
         self._search_cache: dict[str, list[EntityCandidate]] = {}
-
-    def _set_cache_entry(self, cache_dict: dict, key: str, value: Any) -> None:
-        """Memorizza un elemento in cache rispettando il limite massimo."""
-        if len(cache_dict) >= self.max_cache_size and key not in cache_dict:
-            first_key = next(iter(cache_dict))
-            del cache_dict[first_key]
-        cache_dict[key] = value
 
     def _get_with_retry(self, params: dict[str, str]) -> requests.Response:
         """Esegue una GET con retry e backoff in caso di rate limiting (HTTP 429)."""
@@ -110,15 +103,15 @@ class WikimediaConnector(BaseConnector):
                     label_str = self._extract_multilingual_text(labels) or pid
                     self._set_cache_entry(self._property_label_cache, pid, (label_str, is_identifier))
             except Exception as err:
+                # il ripiego non va messo in cache: un guasto transitorio lascerebbe quelle
+                # proprietà senza etichetta per tutta la vita del processo
                 logger.warning("recupero etichette proprietà fallito: %s", err)
-                for pid in batch:
-                    self._set_cache_entry(self._property_label_cache, pid, (pid, False))
 
         return {p: self._property_label_cache.get(p, (p, False)) for p in prop_ids}
 
-    def search_entity(self, text: str, limit: int = 5, language: str | None = None) -> list[EntityCandidate]:
+    def search_entity(self, text: str, limit: int = 5) -> list[EntityCandidate]:
         """Cerca entità su Wikidata a partire dal testo di una menzione."""
-        search_lang = language or self.language
+        search_lang = self.language
         cache_key = f"{text.strip().lower()}:{limit}:{search_lang}"
         if cache_key in self._search_cache:
             return self._search_cache[cache_key]
@@ -238,9 +231,26 @@ class WikimediaConnector(BaseConnector):
         res = self.get_entities([entity_id])
         return res.get(entity_id, EntityData(id=entity_id, label=entity_id, description="", properties={}))
 
-    def looks_like_entity_id(self, value: str) -> bool:
-        """Su Wikidata i riferimenti a entità sono QID nella forma Q seguita da cifre."""
-        return bool(re.match(r"^Q\d+$", str(value)))
+    def candidate_prominence(self, candidates: list[EntityCandidate]) -> dict[str, float]:
+        """Conta i sitelink di ogni candidato: è la misura di notorietà che Wikidata espone."""
+        ids = [str(c.id) for c in candidates if re.match(r"^Q\d+$", str(getattr(c, "id", "") or ""))]
+        counts: dict[str, float] = {}
+        for i in range(0, len(ids), 50):
+            params = {
+                "action": "wbgetentities",
+                "ids": "|".join(ids[i:i + 50]),
+                "props": "sitelinks",
+                "format": "json",
+            }
+            try:
+                entities = self._get_with_retry(params).json().get("entities", {})
+            except Exception as err:
+                # senza prior la disambiguazione resta possibile con la sola descrizione
+                logger.warning("recupero sitelink dei candidati fallito: %s", err)
+                return {}
+            for qid, data in entities.items():
+                counts[qid] = float(len(data.get("sitelinks") or {}))
+        return counts
 
     def is_valid_candidate(self, candidate: EntityCandidate) -> bool:
         """Accetta solo QID ben formati, escludendo disambigue e categorie Wikimedia."""
@@ -260,6 +270,9 @@ class WikimediaConnector(BaseConnector):
 
     def ground_results(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Risolve gli id grezzi in etichette leggibili con un'unica richiesta batch."""
+        if len(raw_results) == 1 and set(raw_results[0]) == {"boolean"}:
+            return [dict(raw_results[0])]
+
         entity_ids: set[str] = set()
         for row in raw_results:
             for var_data in row.values():
