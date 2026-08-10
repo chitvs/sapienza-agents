@@ -1,12 +1,13 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+ROOT_DIR = Path(__file__).resolve().parents[4]
 
 class Settings(BaseSettings):
     """Unico posto per tutte le configurazioni dell'agente."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ROOT_DIR / ".env",  
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -15,7 +16,7 @@ class Settings(BaseSettings):
     prompts_dir: Path = Path(__file__).resolve().parent / "prompts"
 
     # Selezione del Provider: "gemini" oppure "ollama"
-    llm_provider: str = "gemini"
+    llm_provider: str = "ollama"
 
     # Configurazione Gemini
     gemini_api_key: str = ""
@@ -33,7 +34,6 @@ class Settings(BaseSettings):
     # context gathering (Step 5)
     kg_agent_url: str = "http://localhost:8000"
     multiapi_agent_url: str = "http://localhost:8002"
-    external_call_timeout: float = 5.0
-
+    external_call_timeout: float = 60.0
 
 settings = Settings()

@@ -37,7 +37,7 @@ def test_travel_full_success():
 
 def test_travel_partial_degradation():
     async def fake_query_kg(question):
-        return {"error": "kg-agent: timeout dopo 5.0s"}
+        return {"error": "kg-agent: timeout dopo 60.0s"}
 
     async def fake_query_multiapi(question):
         return {"weather": "sereno"}
@@ -46,7 +46,7 @@ def test_travel_partial_degradation():
         pipeline = PlannerPipeline(verbose=True)
         context, errors = asyncio.run(pipeline._gather_context("travel", QueryRequest(question="Weekend a Roma")))
 
-    assert errors == ["kg-agent: timeout dopo 5.0s"]
+    assert errors == ["kg-agent: timeout dopo 60.0s"]
     assert "kg_agent" not in context
     assert context["multiapi_agent"] == {"weather": "sereno"}
 

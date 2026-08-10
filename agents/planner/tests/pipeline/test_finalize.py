@@ -28,20 +28,20 @@ def test_no_retries_no_errors():
 
 
 def test_no_retries_with_one_error():
-    response = _finalize(0, ["kg-agent: timeout dopo 5.0s"])
+    response = _finalize(0, ["kg-agent: timeout dopo 60.0s"])
     assert response.confidence == 0.9
-    assert response.contingency_notes == ["kg-agent: timeout dopo 5.0s"]
+    assert response.contingency_notes == ["kg-agent: timeout dopo 60.0s"]
 
 
 def test_no_retries_with_two_errors_penalty_stays_flat():
     """la penalità è flat (-0.1) indipendentemente dal numero di errori nella lista."""
-    response = _finalize(0, ["kg-agent: timeout dopo 5.0s", "multiapi-agent: errore HTTP 500"])
+    response = _finalize(0, ["kg-agent: timeout dopo 60.0s", "multiapi-agent: errore HTTP 500"])
     assert response.confidence == 0.9
-    assert response.contingency_notes == ["kg-agent: timeout dopo 5.0s", "multiapi-agent: errore HTTP 500"]
+    assert response.contingency_notes == ["kg-agent: timeout dopo 60.0s", "multiapi-agent: errore HTTP 500"]
 
 
 def test_one_retry_with_errors():
-    response = _finalize(1, ["kg-agent: timeout dopo 5.0s"])
+    response = _finalize(1, ["kg-agent: timeout dopo 60.0s"])
     assert response.confidence == 0.65
 
 
@@ -49,7 +49,7 @@ def test_two_retries_floor_absorbs_network_penalty():
     """al floor (draft_attempts == max_draft_retries, oggi 2) la penalità di rete non è
     più visibile: nota accettata nella roadmap, non un bug."""
     response_no_errors = _finalize(2, [])
-    response_with_errors = _finalize(2, ["kg-agent: timeout dopo 5.0s"])
+    response_with_errors = _finalize(2, ["kg-agent: timeout dopo 60.0s"])
     assert response_no_errors.confidence == 0.5
     assert response_with_errors.confidence == 0.5
 
@@ -74,6 +74,6 @@ def test_context_errors_are_appended_to_existing_contingency_notes():
     pipeline = PlannerPipeline(verbose=True)
     draft = dict(_VALID_DRAFT, contingency_notes=["nota del drafting"])
     response = pipeline._finalize(
-        _REQUEST, "travel", draft, 10.0, 0, {}, ["kg-agent: timeout dopo 5.0s"]
+        _REQUEST, "travel", draft, 10.0, 0, {}, ["kg-agent: timeout dopo 60.0s"]
     )
-    assert response.contingency_notes == ["nota del drafting", "kg-agent: timeout dopo 5.0s"]
+    assert response.contingency_notes == ["nota del drafting", "kg-agent: timeout dopo 60.0s"]
