@@ -1,7 +1,12 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-ROOT_DIR = Path(__file__).resolve().parents[4]
+current_path = Path(__file__).resolve().parent
+ROOT_DIR = current_path
+for parent in current_path.parents:
+    if (parent / ".env").exists() or (parent / "agents").exists():
+        ROOT_DIR = parent
+        break
 
 class Settings(BaseSettings):
     """Unico posto per tutte le configurazioni dell'agente."""
