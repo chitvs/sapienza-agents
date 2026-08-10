@@ -150,6 +150,7 @@ class LLMLinker(BaseLinker):
             {"id": c.id, "label": getattr(c, "label", ""), "description": getattr(c, "description", "")}
             for c in valid_cands
         ]
+        raw_output = ""
         try:
             system_prompt = self.llm_client.load_prompt(
                 "disambiguate_entity.txt",
@@ -166,10 +167,17 @@ class LLMLinker(BaseLinker):
         except Exception as err:
             logger.warning("disambiguazione llm fallita per '%s': %s", mention, err)
 
-        # il primo candidato è l'esito migliore del motore di ricerca del KG: è il ripiego
-        # giusto sia quando il modello rifiuta esplicitamente sia quando non si capisce cosa
-        # abbia scelto. Registrarlo permette di misurare quanto spesso accade.
-        logger.info("disambiguazione non conclusiva per '%s': uso il primo candidato", mention)
+        # si ripiega sul primo candidato del motore di ricerca, che però non è affidabile:
+        # per "Divine Comedy" è un film iraniano del 2025, per "Titanic" il transatlantico.
+        # Si registra la risposta grezza perché dal log non si distingue altrimenti un rifiuto
+        # esplicito del modello da un output che il parser non ha saputo interpretare, e le
+        # due cose richiedono rimedi opposti.
+        logger.info(
+            "disambiguazione non conclusiva per '%s': uso il primo candidato (%s). risposta grezza: %r",
+            mention,
+            valid_cands[0].id,
+            (raw_output or "")[:200],
+        )
         return valid_cands[0]
 
     def link(self, text: str) -> list[LinkedEntity]:
