@@ -26,19 +26,28 @@ class Settings(BaseSettings):
     # Configurazione Gemini
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.6-flash"
+    gemini_api_base: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_timeout: float = 30.0
 
     # Configurazione Ollama (Fallback Locale)
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
     ollama_timeout: float = 600.0
 
-    # pipeline: dominio di fallback
-    default_domain: str = "routine"
+    # pipeline: fallback
     max_draft_retries: int = 2
 
     # context gathering (Step 5)
     kg_agent_url: str = "http://localhost:8000"
     multiapi_agent_url: str = "http://localhost:8002"
     external_call_timeout: float = 60.0
+
+    # planner: verbosità pipeline (log della risposta grezza dell'llm, ecc.)
+    planner_verbose: bool = False
+
+    # pipeline: euristica di confidence (vedi PlannerPipeline._finalize)
+    confidence_retry_penalty: float = 0.25
+    confidence_context_error_penalty: float = 0.1
+    confidence_floor: float = 0.5
 
 settings = Settings()

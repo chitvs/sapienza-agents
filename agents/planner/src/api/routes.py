@@ -1,10 +1,15 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from api.schemas import QueryRequest, QueryResponse
+from configs.settings import settings
 from pipeline import PlannerPipeline
 
+logger = logging.getLogger("planner_api")
+
 router = APIRouter()
-pipeline = PlannerPipeline(verbose=True)
+pipeline = PlannerPipeline(verbose=settings.planner_verbose)
 
 
 @router.get("/health")
@@ -17,4 +22,5 @@ async def query_planner(request: QueryRequest):
     try:
         return await pipeline.run(request)
     except Exception as err:
-        raise HTTPException(status_code=500, detail=str(err))
+        logger.exception("Errore durante l'elaborazione della richiesta planner")
+        raise HTTPException(status_code=500, detail="Errore interno del planner-agent") from err

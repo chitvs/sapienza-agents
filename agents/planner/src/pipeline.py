@@ -54,18 +54,21 @@ class PlannerPipeline:
         if not settings.gemini_api_key:
             raise ValueError("GEMINI_API_KEY non configurata")
 
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{settings.gemini_model}:generateContent?key={settings.gemini_api_key}"
-        )
-        generation_config = {"temperature": temperature}
+        url = f"{settings.gemini_api_base}/models/{settings.gemini_model}:generateContent"
+        headers = {"x-goog-api-key": settings.gemini_api_key}
+
+        generation_config: dict = {}
         if json_mode:
             generation_config["response_mime_type"] = "application/json"
+        # temperature/top_p/top_k deprecati e ignorati da gemini-3.6-flash in poi
+        # (Google: verranno rifiutati con HTTP 400 nelle prossime generazioni) - non inviati.
 
-        payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": generation_config}
+        payload: dict = {"contents": [{"parts": [{"text": prompt}]}]}
+        if generation_config:
+            payload["generationConfig"] = generation_config
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json=payload)
+        async with httpx.AsyncClient(timeout=settings.gemini_timeout) as client:
+            resp = await client.post(url, headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
 
@@ -263,17 +266,10 @@ class PlannerPipeline:
         if not days:
             confidence = 0.0
         else:
-            # formula additiva con floor: parte da 1.0, -0.25 per ogni tentativo di
-            # correzione del draft, -0.1 flat se la lista errori non è vuota (non per-singolo-
-            # errore: la lista abilita un affinamento futuro a penalità proporzionale senza
-            # dover ritoccare la firma della funzione, ma non è applicato qui).
-            # nota accettata, non un bug: se draft_attempts == settings.max_draft_retries
-            # (oggi 2), il floor a 0.5 scatta già di suo - la penalità di rete resta
-            # visibile solo quando i tentativi di correzione sono 0 o 1.
-            confidence = 1.0 - 0.25 * draft_attempts
+            confidence = 1.0 - settings.confidence_retry_penalty * draft_attempts
             if context_errors:
-                confidence -= 0.1
-            confidence = round(max(0.5, confidence), 2)
+                confidence -= settings.confidence_context_error_penalty
+            confidence = round(max(settings.confidence_floor, confidence), 2)
 
         return QueryResponse(
             question=request.question,
