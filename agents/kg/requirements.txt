@@ -1,3 +1,11 @@
-fastapi
-uvicorn
-pydantic
+fastapi>=0.141.1
+uvicorn>=0.52.0
+pydantic>=2.13.4
+pydantic-settings>=2.14.2
+requests>=2.34.2
+pytest>=9.1.1
+sentence-transformers>=3.0.0
+faiss-cpu>=1.8.0
+gliner>=0.2.28
+numpy>=1.26.0
+neo4j>=5.28.0

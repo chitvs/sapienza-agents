@@ -1,6 +1,7 @@
 from langgraph.graph import StateGraph, END
 from src.graph.state import AgentState
 from src.graph.nodes import (
+    translate_node,
     supervisor_node,
     kg_node,
     planner_node,
@@ -27,14 +28,16 @@ def build_orchestrator_graph():
     workflow = StateGraph(AgentState)
 
     # registrazione dei nodi
+    workflow.add_node("translator", translate_node)
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("kg_node", kg_node)
     workflow.add_node("planner_node", planner_node)
     workflow.add_node("multiapi_node", multiapi_node)
     workflow.add_node("synthesizer", synthesizer_node)
 
-    # entrypoint del grafo
-    workflow.set_entry_point("supervisor")
+    # entrypoint del grafo: la domanda si normalizza in inglese prima di qualsiasi routing
+    workflow.set_entry_point("translator")
+    workflow.add_edge("translator", "supervisor")
 
     # routing condizionale dal supervisor verso gli agenti
     workflow.add_conditional_edges("supervisor", route_agents, ["kg_node", "planner_node", "multiapi_node", "synthesizer"])

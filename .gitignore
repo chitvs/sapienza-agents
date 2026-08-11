@@ -1,7 +1,7 @@
 # personal files
 todo.md
 .vscode
-.env
+docs/
 
 # python stuff
 __pycache__/
@@ -12,3 +12,10 @@ __pycache__/
 output_repomix
 esporta_repomix.ps1
 test_logs.txt
+
+# environment files
+.env
+
+# generated build artifacts
+agents/kg/data/*
+!agents/kg/data/.gitkeep

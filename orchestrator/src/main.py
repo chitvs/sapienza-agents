@@ -6,6 +6,8 @@ app = FastAPI(title="Orchestrator")
 
 class QueryRequest(BaseModel):
     question: str
+    # knowledge graph da interrogare: se assente decide il kg-agent
+    target_kg: str | None = None
 
 class QueryResponse(BaseModel):
     question: str
@@ -21,6 +23,9 @@ def health():
 async def run_query(req: QueryRequest):
     initial_state = {
         "question": req.question,
+        "question_en": "",
+        "language": "",
+        "target_kg": req.target_kg,
         "selected_agents": [],
         "kg_results": None,
         "planner_results": None,

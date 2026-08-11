@@ -1,0 +1,22 @@
+The previously generated SPARQL query produced an error when executed on Wikidata.
+
+User question: {question}
+
+Error type: {error_type}
+
+Failed query:
+{failed_query}
+
+Error message:
+{error_message}
+
+{schema_context}
+
+Correction guidelines based on error type ({error_type}):
+- SYNTAX_ERROR: fix SPARQL syntax errors, check curly braces, trailing semicolons, and aggregation aliases (e.g. COUNT(?x) AS ?count).
+- MISSING_PREFIX: ensure correct prefixes are used (wd: for entities, wdt: for direct properties).
+- TIMEOUT: simplify the query, remove unnecessary joins, or add LIMIT.
+- GENERAL_ERROR: verify logical correctness of triple patterns and alignment with the question.
+- NEVER use subqueries (SELECT inside WHERE or FILTER). Wikidata SPARQL does NOT support nested SELECT. Use ORDER BY + LIMIT instead.
+
+CRITICAL INSTRUCTION: You MUST output ONLY the raw SPARQL query wrapped in a ```sparql block. DO NOT output any introductory text, explanations, or conversational replies. ONLY return the SPARQL query code.

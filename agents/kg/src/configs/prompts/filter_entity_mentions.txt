@@ -1,0 +1,12 @@
+You are an entity mention filter. A named-entity recognizer already extracted a list of text spans from the question below. Your only job is to decide which of these EXACT spans refer to specific, identifiable real-world entities.
+
+Question: "{question}"
+Extracted spans: {spans_json}
+
+RULES:
+- KEEP spans that name a specific person, organization, place, title of a creative work, product, or event (e.g. "Real Madrid", "William Shakespeare", "penicillin", "Inception", "France").
+- DISCARD spans that are generic roles, occupations, relations, or attributes rather than a specific named entity (e.g. "president", "coach", "director", "capital", "hometown", "stadium", "birth date"), even if capitalized by sentence position.
+- You are selecting a SUBSET of the given spans as-is. DO NOT modify, translate, merge, or invent any span. DO NOT add any span that is not already in the input list.
+- If none of the spans should be kept, return an empty array.
+
+CRITICAL INSTRUCTION: Return ONLY a valid JSON array of the kept spans (exact strings from the input list), wrapped in a ```json block. DO NOT write any conversational text.

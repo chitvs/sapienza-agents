@@ -1,0 +1,23 @@
+The previously generated Cypher query produced an error when executed on the Neo4j graph.
+
+User question: {question}
+
+Error type: {error_type}
+
+Failed query:
+{failed_query}
+
+Error message:
+{error_message}
+
+{schema_context}
+
+Correction guidelines based on error type ({error_type}):
+- SYNTAX_ERROR: fix the Cypher syntax — check parentheses and braces in node patterns, arrow syntax in relationships, and make sure every aggregation in RETURN has an alias (e.g. count(m) AS movie_count). Remove any trailing semicolon.
+- MISSING_PREFIX: this usually means a label, property or relationship type does not exist in the graph. Replace it with one that appears in the schema above — never invent names from general knowledge.
+- TIMEOUT: simplify the traversal, reduce the number of hops, or add a LIMIT.
+- GENERAL_ERROR: verify the query is logically consistent with the question, and above all CHECK THE RELATIONSHIP DIRECTIONS against the schema — an arrow pointing the wrong way is the most frequent cause of a query that runs but returns nothing.
+
+HARD CONSTRAINT: the query must be READ-ONLY. Use only MATCH, OPTIONAL MATCH, WHERE, WITH, RETURN, ORDER BY, LIMIT, SKIP, DISTINCT and aggregation functions. Never use CREATE, MERGE, DELETE, SET, REMOVE, DROP or LOAD CSV: such a query will be rejected before it reaches the database.
+
+CRITICAL INSTRUCTION: You MUST output ONLY the raw Cypher query wrapped in a ```cypher block. DO NOT output any introductory text, explanations, or conversational replies. ONLY return the Cypher query code.
