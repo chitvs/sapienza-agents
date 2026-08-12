@@ -54,19 +54,27 @@ async def supervisor_node(state: AgentState) -> dict:
         "Sei il supervisor di un sistema multi-agente. Analizza la domanda e decidi quali agenti attivare.\n"
         "Agenti disponibili:\n"
         "- 'kg_agent': per domande su entità, relazioni strutturate, fatti e conoscenze.\n"
-        "- 'planner_agent': per attività di pianificazione, scomposizione o piani complessi.\n"
+        "- 'planner_agent': per attività di pianificazione, scomposizione o piani complessi, quali creare un piano, un itinerario, una routine, un programma di studio.\n"
         "- 'multiapi_agent': per chiamate e integrazioni multi-API esterne.\n"
-        "Rispondi esclusivamente con un JSON array contenente i nomi degli agenti necessari, es: [\"kg_agent\"] oppure [\"planner_agent\", \"multiapi_agent\"]."
+        "REGOLA IMPORTANTE: Se decidi di attivare il 'planner_agent', NON attivare 'kg_agent' o 'multiapi_agent', poiché il planner è autonomo nel recuperare il contesto di cui ha bisogno.\n"
+        "Rispondi esclusivamente con un JSON in formato oggetto (es. {\"selected_agents\": [\"planner_agent\"]}) oppure un array (es. [\"planner_agent\"])."
     )
 
     response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=question)])
 
+    selected = []
     try:
-        selected = _parse_json(response.content)
+        parsed = _parse_json(response.content)
+        # gestisce sia se l'llm risponde con una lista sia con un dizionario
+        if isinstance(parsed, list):
+            selected = parsed
+        elif isinstance(parsed, dict):
+            selected = parsed.get("selected_agents", [])
+
         if not isinstance(selected, list):
             selected = []
     except Exception as err:
-        logger.warning("Routing supervisor fallito: %s", err)
+        logger.warning("Routing supervisor fallito: %s (Risposta grezza: %s)", err, response.content)
         selected = []
 
     return {"selected_agents": selected}
@@ -116,8 +124,26 @@ async def synthesizer_node(state: AgentState) -> dict:
 
     if state.get("kg_results") and state["kg_results"].get("results"):
         evidences.append(f"Evidenze da Knowledge Graph: {state['kg_results']['results']}")
-    if state.get("planner_results") and state["planner_results"].get("results"):
-        evidences.append(f"Evidenze da Planning: {state['planner_results']['results']}")
+
+    # Integrazione del nuovo schema del Planner (title, summary, days)
+    planner_res = state.get("planner_results")
+    if planner_res:
+        if "days" in planner_res and planner_res["days"]:
+            plan_str = f"Titolo Piano: {planner_res.get('title', 'N/D')}\n"
+            if planner_res.get("summary"):
+                plan_str += f"Sommario: {planner_res.get('summary')}\n"
+            for day in planner_res["days"]:
+                plan_str += f"- Giorno {day.get('day_index')}"
+                if day.get("label"):
+                    plan_str += f" ({day.get('label')})"
+                plan_str += ":\n"
+                for slot in day.get("slots", []):
+                    time_slot = f"[{slot.get('start_time')}] " if slot.get("start_time") else ""
+                    plan_str += f"  * {time_slot}{slot.get('task')} ({slot.get('duration_minutes')} min)\n"
+            evidences.append(f"Evidenze da Planning:\n{plan_str}")
+        elif planner_res.get("results"):
+            evidences.append(f"Evidenze da Planning: {planner_res['results']}")
+
     if state.get("multiapi_results") and state["multiapi_results"].get("results"):
         evidences.append(f"Evidenze da Multi-API: {state['multiapi_results']['results']}")
 

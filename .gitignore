@@ -1,12 +1,17 @@
 # personal files
 todo.md
-docs/
 .vscode
+docs/
 
 # python stuff
 __pycache__/
 .pytest_cache/
 .venv/
+
+# other
+output_repomix
+esporta_repomix.ps1
+test_logs.txt
 
 # environment files
 .env

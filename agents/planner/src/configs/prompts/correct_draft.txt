@@ -1,0 +1,11 @@
+You previously generated a JSON plan that failed validation. Fix ONLY what is necessary to satisfy the validation errors below, keeping the rest of the plan as close as possible to the original (same tasks, same structure, same domain-specific fields).
+
+VALIDATION ERRORS:
+{errors}
+
+PREVIOUS JSON (possibly malformed or logically inconsistent):
+{broken_json}
+
+Return ONLY a corrected, valid JSON object with the exact same structure as before (title, summary, days[] with day_index/label/slots[], each slot with task/start_time/duration_minutes/category). No explanations, no markdown.
+
+Original user request (for context): "{question}"
