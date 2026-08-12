@@ -11,15 +11,10 @@ traversata diretta, traversata contro la direzione della relazione, catena a due
 aggregazione e superlativo.
 """
 import pytest
-import requests
 
 from pipeline import KGPipeline
-
-def is_ollama_running() -> bool:
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
+from conftest import contiene_risposta
+from conftest import is_ollama_running
 
 def is_neo4j_ready() -> bool:
     """verifica che neo4j risponda e che il movie graph sia effettivamente caricato."""
@@ -54,14 +49,14 @@ def test_movies_acted_in_by_person(pipeline):
     """traversata diretta, seguendo la direzione della relazione."""
     result = pipeline.run("Which movies did Tom Hanks act in?")
     assert len(result.results) > 0
-    assert any("Apollo 13" in str(row) or "Forrest Gump" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Apollo 13") or contiene_risposta(result, "Forrest Gump")
 
 @requires_stack
 def test_director_of_movie(pipeline):
     """traversata CONTRO la direzione della relazione: (:Movie)<-[:DIRECTED]-(:Person)."""
     result = pipeline.run("Who directed The Matrix?")
     assert len(result.results) > 0
-    assert any("Wachowski" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Wachowski")
 
 @requires_stack
 def test_co_actors_two_hops(pipeline):

@@ -17,11 +17,6 @@ _ENTITY_LABELS = [
     "nationality",
 ]
 
-# Soglia orientata al recall: GLiNER non separa in modo affidabile le entità vere dai
-# sostantivi di ruolo ("coach" a volte scora più in alto di "penicillin"), quindi la
-# precisione è delegata al filtro LLM successivo invece di inseguire una soglia che,
-# per costruzione, non esiste.
-
 _MODEL: Any = None
 
 def _get_model() -> Any:

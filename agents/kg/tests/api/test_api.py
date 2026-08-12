@@ -1,15 +1,9 @@
 from fastapi.testclient import TestClient
 from main import app
 import pytest
-import requests
+from conftest import is_ollama_running
 
 client = TestClient(app)
-
-def is_ollama_running():
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
 
 def test_health():
     res = client.get("/health")
@@ -24,7 +18,8 @@ def test_unsupported_kg_is_rejected():
 def test_missing_prerequisite_explains_itself(monkeypatch):
     """
     L'indice FAISS è un artefatto di build: se manca, il messaggio che spiega come generarlo
-    deve arrivare al client, non perdersi in un 500 senza corpo.
+    deve arrivare al client. Il codice è 500 e non 503, perché è un guasto nostro e non del
+    knowledge graph, che invece è perfettamente raggiungibile.
     """
     import api.routes as routes
 
@@ -35,7 +30,7 @@ def test_missing_prerequisite_explains_itself(monkeypatch):
     monkeypatch.setattr(routes, "_pipelines", {})
 
     res = client.post("/query", json={"question": "x", "target_kg": "wikidata"})
-    assert res.status_code == 503
+    assert res.status_code == 500
     assert "ingest_wikidata.py" in res.json()["detail"]
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")

@@ -6,32 +6,32 @@ from typing import Any
 import numpy as np
 import faiss
 
+from connectors.base_connector import BaseConnector
 from embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
+from configs.settings import settings
 from pruners.base_pruner import BasePruner, PrunedSchema
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_INDEX_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "wikidata_ontology"
 
-# Con bge-small-en-v1.5 le proprietà corrette per domande indirette (es. "author",
-# "place of birth") cadono nel top-15 ma non nel top-10 del ranking semantico.
-_MAX_SUGGESTED_PROPS = 15
+# le classi servono solo a suggerire il tipo del soggetto: oltre le prime aggiungono rumore
+_CLASS_RESULTS = 5
 
 class VectorPruner(BasePruner):
     """Seleziona lo schema rilevante cercando proprietà e classi in un indice FAISS."""
 
     def __init__(
         self,
+        connector: BaseConnector,
         index_dir: str | Path | None = None,
         ingest_script: str = "scripts/ingest_wikidata.py",
     ) -> None:
+        super().__init__(connector)
         index_path = Path(index_dir) if index_dir else _DEFAULT_INDEX_DIR
-        self.ingest_script = ingest_script
 
         prop_index_file = index_path / "properties.faiss"
         class_index_file = index_path / "classes.faiss"
-        prop_meta_file = index_path / "properties_meta.json"
-        class_meta_file = index_path / "classes_meta.json"
 
         if not prop_index_file.exists():
             raise FileNotFoundError(
@@ -41,11 +41,15 @@ class VectorPruner(BasePruner):
             )
 
         self.prop_index = faiss.read_index(str(prop_index_file))
-        self.prop_meta: list[dict] = json.loads(prop_meta_file.read_text(encoding="utf-8"))
+        self.prop_meta: list[dict] = json.loads(
+            (index_path / "properties_meta.json").read_text(encoding="utf-8")
+        )
 
         if class_index_file.exists():
             self.class_index = faiss.read_index(str(class_index_file))
-            self.class_meta: list[dict] = json.loads(class_meta_file.read_text(encoding="utf-8"))
+            self.class_meta: list[dict] = json.loads(
+                (index_path / "classes_meta.json").read_text(encoding="utf-8")
+            )
         else:
             self.class_index = None
             self.class_meta = []
@@ -74,87 +78,75 @@ class VectorPruner(BasePruner):
             })
         return results
 
-    def _search_properties(self, question: str, top_k: int = 15) -> list[dict]:
-        """Cerca le proprietà semanticamente più rilevanti nell'ontologia del KG."""
-        return self._search(self.prop_index, self.prop_meta, question, top_k)
-
-    def _search_classes(self, question: str, top_k: int = 5) -> list[dict]:
-        """Cerca le classi semanticamente più rilevanti nell'ontologia del KG."""
-        return self._search(self.class_index, self.class_meta, question, top_k)
-
     @staticmethod
     def _describe(item: dict, prefix: str) -> str:
         """Formatta un termine dell'ontologia per il contesto dell'LLM."""
         desc = item.get("description", "")
         return f"  {prefix}{item['id']} - {item['label']}" + (f" ({desc})" if desc else "")
 
-    def prune(
-        self,
-        seed_entity_ids: list[str],
-        connector: Any = None,
-        max_items: int = 20,
-        question: str = "",
-    ) -> PrunedSchema:
+    def _seed_context(self, seed_entity_ids: list[str], context_lines: list[str]) -> set[str]:
+        """Descrive le entità seed e restituisce le proprietà che possiedono davvero."""
+        try:
+            entities_dict = self.connector.get_entities(seed_entity_ids)
+        except Exception as err:
+            logger.warning("entità seed non leggibili dal KG: %s", err)
+            entities_dict = {}
+
+        existing_pids: set[str] = set()
+        for eid in seed_entity_ids:
+            entity_data = entities_dict.get(eid)
+            if entity_data is None:
+                context_lines.append(f"entity: {self.connector.format_entity_ref(eid)}")
+                continue
+
+            desc = entity_data.description or ""
+            desc_str = f" - {desc}" if desc else ""
+            context_lines.append(
+                f"entity: {self.connector.format_entity_ref(entity_data.id)} ({entity_data.label}{desc_str})"
+            )
+            if desc:
+                context_lines.append(f'description: "{desc}"')
+
+            # l'identificatore è il primo token della chiave: vale sia per Wikidata
+            # ("P569 (date of birth)") sia per vocabolari con nomi ("birthPlace")
+            for prop_key in entity_data.properties:
+                token = prop_key.split(" ", 1)[0].strip()
+                if token:
+                    existing_pids.add(token)
+        return existing_pids
+
+    def prune(self, seed_entity_ids: list[str], question: str = "") -> PrunedSchema:
         """Costruisce il contesto unendo entità seed, proprietà verificate e match semantici."""
         context_lines: list[str] = []
-        entity_prefix, property_prefix = self._prefixes(connector)
-
-        def entity_ref(eid: str) -> str:
-            if connector is not None:
-                return connector.format_entity_ref(eid)
-            return f"{entity_prefix}{eid}"
-
-        # proprietà realmente presenti sulle entità seed, per distinguere verificate da suggerite
-        existing_pids: set[str] = set()
-
-        if seed_entity_ids and connector:
-            entities_dict = connector.get_entities(seed_entity_ids)
-
-            for eid in seed_entity_ids:
-                entity_data = entities_dict.get(eid)
-                if not (entity_data and getattr(entity_data, "id", None)):
-                    context_lines.append(f"entity: {entity_ref(eid)}")
-                    continue
-
-                desc = getattr(entity_data, "description", "") or ""
-                desc_str = f" - {desc}" if desc else ""
-                context_lines.append(f"entity: {entity_ref(entity_data.id)} ({entity_data.label}{desc_str})")
-                if desc:
-                    context_lines.append(f'description: "{desc}"')
-
-                # l'identificatore è il primo token della chiave: vale sia per Wikidata
-                # ("P569 (date of birth)") sia per vocabolari con nomi ("birthPlace")
-                for prop_key in getattr(entity_data, "properties", {}):
-                    token = prop_key.split(" ", 1)[0].strip()
-                    if token:
-                        existing_pids.add(token)
-        elif seed_entity_ids:
-            context_lines.extend(f"entity: {entity_ref(eid)}" for eid in seed_entity_ids)
+        # le proprietà già presenti sulle entità seed distinguono le verificate dalle suggerite
+        existing_pids = self._seed_context(seed_entity_ids, context_lines) if seed_entity_ids else set()
 
         if question:
-            relevant_props = self._search_properties(question, top_k=max_items)
+            relevant_props = self._search(
+                self.prop_index, self.prop_meta, question, settings.schema_search_pool
+            )
             if relevant_props:
                 verified = [p for p in relevant_props if p["id"] in existing_pids]
                 suggested = [p for p in relevant_props if p["id"] not in existing_pids]
+                prefix = self.connector.property_prefix
 
                 context_lines.append("")
                 if verified:
                     context_lines.append("VERIFIED properties (exist as outbound edges on the seed entities):")
-                    context_lines.extend(self._describe(p, property_prefix) for p in verified)
+                    context_lines.extend(self._describe(p, prefix) for p in verified)
                 if suggested:
                     context_lines.append("")
                     context_lines.append("SUGGESTED properties (semantic match, useful for inverse edges or target types):")
                     context_lines.extend(
-                        self._describe(p, property_prefix) for p in suggested[:_MAX_SUGGESTED_PROPS]
+                        self._describe(p, prefix) for p in suggested[:settings.schema_max_suggested]
                     )
 
-            relevant_classes = self._search_classes(question, top_k=5)
+            relevant_classes = self._search(self.class_index, self.class_meta, question, _CLASS_RESULTS)
             if relevant_classes:
                 context_lines.append("")
                 context_lines.append("relevant classes for this question:")
-                context_lines.extend(self._describe(c, entity_prefix) for c in relevant_classes)
-
-        if not context_lines:
-            context_lines.extend(f"entity: {entity_ref(seed_id)}" for seed_id in seed_entity_ids)
+                context_lines.extend(
+                    self._describe(c, self.connector.entity_prefix) for c in relevant_classes
+                )
 
         return PrunedSchema(context_text="\n".join(context_lines))

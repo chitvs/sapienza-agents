@@ -8,7 +8,7 @@ class WikidataProvider(BaseProvider):
         from connectors.wikidata_connector import WikidataConnector
         from correctors.error_conditioned_corrector import ErrorConditionedCorrector
         from executors.sparql_executor import SPARQLExecutor
-        from linkers.llm_linker import LLMLinker
+        from linkers.entity_linker import EntityLinker
         from pruners.vector_pruner import VectorPruner
         from translators.sparql_translator import WikidataSPARQLTranslator
 
@@ -18,6 +18,6 @@ class WikidataProvider(BaseProvider):
             endpoint=settings.wikidata_endpoint,
             timeout=settings.wikidata_timeout,
         )
-        self.pruner = VectorPruner()
-        self.corrector = ErrorConditionedCorrector(self.llm_client)
-        self.linker = LLMLinker(connector=self.connector, llm_client=self.linking_client)
+        self.pruner = VectorPruner(self.connector)
+        self.corrector = ErrorConditionedCorrector(self.translator, self.llm_client)
+        self.linker = EntityLinker(connector=self.connector, llm_client=self.linking_client)

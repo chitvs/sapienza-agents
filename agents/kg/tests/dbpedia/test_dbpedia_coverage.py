@@ -13,14 +13,10 @@ import pytest
 import requests
 
 from pipeline import KGPipeline
+from conftest import contiene_risposta
+from conftest import is_ollama_running
 
 _INDEX_DIR = Path(__file__).resolve().parents[2] / "data" / "dbpedia_ontology"
-
-def is_ollama_running() -> bool:
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
 
 def is_dbpedia_reachable() -> bool:
     try:
@@ -53,7 +49,9 @@ def test_resource_with_parentheses_in_uri(pipeline: KGPipeline) -> None:
     prefissato valido: la query deve usare l'URI completo fra parentesi angolari.
     """
     result = pipeline.run("What is the mass of the planet Mercury?")
-    assert len(result.results) >= 0  # esito aperto: interessa che non sia un errore di sintassi
+    # dbr:Mercury_(planet) non è un nome prefissato valido: le parentesi obbligano
+    # all'URI fra parentesi angolari, ed è questo che il test deve proteggere
+    assert "dbr:Mercury_(planet)" not in result.query
 
 @requires_stack
 def test_superlative_with_type_filter(pipeline: KGPipeline) -> None:
@@ -66,14 +64,14 @@ def test_date_property(pipeline: KGPipeline) -> None:
     """proprietà di tipo data, che va restituita come letterale e non risolta come risorsa."""
     result = pipeline.run("When was Albert Einstein born?")
     assert len(result.results) > 0
-    assert any("1879" in str(row) for row in result.results)
+    assert contiene_risposta(result, "1879")
 
 @requires_stack
 def test_death_place(pipeline: KGPipeline) -> None:
     """il valore è una risorsa con virgola nell'URI (Princeton,_New_Jersey)."""
     result = pipeline.run("Where did Albert Einstein die?")
     assert len(result.results) > 0
-    assert any("Princeton" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Princeton")
 
 @requires_stack
 def test_multi_valued_property(pipeline: KGPipeline) -> None:
@@ -85,13 +83,15 @@ def test_multi_valued_property(pipeline: KGPipeline) -> None:
 def test_three_hop_chain(pipeline: KGPipeline) -> None:
     """catena a tre hop: film -> regista -> luogo di nascita -> paese."""
     result = pipeline.run("In which country was the director of Inception born?")
-    assert len(result.results) >= 0
+    # esito aperto sui dati: si verifica che la traduzione abbia prodotto una SELECT
+    assert "SELECT" in result.query.upper()
 
 @requires_stack
 def test_spouse_relation(pipeline: KGPipeline) -> None:
     """relazione fra due persone."""
     result = pipeline.run("Who was the spouse of Albert Einstein?")
-    assert len(result.results) >= 0
+    # esito aperto sui dati: si verifica che la traduzione abbia prodotto una SELECT
+    assert "SELECT" in result.query.upper()
 
 @requires_stack
 def test_count_with_inverse_relation(pipeline: KGPipeline) -> None:
@@ -112,7 +112,8 @@ def test_ambiguous_entity_name(pipeline: KGPipeline) -> None:
     disambiguazione deve usare il contesto della domanda.
     """
     result = pipeline.run("Who was the lead singer of Queen?")
-    assert len(result.results) >= 0
+    # esito aperto sui dati: si verifica che la traduzione abbia prodotto una SELECT
+    assert "SELECT" in result.query.upper()
 
 @requires_stack
 def test_film_numeric_property(pipeline: KGPipeline) -> None:

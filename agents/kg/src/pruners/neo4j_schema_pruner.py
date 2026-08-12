@@ -1,6 +1,9 @@
+import logging
 from typing import Any
 
 from pruners.base_pruner import BasePruner, PrunedSchema
+
+logger = logging.getLogger(__name__)
 
 class Neo4jSchemaPruner(BasePruner):
     """Espone al modello l'intero schema del grafo, letto per introspezione."""
@@ -10,15 +13,7 @@ class Neo4jSchemaPruner(BasePruner):
     # in partenza il rischio che il modello inventi relazioni inesistenti.
 
     @staticmethod
-    def _format_property(prop: Any) -> str:
-        """Rende una proprietà come "nome: TIPO", accettando anche la forma senza tipo."""
-        if isinstance(prop, dict):
-            name = prop.get("name", "")
-            prop_type = prop.get("type")
-            return f"{name}: {prop_type}" if prop_type else str(name)
-        return str(prop)
-
-    def _format_schema(self, schema: dict[str, Any]) -> list[str]:
+    def _format_schema(schema: dict[str, Any]) -> list[str]:
         """Formatta label e relazioni del grafo per il contesto dell'LLM."""
         lines: list[str] = []
         labels = schema.get("labels") or {}
@@ -27,7 +22,7 @@ class Neo4jSchemaPruner(BasePruner):
         if labels:
             lines.append("NODE LABELS (with their properties and types):")
             for label, props in labels.items():
-                props_str = ", ".join(self._format_property(p) for p in props) if props else "(no properties)"
+                props_str = ", ".join(f"{p['name']}: {p['type']}" for p in props) if props else "(no properties)"
                 lines.append(f"  (:{label}) properties: {props_str}")
 
         if relationships:
@@ -37,24 +32,21 @@ class Neo4jSchemaPruner(BasePruner):
                 lines.append(f"  (:{rel.get('from') or '?'})-[:{rel.get('type')}]->(:{rel.get('to') or '?'})")
         return lines
 
-    def prune(
-        self,
-        seed_entity_ids: list[str],
-        connector: Any = None,
-        max_items: int = 40,  # ignorato: lo schema si legge per intero
-        question: str = "",
-    ) -> PrunedSchema:
+    def prune(self, seed_entity_ids: list[str], question: str = "") -> PrunedSchema:
         """Costruisce il contesto unendo lo schema del grafo e le entità già risolte."""
-        schema = connector.get_schema() if connector is not None else {}
+        context_lines = self._format_schema(self.connector.get_schema())
 
-        context_lines = self._format_schema(schema)
+        if seed_entity_ids:
+            try:
+                seed_entities = self.connector.get_entities(seed_entity_ids).values()
+            except Exception as err:
+                logger.warning("entità seed non leggibili dal grafo: %s", err)
+                seed_entities = []
 
-        if seed_entity_ids and connector is not None:
-            seed_lines: list[str] = []
-            for entity_data in connector.get_entities(seed_entity_ids).values():
-                if not entity_data or not getattr(entity_data, "label", ""):
+            seed_lines = []
+            for entity_data in seed_entities:
+                if not entity_data.label:
                     continue
-
                 node_labels = entity_data.description or ""
                 label_pattern = f":{node_labels.split(',')[0].strip()}" if node_labels else ""
                 seed_lines.append(f'  ({label_pattern} {{name/title: "{entity_data.label}"}})')

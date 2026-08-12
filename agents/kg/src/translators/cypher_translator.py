@@ -1,39 +1,25 @@
 import re
 
-from shared.ollama_client import OllamaClient
+from query_text import apply_outside_literals
 from translators.base_translator import BaseTranslator
 
 class CypherTranslator(BaseTranslator):
-    """Traduttore Text2Cypher basato su LLM per grafi Neo4j."""
+    """Traduttore Text2Cypher."""
 
-    @staticmethod
-    def sanitize(query: str) -> str:
+    prompt_filename = "translate_cypher.txt"
+    correction_prompt_filename = "correction_cypher.txt"
+
+    @classmethod
+    def sanitize(cls, query: str) -> str:
         """Normalizza gli errori di forma più comuni nell'output dell'LLM."""
         # il punto e virgola finale è rifiutato dentro una transazione esplicita
         query = query.strip().rstrip(";").strip()
-        # spazi spuri nei pattern, es. "( p:Person )"
-        query = re.sub(r"\(\s+", "(", query)
-        return re.sub(r"\s+\)", ")", query)
 
-    def translate(
-        self,
-        question: str,
-        schema_context: str = "",
-        temperature: float = 0.0,
-        top_p: float | None = None,
-    ) -> str:
-        system_prompt = self.llm_client.load_prompt(
-            "translate_cypher.txt",
-            schema=schema_context,
-            question=question,
-        )
-        raw_output = self.llm_client.chat(
-            system_prompt=system_prompt,
-            user_content=question,
-            temperature=temperature,
-            top_p=top_p,
-        )
-        return self.postprocess(self.sanitize(OllamaClient.clean_code_block(raw_output)), question)
+        def trim_parens(code: str) -> str:
+            # spazi spuri nei pattern, es. "( p:Person )"
+            return re.sub(r"\s+\)", ")", re.sub(r"\(\s+", "(", code))
+
+        return apply_outside_literals(query, trim_parens)
 
     def generate_feedback_prompt(self, query: str, schema_context: str) -> str:
         hints: list[str] = [

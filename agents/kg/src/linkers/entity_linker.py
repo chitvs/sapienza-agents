@@ -7,8 +7,8 @@ from typing import Any
 from connectors.base_connector import BaseConnector, EntityCandidate
 from embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
 from linkers.base_linker import BaseLinker, LinkedEntity
-from linkers.mention_extractor import extract_entity_mentions
 from llm import build_llm_client
+from mention_extraction import extract_entity_mentions
 from shared.ollama_client import OllamaClient
 from configs.settings import settings
 
@@ -22,29 +22,20 @@ _SKIP_WORDS = {
     "will", "would", "shall", "should",
 }
 
-class LLMLinker(BaseLinker):
-    """Entity linker zero-shot: GLiNER estrae le menzioni, l'LLM le disambigua."""
+class EntityLinker(BaseLinker):
+    """Entity linker zero-shot: GLiNER estrae le menzioni, l'LLM le disambigua e, quando
+    non è conclusivo, decide la combinazione di contesto, notorietà e rank di ricerca."""
 
-    def __init__(
-        self,
-        connector: BaseConnector | None = None,
-        llm_client: OllamaClient | None = None,
-        model_name: str | None = None,
-    ) -> None:
-        if connector is None:
-            from connectors.wikidata_connector import WikidataConnector
-
-            connector = WikidataConnector()
+    def __init__(self, connector: BaseConnector, llm_client: OllamaClient | None = None) -> None:
         self.connector = connector
-
-        self.llm_client = llm_client or build_llm_client(model_name or settings.ollama_linking_model)
+        self.llm_client = llm_client or build_llm_client(settings.ollama_linking_model)
 
     def _extract_mentions(self, text: str) -> list[str]:
         """Estrae le menzioni di entità, con fallback progressivi se GLiNER non produce nulla."""
         try:
             candidates = extract_entity_mentions(text)
             if candidates:
-                filtered = self._filter_entity_candidates(text, candidates)
+                filtered = self._filter_mentions(text, candidates)
                 if filtered:
                     return filtered
         except Exception as err:
@@ -57,8 +48,8 @@ class LLMLinker(BaseLinker):
         clean_text = re.sub(r"[?!.,;:]", "", text).strip()
         return [clean_text] if clean_text else []
 
-    def _filter_entity_candidates(self, question: str, candidates: list[str]) -> list[str]:
-        """Scarta dai candidati GLiNER i ruoli e gli attributi generici, tenendo le entità nominate."""
+    def _filter_mentions(self, question: str, candidates: list[str]) -> list[str]:
+        """Scarta dalle menzioni GLiNER i ruoli e gli attributi generici, tenendo le entità nominate."""
         # GLiNER estrae "president" o "hometown" con score paragonabile a entità vere e
         # nessuna soglia li separa; l'LLM sceglie un sottoinsieme dei candidati estratti,
         # quindi anche sbagliando non può introdurre entità inesistenti nel testo
@@ -90,7 +81,9 @@ class LLMLinker(BaseLinker):
 
     def _fallback_extract_proper_nouns(self, text: str) -> list[str]:
         """Estrae i nomi propri raggruppando le parole maiuscole consecutive."""
-        words = re.sub(r"[?!.,;:''\"]", "", text).split()
+        # l'apostrofo non è punteggiatura da togliere qui: "McDonald's" e "Shakespeare's"
+        # si distinguono solo interrogando il KG, e ci pensa _search_mention
+        words = re.sub(r"[?!.,;:\"]", "", text).split()
         proper_nouns: list[str] = []
         current_group: list[str] = []
 
@@ -121,11 +114,16 @@ class LLMLinker(BaseLinker):
         # di formato, così la logica resta valida per qualunque KG. Se il modello ne nomina
         # più d'uno la scelta non è deducibile: la posizione nel testo non è una decisione, e
         # un output che ragiona cita per ultimo proprio il candidato che ha scartato.
-        mentioned = [
-            cand_id
-            for cand_id in valid_id_map
-            if re.search(rf"(?<!\w){re.escape(cand_id)}(?!\w)", raw_output)
-        ]
+        mentioned: list[str] = []
+        remaining = raw_output
+        # dal più lungo al più corto, cancellando via via il testo già attribuito: su
+        # DBpedia un id può contenerne un altro (Berlin dentro Berlin,_Ohio), e una
+        # scelta univoca sembrerebbe ambigua
+        for cand_id in sorted(valid_id_map, key=len, reverse=True):
+            pattern = rf"(?<!\w){re.escape(cand_id)}(?!\w)"
+            if re.search(pattern, remaining):
+                mentioned.append(cand_id)
+                remaining = re.sub(pattern, " ", remaining)
         return valid_id_map[mentioned[0]] if len(mentioned) == 1 else None
 
     def _disambiguate_candidates(
@@ -133,17 +131,14 @@ class LLMLinker(BaseLinker):
     ) -> Any | None:
         """Sceglie il candidato più adatto al contesto della domanda."""
         # la validità dei candidati la decide il connector, così il linker resta agnostico
-        valid_cands = [
-            c for c in candidates if getattr(c, "id", "") and self.connector.is_valid_candidate(c)
-        ]
+        valid_cands = [c for c in candidates if c.id and self.connector.is_valid_candidate(c)]
         if not valid_cands:
             return None
         if len(valid_cands) == 1:
             return valid_cands[0]
 
         cands_json = [
-            {"id": c.id, "label": getattr(c, "label", ""), "description": getattr(c, "description", "")}
-            for c in valid_cands
+            {"id": c.id, "label": c.label, "description": c.description or ""} for c in valid_cands
         ]
         raw_output = ""
         try:
@@ -217,14 +212,26 @@ class LLMLinker(BaseLinker):
         scores = [(c + p + r) / 3 for c, p, r in zip(context, prominence, search_rank)]
         return candidates[max(range(len(candidates)), key=lambda i: scores[i])]
 
+    def _search_mention(self, mention: str) -> tuple[str, list[EntityCandidate]]:
+        """Cerca la menzione com'è, e solo se il KG non conosce nulla riprova senza il possessivo."""
+        # "McDonald's" e "Levi's" sono nomi propri, non genitivi: togliere il suffisso a
+        # priori li trasformerebbe in un'altra entità, quasi sempre una persona
+        candidates = self.connector.search_entity(mention, limit=settings.linker_candidates)
+        if candidates:
+            return mention, candidates
+
+        stripped = self._normalize_mention(mention)
+        if stripped and stripped != mention:
+            return stripped, self.connector.search_entity(stripped, limit=settings.linker_candidates)
+        return mention, candidates
+
     def link(self, text: str) -> list[LinkedEntity]:
         """Estrae le menzioni dal testo e le associa agli id del knowledge graph."""
         linked_entities: list[LinkedEntity] = []
         seen_ids: set[str] = set()
 
-        for mention in self._extract_mentions(text):
-            mention = self._normalize_mention(mention)
-            candidates = self.connector.search_entity(mention, limit=settings.linker_candidates)
+        for raw_mention in self._extract_mentions(text):
+            mention, candidates = self._search_mention(raw_mention.strip())
             best_cand = self._disambiguate_candidates(text, mention, candidates)
 
             if best_cand and best_cand.id not in seen_ids:
@@ -234,7 +241,7 @@ class LLMLinker(BaseLinker):
                         mention=mention,
                         id=best_cand.id,
                         label=best_cand.label or mention,
-                        description=getattr(best_cand, "description", "") or "",
+                        description=best_cand.description or "",
                     )
                 )
         return linked_entities

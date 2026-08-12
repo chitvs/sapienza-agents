@@ -9,15 +9,10 @@ E' lecito che qualcuno fallisca: servono a scoprire dove sta il limite, non a
 confermare ciò che già sappiamo funzionare.
 """
 import pytest
-import requests
 
 from pipeline import KGPipeline
-
-def is_ollama_running() -> bool:
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
+from conftest import contiene_risposta
+from conftest import is_ollama_running
 
 def is_neo4j_ready() -> bool:
     try:
@@ -52,14 +47,14 @@ def test_writer_relationship(pipeline: KGPipeline) -> None:
     # nel dataset The Matrix non ha sceneggiatore: si usa un film che ce l'ha davvero
     result = pipeline.run("Who wrote A Few Good Men?")
     assert len(result.results) > 0
-    assert any("Sorkin" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Sorkin")
 
 @requires_stack
 def test_producer_relationship(pipeline: KGPipeline) -> None:
     """relazione PRODUCED."""
     result = pipeline.run("Who produced The Matrix?")
     assert len(result.results) > 0
-    assert any("Silver" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Silver")
 
 @requires_stack
 def test_person_to_person_relationship(pipeline: KGPipeline) -> None:
@@ -67,7 +62,7 @@ def test_person_to_person_relationship(pipeline: KGPipeline) -> None:
     # nel dataset Jessica Thompson è seguita ma non segue nessuno: la direzione conta
     result = pipeline.run("Who follows Jessica Thompson?")
     assert len(result.results) > 0
-    assert any("Thompson" in str(row) or "Scope" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Thompson") or contiene_risposta(result, "Scope")
 
 @requires_stack
 def test_relationship_property(pipeline: KGPipeline) -> None:
@@ -116,13 +111,14 @@ def test_ambiguous_title_prefix(pipeline: KGPipeline) -> None:
     """
     result = pipeline.run("When was The Matrix released?")
     assert len(result.results) > 0
-    assert any("1999" in str(row) for row in result.results)
+    assert contiene_risposta(result, "1999")
 
 @requires_stack
 def test_person_who_both_acted_and_directed(pipeline: KGPipeline) -> None:
     """richiede due traversate distinte dallo stesso nodo persona."""
     result = pipeline.run("Which people both acted in and directed a movie?")
-    assert len(result.results) >= 0  # esito aperto: interessa che non sollevi
+    # esito aperto sui dati, non sulla forma: deve comunque aver prodotto una query
+    assert "MATCH" in result.query.upper()
 
 @requires_stack
 def test_movie_with_most_actors(pipeline: KGPipeline) -> None:

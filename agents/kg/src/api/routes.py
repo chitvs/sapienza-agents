@@ -17,11 +17,10 @@ _pipelines_lock = threading.Lock()
 def get_pipeline(target_kg: str) -> KGPipeline:
     """Restituisce la pipeline del KG richiesto, creandola al primo utilizzo."""
     target_kg = (target_kg or "").strip().lower()
-    if target_kg not in _pipelines:
-        with _pipelines_lock:
-            if target_kg not in _pipelines:
-                _pipelines[target_kg] = KGPipeline(target_kg=target_kg)
-    return _pipelines[target_kg]
+    with _pipelines_lock:
+        if target_kg not in _pipelines:
+            _pipelines[target_kg] = KGPipeline(target_kg=target_kg)
+        return _pipelines[target_kg]
 
 @router.get("/health")
 def health_check() -> dict[str, str]:
@@ -34,8 +33,9 @@ def query_kg(request: QueryRequest) -> QueryResponse:
     try:
         pipeline = get_pipeline(target_kg)
     except ValueError as err:
-        # kg non supportato
         raise HTTPException(status_code=400, detail=str(err)) from err
+    except (FileNotFoundError, ImportError) as err:
+        raise HTTPException(status_code=500, detail=str(err)) from err
     except Exception as err:
         raise HTTPException(
             status_code=503, detail=f"knowledge graph '{target_kg}' non disponibile: {err}"

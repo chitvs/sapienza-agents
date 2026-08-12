@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+# classe di eccezione custom
 class KnowledgeGraphUnavailableError(Exception):
     """Il knowledge graph non è raggiungibile o non ha risposto."""
 
@@ -10,12 +11,7 @@ class KnowledgeGraphUnavailableError(Exception):
         self.kg = kg
         self.detail = detail
 
-@dataclass
-class EntityReference:
-    """Riferimento ad un'altra entità."""
-    id: str
-    label: str | None = None
-
+# strutture dati per le entità
 @dataclass
 class EntityCandidate:
     id: str
@@ -32,11 +28,12 @@ class EntityData:
 class BaseConnector(ABC):
     """Interfaccia verso un knowledge graph."""
 
-    # Convenzioni di citazione del KG ("wd:"/"wdt:" su Wikidata, nessun prefisso su
-    # Neo4j). Vivono qui perché i pruner riusabili possano formattare il contesto
-    # senza sapere con quale KG stanno lavorando.
+    # convenzioni di citazione del KG ("wd:"/"wdt:" su Wikidata)
     entity_prefix: str = ""
     property_prefix: str = ""
+
+    # limite delle cache in-memory dei connettori che ne hanno; 0 significa nessun limite
+    max_cache_size: int = 0
 
     @abstractmethod
     def search_entity(self, text: str, limit: int = 5) -> list[EntityCandidate]:
@@ -49,11 +46,11 @@ class BaseConnector(ABC):
         raise NotImplementedError
 
     def get_entities(self, entity_ids: list[str]) -> dict[str, EntityData]:
-        """Recupera più entità insieme; le sottoclassi che hanno un'API batch la usano."""
+        """Recupera più entità insieme."""
         return {eid: self.get_entity(eid) for eid in entity_ids}
 
     def get_schema(self) -> dict[str, Any]:
-        """Schema del grafo, per i KG che ne hanno uno chiuso ed enumerabile."""
+        """Restituisce lo schema del grafo."""
         return {}
 
     @abstractmethod
@@ -62,16 +59,15 @@ class BaseConnector(ABC):
         raise NotImplementedError
 
     def _set_cache_entry(self, cache_dict: dict, key: str, value: Any) -> None:
-        """Memorizza un elemento rispettando il limite della cache, con eviction FIFO."""
-        max_size = getattr(self, "max_cache_size", 0)
-        if max_size and len(cache_dict) >= max_size and key not in cache_dict:
-            del cache_dict[next(iter(cache_dict))]
+        """Memorizza un elemento rispettando il limite della cache."""
+        if self.max_cache_size and len(cache_dict) >= self.max_cache_size and key not in cache_dict:
+            oldest = next(iter(cache_dict), None)
+            if oldest is not None:
+                cache_dict.pop(oldest, None) # FIFO
         cache_dict[key] = value
 
     def format_entity_ref(self, entity_id: str) -> str:
         """Compone il riferimento con cui citare l'entità dentro una query."""
-        # id dei kg che contengono caratteri non ammessi nei nomi prefissati SPARQL
-        # (es. DBpedia con "Mercury_(planet)") sovrascrivono questo metodo
         return f"{self.entity_prefix}{entity_id}"
 
     def candidate_prominence(self, candidates: list[EntityCandidate]) -> dict[str, float]:
@@ -80,6 +76,4 @@ class BaseConnector(ABC):
 
     def is_valid_candidate(self, candidate: EntityCandidate) -> bool:
         """Indica se un candidato di search_entity è utilizzabile per la disambiguazione."""
-        # sapere quali voci sono spazzatura (es. le pagine di disambiguazione Wikidata)
-        # è conoscenza del KG, quindi sta qui e non nel linker, che resta agnostico
-        return bool(getattr(candidate, "id", ""))
+        return bool(candidate.id)

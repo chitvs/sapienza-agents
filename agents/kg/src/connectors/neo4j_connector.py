@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from executors.cypher_executor import CypherExecutionError
 from connectors.base_connector import (
     BaseConnector,
     EntityCandidate,
@@ -25,24 +26,8 @@ class Neo4jConnector(BaseConnector):
     entity_prefix = ""
     property_prefix = ""
 
-    def __init__(
-        self,
-        executor: Any = None,
-        uri: str | None = None,
-        user: str | None = None,
-        password: str | None = None,
-    ) -> None:
-        if executor is not None:
-            self.executor = executor
-        else:
-            from configs.settings import settings
-            from executors.cypher_executor import CypherExecutor
-
-            self.executor = CypherExecutor(
-                uri=uri or settings.neo4j_uri,
-                user=user or settings.neo4j_user,
-                password=password or settings.neo4j_password,
-            )
+    def __init__(self, executor: Any) -> None:
+        self.executor = executor
         self._schema_cache: dict[str, Any] | None = None
 
     @staticmethod
@@ -149,7 +134,7 @@ class Neo4jConnector(BaseConnector):
                 ({"name": r["prop"], "type": self._normalize_type(r.get("type"))} for r in rows if r.get("prop")),
                 key=lambda p: p["name"],
             )
-        except Exception:
+        except CypherExecutionError:
             logger.debug("valueType() non disponibile per :%s, deduco il tipo da un campione", label)
 
         # valueType() esiste solo dalle versioni recenti di Neo4j 5

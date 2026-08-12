@@ -1,6 +1,16 @@
 import pytest
+import requests
 
 from connectors.wikidata_connector import WikidataConnector
+
+def is_wikidata_reachable() -> bool:
+    """Le prove che interrogano davvero le API vanno saltate, non fatte fallire, senza rete."""
+    try:
+        return requests.head("https://www.wikidata.org/w/api.php", timeout=3).status_code < 500
+    except Exception:
+        return False
+
+needs_wikidata = pytest.mark.skipif(not is_wikidata_reachable(), reason="Wikidata non raggiungibile")
 
 @pytest.mark.parametrize(
     "valore, atteso",
@@ -20,18 +30,21 @@ def test_iso_dates_are_made_readable(valore, atteso):
     grounded = WikidataConnector().ground_results([{"v": {"value": valore}}])
     assert grounded[0]["v"] == atteso
 
+@needs_wikidata
 def test_search_entity():
     connector = WikidataConnector()
     results = connector.search_entity("universe", limit=5)
     assert len(results) > 0
     assert any(r.id == "Q1" for r in results)
 
+@needs_wikidata
 def test_get_entity():
     connector = WikidataConnector()
     entity = connector.get_entity("Q1")
     assert entity.id == "Q1"
     assert entity.label != ""
 
+@needs_wikidata
 def test_ground_results():
     connector = WikidataConnector()
     grounded = connector.ground_results([{"person": "http://www.wikidata.org/entity/Q937"}])
@@ -45,7 +58,8 @@ def test_ground_results_date():
     assert grounded[0]["birth_date"] == "1879-03-14"
 
 def test_bounded_cache():
-    connector = WikidataConnector(max_cache_size=2)
+    connector = WikidataConnector()
+    connector.max_cache_size = 2
     connector._set_cache_entry(connector._search_cache, "k1", [])
     connector._set_cache_entry(connector._search_cache, "k2", [])
     assert len(connector._search_cache) == 2
@@ -54,6 +68,7 @@ def test_bounded_cache():
     assert "k1" not in connector._search_cache
     assert "k3" in connector._search_cache
 
+@needs_wikidata
 def test_ground_results_keeps_source_uri():
     """L'uri originale va conservato: senza, l'interfaccia non può linkare la fonte."""
     connector = WikidataConnector()

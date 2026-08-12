@@ -3,6 +3,7 @@ import logging
 import re
 import time
 from typing import Any
+from urllib.parse import unquote
 
 import requests
 
@@ -30,20 +31,12 @@ class DBpediaConnector(BaseConnector):
     # si usa dbo:, l'ontologia curata e tipizzata, invece di dbp: estratto dalle infobox
     entity_prefix = "dbr:"
     property_prefix = "dbo:"
+    max_cache_size = 1000
 
-    def __init__(
-        self,
-        language: str = "en",
-        timeout: float | None = None,
-        max_cache_size: int = 1000,
-        endpoint: str | None = None,
-        lookup_api: str | None = None,
-    ) -> None:
+    def __init__(self, language: str = "en") -> None:
         self.language = language
-        self.timeout = timeout if timeout is not None else settings.dbpedia_timeout
-        self.max_cache_size = max_cache_size
-        self.endpoint = endpoint or settings.dbpedia_endpoint
-        self.lookup_api = lookup_api or DBPEDIA_LOOKUP_API
+        self.timeout = settings.dbpedia_timeout
+        self.endpoint = settings.dbpedia_endpoint
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "kg-agent/1.0 (https://github.com/chitvs/sapienza-agents)"})
         self._entity_cache: dict[str, EntityData] = {}
@@ -67,12 +60,7 @@ class DBpediaConnector(BaseConnector):
     @staticmethod
     def _readable(local_name: str) -> str:
         """Rende leggibile un nome locale: 'Princeton,_New_Jersey' -> 'Princeton, New Jersey'."""
-        try:
-            from urllib.parse import unquote
-            local_name = unquote(local_name)
-        except Exception:
-            pass
-        return local_name.replace("_", " ").strip()
+        return unquote(local_name).replace("_", " ").strip()
 
     def format_entity_ref(self, entity_id: str) -> str:
         """Cita la risorsa come dbr:Nome se lecito, altrimenti con l'URI completo."""
@@ -115,7 +103,7 @@ class DBpediaConnector(BaseConnector):
 
         try:
             response = self.session.get(
-                self.lookup_api,
+                DBPEDIA_LOOKUP_API,
                 params={"query": text, "maxResults": limit, "format": "json"},
                 headers={"Accept": "application/json"},
                 timeout=self.timeout,
@@ -144,9 +132,10 @@ class DBpediaConnector(BaseConnector):
             if type_name:
                 description = f"{type_name}: {description}" if description else type_name
             try:
-                self._reference_counts[local] = float(first(doc, "refCount") or 0.0)
+                ref_count = float(first(doc, "refCount") or 0.0)
             except ValueError:
-                self._reference_counts[local] = 0.0
+                ref_count = 0.0
+            self._set_cache_entry(self._reference_counts, local, ref_count)
             candidates.append(
                 EntityCandidate(
                     id=local,
@@ -166,7 +155,7 @@ class DBpediaConnector(BaseConnector):
         """Scarta le pagine di disambiguazione e le categorie, che non sono entità."""
         # senza questo filtro finiscono fra i candidati passati al disambiguatore e possono
         # essere scelte come entità seed, ancorando la query a una pagina di servizio
-        identifier = str(getattr(candidate, "id", "") or "")
+        identifier = candidate.id
         if not identifier:
             return False
         if identifier.startswith(("Category:", "List_of_", "Template:")):

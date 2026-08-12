@@ -1,12 +1,6 @@
 import pytest
-import requests
 from translators.sparql_translator import WikidataSPARQLTranslator as SPARQLTranslator
-
-def is_ollama_running():
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
+from conftest import is_ollama_running
 
 def test_sanitize_aggregations():
     translator = SPARQLTranslator.__new__(SPARQLTranslator)

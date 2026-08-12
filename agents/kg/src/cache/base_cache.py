@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 class BaseCache(ABC):
-    """Interfaccia della cache delle risposte, l'ultimo componente sostituibile della pipeline."""
+    """Interfaccia della cache delle risposte."""
 
     @abstractmethod
     def get(self, question: str) -> tuple[str, list[dict], float] | None:

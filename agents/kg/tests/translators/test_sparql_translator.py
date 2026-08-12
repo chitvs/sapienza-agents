@@ -1,14 +1,8 @@
 import pytest
-import requests
 
 from connectors.wikidata_connector import WikidataConnector
 from translators.sparql_translator import WikidataSPARQLTranslator as SPARQLTranslator
-
-def is_ollama_running():
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
+from conftest import is_ollama_running
 
 def test_ask_query_survives_sanitize_and_postprocess():
     """
@@ -32,8 +26,27 @@ def test_sanitize_variable_spaces():
 def test_sanitize_service_outside_where():
     query = "SELECT ?label WHERE { wd:Q937 rdfs:label ?label . } SERVICE wikibase:label { bd:serviceParam wikibase:language 'en'. }"
     sanitized = SPARQLTranslator.sanitize(query)
-    assert "SERVICE wikibase:label" in sanitized
-    assert sanitized.endswith("}")
+    # non basta che il blocco ci sia ancora: era già nell'input, quindi il test passava
+    # anche se la rilocazione non avveniva. Deve finire dentro le graffe del WHERE.
+    apertura, chiusura = SPARQLTranslator._where_span(sanitized)
+    assert apertura < sanitized.index("SERVICE wikibase:label") < chiusura
+
+def test_sanitize_leaves_service_already_inside_where():
+    """Con un UNION il SERVICE non va spostato: finirebbe dentro un ramo, e le etichette
+    dell'altro uscirebbero vuote senza che nessun errore di sintassi lo segnali."""
+    query = (
+        "SELECT ?x ?xLabel WHERE { { ?x wdt:P27 wd:Q30 } UNION { ?x wdt:P27 wd:Q145 }\n"
+        "  SERVICE wikibase:label { bd:serviceParam wikibase:language 'en'. }\n}"
+    )
+    sanitized = SPARQLTranslator.sanitize(query)
+    # il blocco resta dopo l'UNION, non incorporato nel suo ultimo ramo
+    assert "wd:Q145 }" in sanitized
+    assert sanitized.count("SERVICE wikibase:label") == 1
+
+def test_sanitize_preserves_string_literals():
+    """Le normalizzazioni sono sintattiche: dentro un letterale cambierebbero il valore cercato."""
+    query = 'SELECT ?x WHERE { ?x rdfs:label ?l . FILTER(CONTAINS(?l, "What? Really")) }'
+    assert '"What? Really"' in SPARQLTranslator.sanitize(query)
 
 def test_sanitize_aggregate_alias():
     query = "SELECT COUNT(?item) WHERE { wd:Q937 wdt:P31 ?item . }"

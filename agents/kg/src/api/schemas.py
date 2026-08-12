@@ -8,14 +8,15 @@ class QueryRequest(BaseModel):
         description="domanda in linguaggio naturale, in inglese",
         json_schema_extra={"examples": ["What is the birth date of Albert Einstein?"]},
     )
+    # se non viene impostato un target_kg, viene preso dai settings
     target_kg: str | None = Field(
-        default="wikidata",
+        default=None,
         description="knowledge graph da interrogare: 'wikidata', 'dbpedia' o 'neo4j'",
     )
 
 class QueryResponse(BaseModel):
     question: str
-    target_kg: str = "wikidata"
+    target_kg: str
     generated_query: str | None = None
     results: list[dict[str, Any]]
     count: int

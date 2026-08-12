@@ -1,14 +1,14 @@
 import re
-from shared.ollama_client import OllamaClient
+
+from query_text import apply_outside_literals, mask_literals
 from translators.base_translator import BaseTranslator
 
 class SPARQLTranslator(BaseTranslator):
-    """Traduttore Text2SPARQL basato su LLM, indipendente dal knowledge graph."""
+    """Traduttore Text2SPARQL."""
 
     # Le euristiche di riparazione sono strutturali (ragionano sul grafo della query) e
     # quindi comuni a tutti i KG SPARQL: solo la sintassi cambia, ed è isolata qui sotto
     # perché le sottoclassi la ridefiniscano senza duplicare le euristiche.
-    prompt_filename: str = "translate_sparql.txt"
     entity_ref_pattern: str = r"\w+:\w+"
     property_ref_pattern: str = r"\w+:\w+"
     class_filter_pattern: str = r"\?(\w+)\s+(?:a|rdf:type)\s+[\w:]+\s*\.\s*"
@@ -17,36 +17,33 @@ class SPARQLTranslator(BaseTranslator):
     # che l'endpoint proietta senza valore invece di segnalare un errore
     has_label_service: bool = False
 
-    @staticmethod
-    def sanitize(query: str) -> str:
+    @classmethod
+    def sanitize(cls, query: str) -> str:
         """Corregge gli errori di sintassi SPARQL più comuni nell'output dell'LLM."""
-        # "? occupation" -> "?occupation"
-        query = re.sub(r"\?\s+([a-zA-Z_]\w*)", r"?\1", query)
-        # "COUNT (?x)" -> "COUNT(?x)"
-        query = re.sub(r"\b(COUNT|SUM|AVG|MIN|MAX)\s+\(", r"\1(", query, flags=re.IGNORECASE)
+        def normalize_spacing(code: str) -> str:
+            # "? occupation" -> "?occupation"
+            code = re.sub(r"\?\s+([a-zA-Z_]\w*)", r"?\1", code)
+            # "COUNT (?x)" -> "COUNT(?x)"
+            return re.sub(r"\b(COUNT|SUM|AVG|MIN|MAX)\s+\(", r"\1(", code, flags=re.IGNORECASE)
+
+        query = apply_outside_literals(query, normalize_spacing)
 
         def fix_aggregate_alias(match: re.Match) -> str:
             """Le aggregazioni senza alias sono un errore di sintassi: ne aggiunge uno."""
-            full_select = match.group(0)
-            prefix_vars = match.group(1)
-            expr = match.group(2).strip()
-            if " AS " in expr.upper():
-                return full_select
-            if expr.startswith("(") and expr.endswith(")"):
-                expr = expr[1:-1].strip()
-            func_match = re.search(r"\b(COUNT|SUM|AVG|MIN|MAX)\b", expr, re.IGNORECASE)
-            func_name = func_match.group(1).lower() if func_match else "count"
-            return f"SELECT {prefix_vars}({expr} AS ?{func_name}) WHERE"
+            prefix_vars, func, arg = match.groups()
+            return f"SELECT {prefix_vars}({func}({arg}) AS ?{func.lower()}) WHERE"
 
+        # l'aggregazione già dotata di alias non combacia: fra la parentesi chiusa e WHERE
+        # ci sarebbe " AS ?x)", quindi il pattern la ignora senza bisogno di controlli
         query = re.sub(
-            r"SELECT\s+(.*?)(\(?\b(?:COUNT|SUM|AVG|MIN|MAX)\([^)]+\)\)?)\s+WHERE",
+            r"SELECT\s+(.*?)\(?\b(COUNT|SUM|AVG|MIN|MAX)\(([^)]+)\)\)?\s+WHERE",
             fix_aggregate_alias,
             query,
             flags=re.IGNORECASE,
         )
         # alcuni modelli generano "FROM {" al posto di "WHERE {"
         query = re.sub(r"\bFROM\s*\{", r"WHERE {", query, flags=re.IGNORECASE)
-        return SPARQLTranslator._dedupe_select_vars(query)
+        return cls._dedupe_select_vars(query)
 
     @staticmethod
     def _dedupe_select_vars(query: str) -> str:
@@ -79,27 +76,6 @@ class SPARQLTranslator(BaseTranslator):
         query = self._fix_intermediate_hop_label(query)
         return self._dedupe_select_vars(query)
 
-    def translate(
-        self,
-        question: str,
-        schema_context: str = "",
-        temperature: float = 0.0,
-        top_p: float | None = None,
-    ) -> str:
-        system_prompt = self.llm_client.load_prompt(
-            self.prompt_filename,
-            schema=schema_context,
-            question=question,
-        )
-        raw_output = self.llm_client.chat(
-            system_prompt=system_prompt,
-            user_content=question,
-            temperature=temperature,
-            top_p=top_p,
-        )
-        cleaned = OllamaClient.clean_code_block(raw_output)
-        return self.postprocess(self.sanitize(cleaned), question)
-
     @classmethod
     def _triple_regex(cls) -> re.Pattern[str]:
         """Riconosce una tripla del WHERE: unico punto in cui le euristiche dipendono dal KG."""
@@ -108,6 +84,18 @@ class SPARQLTranslator(BaseTranslator):
             rf'(?:{cls.property_ref_pattern})\s+'
             rf'(\?\w+|{cls.entity_ref_pattern}|"[^"]*")'
         )
+
+    @classmethod
+    def _has_unparsed_syntax(cls, where_body: str) -> bool:
+        """Segnala le forme sintattiche che _triple_regex non sa leggere."""
+        # con le triple abbreviate (";") o i property path gli oggetti intermedi non
+        # compaiono nell'analisi, e le foglie dedotte sarebbero sbagliate: meglio non
+        # riscrivere nulla che riscrivere la proiezione su una variabile scorretta,
+        # perché la query resterebbe valida rispondendo però a un'altra domanda
+        body = mask_literals(where_body)
+        if ";" in body:
+            return True
+        return bool(re.search(rf"(?:{cls.property_ref_pattern})\s*[/|*+]", body))
 
     @classmethod
     def _leaf_vars(cls, where_body: str) -> set[str]:
@@ -173,7 +161,7 @@ class SPARQLTranslator(BaseTranslator):
             candidates = {v for v in body_vars if not v.endswith("Label")}
             if len(candidates) == 1:
                 query = cls._replace_in_projection(query, var, f"?{next(iter(candidates))}")
-            elif len(candidates) > 1:
+            elif len(candidates) > 1 and not cls._has_unparsed_syntax(where_body):
                 # con più candidati non si sa quale sia la risposta: si selezionano tutte
                 # le foglie, perché dati incerti valgono più di zero righe.
                 leaves = (cls._leaf_vars(where_body) & candidates) - cls._constraint_vars(query)
@@ -189,6 +177,8 @@ class SPARQLTranslator(BaseTranslator):
         if parsed is None:
             return query
         select_vars, where_body = parsed
+        if cls._has_unparsed_syntax(where_body):
+            return query
 
         subject_vars = {
             subj[1:] for subj, _ in cls._triple_regex().findall(where_body) if subj.startswith("?")
@@ -259,6 +249,8 @@ class SPARQLTranslator(BaseTranslator):
 class WikidataSPARQLTranslator(SPARQLTranslator):
     """Traduttore Text2SPARQL per Wikidata: prefissi wd:/wdt: ed etichette via SERVICE wikibase:label."""
 
+    prompt_filename = "translate_sparql.txt"
+    correction_prompt_filename = "correction.txt"
     entity_ref_pattern = r"wd:Q\d+"
     property_ref_pattern = r"wdt:P\d+|p:P\d+|ps:P\d+|pq:P\d+"
     class_filter_pattern = r"\?(\w+)\s+wdt:P31\s+wd:Q\d+\s*\.\s*"
@@ -266,18 +258,50 @@ class WikidataSPARQLTranslator(SPARQLTranslator):
     has_label_service = True
 
     @staticmethod
-    def sanitize(query: str) -> str:
+    def _where_span(query: str) -> tuple[int, int] | None:
+        """Indici della graffa che apre il WHERE e di quella che lo chiude, o None."""
+        match = re.search(r"\bWHERE\s*\{", query, flags=re.IGNORECASE)
+        if not match:
+            return None
+        masked = mask_literals(query)
+        opening = match.end() - 1
+        depth = 0
+        for i in range(opening, len(masked)):
+            if masked[i] == "{":
+                depth += 1
+            elif masked[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    return opening, i
+        return None
+
+    @classmethod
+    def sanitize(cls, query: str) -> str:
         """Come la versione base, ma rimette SERVICE wikibase:label dentro il WHERE se ne è uscito."""
-        query = SPARQLTranslator.sanitize(query)
+        query = super().sanitize(query)
         service_match = re.search(
-            r"(\})\s*(SERVICE\s+wikibase:label\s*\{[^}]*\})\s*(.*)$", query, re.IGNORECASE | re.DOTALL
+            r"SERVICE\s+wikibase:label\s*\{[^{}]*\}", query, flags=re.IGNORECASE
         )
-        if service_match:
-            after_service = service_match.group(3).strip()
-            query = query[: service_match.start()] + "\n  " + service_match.group(2) + "\n}"
-            if after_service:
-                query += "\n" + after_service
-        return query
+        span = cls._where_span(query)
+        if not service_match or span is None:
+            return query
+
+        # Se il blocco è già dentro il WHERE va lasciato dov'è: la versione precedente si
+        # agganciava alla prima graffa chiusa che lo precedeva, e con un UNION o un
+        # OPTIONAL lo infilava dentro il ramo. Le graffe restavano bilanciate, quindi
+        # nessun errore di sintassi, ma le etichette dell'altro ramo uscivano vuote.
+        opening, closing = span
+        if opening < service_match.start() < closing:
+            return query
+
+        service = service_match.group(0)
+        without_service = query[: service_match.start()] + query[service_match.end():]
+        span = cls._where_span(without_service)
+        if span is None:
+            return query
+        _, closing = span
+        rebuilt = without_service[:closing] + "\n  " + service + "\n" + without_service[closing:]
+        return rebuilt.rstrip()
 
     @staticmethod
     def _prefer_description_over_label(query: str) -> str:
@@ -303,6 +327,7 @@ class DBpediaSPARQLTranslator(SPARQLTranslator):
     """Traduttore Text2SPARQL per DBpedia: risorse dbr:, proprietà dbo:/dbp:, etichette con rdfs:label."""
 
     prompt_filename = "translate_sparql_dbpedia.txt"
+    correction_prompt_filename = "correction_dbpedia.txt"
     # le risorse possono contenere accenti, punti e parentesi (es. dbr:Mercury_(planet))
     entity_ref_pattern = r"dbr:[^\s.;,)]+|dbo:[A-Za-z]\w*"
     property_ref_pattern = r"dbo:\w+|dbp:\w+"

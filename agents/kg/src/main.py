@@ -5,8 +5,6 @@ from pathlib import Path
 
 def _find_repo_root(start: Path) -> Path | None:
     """Risale da 'start' fino alla directory che contiene il pacchetto condiviso 'shared'."""
-    # un indice fisso su .parents[N] non funzionerebbe: la profondità delle directory
-    # è diversa in locale (agents/kg/src) e dentro il container (/app/src)
     for candidate in (start, *start.parents):
         if (candidate / "shared").is_dir():
             return candidate
@@ -48,7 +46,7 @@ def _warmup_models() -> None:
     # toccano: li gestisce Ollama, e sollecitarli qui li caricherebbe solo per farli
     # sfrattare a vicenda dalla VRAM.
     from embeddings import SIMILARITY_MODEL_NAME, RETRIEVAL_MODEL_NAME, get_embedding_model
-    from linkers.mention_extractor import extract_entity_mentions
+    from mention_extraction import extract_entity_mentions
 
     for model_name in (RETRIEVAL_MODEL_NAME, SIMILARITY_MODEL_NAME):
         get_embedding_model(model_name)

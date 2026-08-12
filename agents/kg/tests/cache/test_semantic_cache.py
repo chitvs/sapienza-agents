@@ -5,54 +5,42 @@ from pipeline import KGPipeline
 from translators.base_translator import BaseTranslator
 from pruners.base_pruner import PrunedSchema
 
+class _FakeClient:
+    model_name = "finto"
+
+class _FakeTranslator(BaseTranslator):
+    def translate(self, question, schema_context="", temperature=0.0, top_p=None):
+        return "SELECT ?x WHERE { ?x ?p ?o }"
+
+    def generate_feedback_prompt(self, query, schema_context):
+        return schema_context
+
+class _FakeConnector:
+    def ground_results(self, raw_results):
+        return list(raw_results)
+
+class _FakePruner:
+    def prune(self, seed_entity_ids, question=""):
+        return PrunedSchema(context_text="schema finto")
+
+class _FakeLinker:
+    def link(self, text):
+        return []
+
 class _FakeProvider:
     """Provider con componenti finti: serve a esercitare la politica di caching senza rete né LLM."""
 
     def __init__(self, rows):
-        self.rows = rows
-
-    def get_connector(self):
-        class Connector:
-            def ground_results(self, raw):
-                return list(raw)
-        return Connector()
-
-    def get_translator(self):
-        class Client:
-            model_name = "finto"
-
-        class Translator(BaseTranslator):
-            llm_client = Client()
-
-            def translate(self, question, schema_context="", temperature=0.0, top_p=None):
-                return "SELECT ?x WHERE { ?x ?p ?o }"
-
-            def generate_feedback_prompt(self, query, schema_context):
-                return schema_context
-        return Translator()
-
-    def get_executor(self):
-        rows = self.rows
-
         class Executor:
             def execute(self, query):
                 return list(rows)
-        return Executor()
 
-    def get_pruner(self):
-        class Pruner:
-            def prune(self, seed_entity_ids, connector=None, max_items=20, question=""):
-                return PrunedSchema(context_text="schema finto")
-        return Pruner()
-
-    def get_corrector(self):
-        return None
-
-    def get_linker(self):
-        class Linker:
-            def link(self, text):
-                return []
-        return Linker()
+        self.connector = _FakeConnector()
+        self.translator = _FakeTranslator(llm_client=_FakeClient())
+        self.executor = Executor()
+        self.pruner = _FakePruner()
+        self.corrector = None
+        self.linker = _FakeLinker()
 
 @pytest.mark.parametrize(
     "righe, atteso_in_cache",
@@ -152,3 +140,27 @@ def test_paraphrase_containing_the_same_number_still_hits():
     cache.set("when was kung fu panda 3 released", "SELECT ?d WHERE {...}", [{"d": "2016-01-23"}])
     assert cache.get("when was kung fu panda 3 released?") is not None
 
+def test_i_decimali_non_vengono_spezzati():
+    """Con \\d+ e sorted() "3.5" e "5.3" davano la stessa chiave, e la partizione che
+    doveva separarli li rimetteva insieme."""
+    assert SemanticCache._numeric_tokens("da 3.5 a 5.3") == ("3.5", "5.3")
+    assert SemanticCache._numeric_tokens("da 5.3 a 3.5") == ("5.3", "3.5")
+
+def test_capacita_non_positiva_disattiva_la_cache():
+    """Azzerare la capacità da ambiente è il modo naturale di spegnerla: non deve sollevare."""
+    cache = SemanticCache(capacity=0)
+    cache.set("quando è uscito kung fu panda", "q", [{"d": "2008"}])
+    assert cache.get("quando è uscito kung fu panda") is None
+
+def test_lo_sfratto_rispetta_la_capacita():
+    cache = SemanticCache(capacity=1)
+    cache.set("when kung fu panda was released", "q1", [{"d": "2008"}])
+    cache.set("when kung fu panda 3 was released", "q2", [{"d": "2016"}])
+    assert len(cache._entries) == 1
+    assert cache.get("when kung fu panda was released") is None
+
+def test_clear_svuota_davvero():
+    cache = SemanticCache()
+    cache.set("domanda", "q", [{"x": 1}])
+    cache.clear()
+    assert cache.get("domanda") is None

@@ -3,11 +3,11 @@ import time
 import logging
 import requests
 from typing import Any
+from configs.settings import settings
 from connectors.base_connector import (
     BaseConnector,
     EntityCandidate,
     EntityData,
-    EntityReference,
     KnowledgeGraphUnavailableError,
 )
 
@@ -24,10 +24,11 @@ class WikidataConnector(BaseConnector):
 
     entity_prefix = "wd:"
     property_prefix = "wdt:"
+    max_cache_size = 1000
 
-    def __init__(self, language: str = "en", max_cache_size: int = 1000):
+    def __init__(self, language: str = "en"):
         self.language = language
-        self.max_cache_size = max_cache_size
+        self.timeout = settings.wikidata_timeout
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "kg-agent/1.0 (https://github.com/chitvs/sapienza-agents)",
@@ -43,7 +44,9 @@ class WikidataConnector(BaseConnector):
         for attempt in range(max_retries):
             try:
                 time.sleep(0.15)
-                response = self.session.get(WIKIDATA_API, params=params)
+                # senza timeout una connessione che si pianta blocca per sempre il thread
+                # che serve la richiesta, e i retry non entrano mai in gioco
+                response = self.session.get(WIKIDATA_API, params=params, timeout=self.timeout)
                 if response.status_code == 429:
                     logger.info("rate limit 429 incontrato, attesa %d s...", 3 * (attempt + 1))
                     time.sleep(3.0 * (attempt + 1))
@@ -109,6 +112,33 @@ class WikidataConnector(BaseConnector):
 
         return {p: self._property_label_cache.get(p, (p, False)) for p in prop_ids}
 
+    @staticmethod
+    def _claim_value(claim: dict) -> str:
+        """Riduce uno statement al suo valore testuale, o stringa vuota se non ne ha uno leggibile."""
+        val = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
+        if isinstance(val, str):
+            return val
+        if not isinstance(val, dict):
+            return ""
+        if "id" in val:
+            return str(val["id"])
+        if "time" in val:
+            # +1879-03-14T00:00:00Z -> 1879-03-14
+            return str(val["time"]).lstrip("+").split("T")[0]
+        if "amount" in val:
+            return str(val["amount"]).lstrip("+")
+        return ""
+
+    @classmethod
+    def _claims_to_properties(cls, entity: dict) -> dict[str, list[str]]:
+        """Estrae le proprietà dai claim dell'entità, scartando quelle senza valori leggibili."""
+        properties: dict[str, list[str]] = {}
+        for prop_id, claims in (entity.get("claims") or {}).items():
+            values = [v for v in (cls._claim_value(c) for c in claims) if v]
+            if values:
+                properties[prop_id] = values
+        return properties
+
     def search_entity(self, text: str, limit: int = 5) -> list[EntityCandidate]:
         """Cerca entità su Wikidata a partire dal testo di una menzione."""
         search_lang = self.language
@@ -172,31 +202,7 @@ class WikidataConnector(BaseConnector):
                 entities = data.get("entities", {})
 
                 # le proprietà di tutte le entità si raccolgono insieme per risolverne le etichette in un colpo solo
-                all_raw_props = {}
-                for eid in batch:
-                    ent_data = entities.get(eid, {})
-                    raw_properties = {}
-                    if "claims" in ent_data:
-                        for prop_id, claims_list in ent_data["claims"].items():
-                            values = []
-                            for claim in claims_list:
-                                if "mainsnak" in claim and "datavalue" in claim["mainsnak"]:
-                                    if "value" in claim["mainsnak"]["datavalue"]:
-                                        val = claim["mainsnak"]["datavalue"]["value"]
-                                        if isinstance(val, dict):
-                                            if "id" in val:
-                                                values.append(EntityReference(id=val["id"]))
-                                            elif "time" in val:
-                                                raw_time = str(val["time"]).lstrip("+")
-                                                date_part = raw_time.split("T")[0]
-                                                values.append(date_part)
-                                            elif "amount" in val:
-                                                values.append(str(val["amount"]).lstrip("+"))
-                                        elif isinstance(val, str):
-                                            values.append(val)
-                            if values:
-                                raw_properties[prop_id] = values
-                    all_raw_props[eid] = raw_properties
+                all_raw_props = {eid: self._claims_to_properties(entities.get(eid, {})) for eid in batch}
 
                 all_prop_ids = list({pid for props in all_raw_props.values() for pid in props})
                 prop_meta = self._fetch_property_labels(all_prop_ids)
@@ -233,7 +239,7 @@ class WikidataConnector(BaseConnector):
 
     def candidate_prominence(self, candidates: list[EntityCandidate]) -> dict[str, float]:
         """Conta i sitelink di ogni candidato: è la misura di notorietà che Wikidata espone."""
-        ids = [str(c.id) for c in candidates if re.match(r"^Q\d+$", str(getattr(c, "id", "") or ""))]
+        ids = [c.id for c in candidates if re.match(r"^Q\d+$", c.id)]
         counts: dict[str, float] = {}
         for i in range(0, len(ids), 50):
             params = {
@@ -254,11 +260,10 @@ class WikidataConnector(BaseConnector):
 
     def is_valid_candidate(self, candidate: EntityCandidate) -> bool:
         """Accetta solo QID ben formati, escludendo disambigue e categorie Wikimedia."""
-        cid = str(getattr(candidate, "id", "") or "")
-        if not re.match(r"^Q\d+$", cid):
+        if not re.match(r"^Q\d+$", candidate.id):
             return False
 
-        desc = (getattr(candidate, "description", "") or "").lower()
+        desc = (candidate.description or "").lower()
         junk_markers = ("disambiguation", "wikimedia category", "categoria wikimedia")
         return not any(marker in desc for marker in junk_markers)
 

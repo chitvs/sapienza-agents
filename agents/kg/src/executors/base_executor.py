@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+# classe di eccezione custom
 class QueryExecutionError(Exception):
     """Errore nella validazione o nell'esecuzione di una query sul knowledge graph."""
 

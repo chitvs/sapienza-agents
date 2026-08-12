@@ -7,14 +7,9 @@ queste domande è mai stata eseguita contro la pipeline reale: è lecito che qua
 fallisca, è proprio quello che vogliamo scoprire.
 """
 import pytest
-import requests
 from pipeline import KGPipeline
-
-def is_ollama_running():
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
+from conftest import contiene_risposta
+from conftest import is_ollama_running
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_switzerland_official_languages_list():
@@ -23,7 +18,7 @@ def test_switzerland_official_languages_list():
     pipeline = KGPipeline()
     result = pipeline.run("What are the official languages of Switzerland?")
     assert len(result.results) > 0
-    assert any("German" in str(row) for row in result.results)
+    assert contiene_risposta(result, "German")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_switzerland_official_languages_count():
@@ -40,7 +35,7 @@ def test_titanic_director_citizenship_capital():
     pipeline = KGPipeline()
     result = pipeline.run("What is the capital of the country of citizenship of the director of Titanic?")
     assert len(result.results) > 0
-    assert any(capital in str(row) for row in result.results for capital in ("Ottawa", "Wellington"))
+    assert any(contiene_risposta(result, c) for c in ("Ottawa", "Wellington"))
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_us_president_2010():
@@ -49,7 +44,7 @@ def test_us_president_2010():
     pipeline = KGPipeline()
     result = pipeline.run("Who was the president of the United States in 2010?")
     assert len(result.results) > 0
-    assert any("Obama" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Obama")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_bach_children_count():
@@ -66,7 +61,7 @@ def test_highest_mountain_eiffel_tower_country():
     pipeline = KGPipeline()
     result = pipeline.run("What is the highest mountain in the country where the Eiffel Tower is located?")
     assert len(result.results) > 0
-    assert any("Mont Blanc" in str(row) or "Blanc" in str(row) for row in result.results)
+    assert any(contiene_risposta(result, n) for n in ("Mont Blanc", "Blanc"))
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_official_language_capital_paris():
@@ -75,7 +70,7 @@ def test_official_language_capital_paris():
     pipeline = KGPipeline()
     result = pipeline.run("What is the official language of the country whose capital is Paris?")
     assert len(result.results) > 0
-    assert any("French" in str(row) for row in result.results)
+    assert contiene_risposta(result, "French")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_mars_moons_count():

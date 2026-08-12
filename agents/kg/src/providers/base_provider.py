@@ -28,8 +28,6 @@ class BaseProvider(ABC):
 
     def _client_for(self, model_name: str) -> Any:
         """Restituisce il client Ollama del modello, riusandolo se già creato."""
-        # traduzione e linking usano modelli diversi ma spesso coincidono con quello
-        # generale: la cache evita sessioni HTTP duplicate verso lo stesso modello
         if model_name not in self._clients:
             from llm import build_llm_client
 
@@ -40,21 +38,3 @@ class BaseProvider(ABC):
     def _build_components(self) -> None:
         """Costruisce i componenti specifici del KG, assegnandoli agli attributi della classe."""
         raise NotImplementedError
-
-    def get_connector(self) -> BaseConnector:
-        return self.connector
-
-    def get_linker(self) -> BaseLinker:
-        return self.linker
-
-    def get_translator(self) -> BaseTranslator:
-        return self.translator
-
-    def get_executor(self) -> BaseExecutor:
-        return self.executor
-
-    def get_pruner(self) -> BasePruner:
-        return self.pruner
-
-    def get_corrector(self) -> BaseCorrector | None:
-        return self.corrector

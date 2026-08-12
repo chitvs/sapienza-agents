@@ -4,16 +4,14 @@ Costruisce gli indici FAISS dell'ontologia Wikidata (proprietà e classi) per il
 Uso: python scripts/ingest_wikidata.py
 """
 
-import json
 import logging
 import sys
 import time
 from pathlib import Path
 
-import faiss
-import numpy as np
 import requests
-from sentence_transformers import SentenceTransformer
+
+from ontology_index import build_and_save
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -129,54 +127,10 @@ def fetch_common_classes(top_n: int = 500) -> list[dict]:
     logger.info("risolte %d classi", len(classes))
     return classes
 
-def build_embedding_text(item: dict) -> str:
-    """Compone il testo da incorporare per una proprietà o una classe."""
-    label = item.get("label", "") or item.get("id", "")
-    description = item.get("description", "")
-    return f"{label} - {description}" if description else label
-
-def create_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatIP:
-    """Crea un indice FAISS per la ricerca per similarità coseno."""
-    # la normalizzazione rende il prodotto interno equivalente alla similarità coseno
-    faiss.normalize_L2(embeddings)
-    index = faiss.IndexFlatIP(embeddings.shape[1])
-    index.add(embeddings)
-    return index
-
 def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    # il modello va letto da src: l'indice deve nascere nello stesso spazio vettoriale
-    # in cui il VectorPruner incorpora le domande a runtime
-    from embeddings import RETRIEVAL_MODEL_NAME
-
-    logger.info("carico il modello di embedding (%s)...", RETRIEVAL_MODEL_NAME)
-    model = SentenceTransformer(RETRIEVAL_MODEL_NAME)
-
     properties = fetch_all_properties()
     classes = fetch_common_classes()
-
-    # si incorporano i testi del corpus, quindi senza il prefisso di istruzione che
-    # bge richiede solo lato query
-    logger.info("genero gli embedding per %d proprietà...", len(properties))
-    prop_emb = model.encode(
-        [build_embedding_text(p) for p in properties], show_progress_bar=True, convert_to_numpy=True
-    )
-    logger.info("genero gli embedding per %d classi...", len(classes))
-    class_emb = model.encode(
-        [build_embedding_text(c) for c in classes], show_progress_bar=True, convert_to_numpy=True
-    )
-
-    faiss.write_index(create_faiss_index(prop_emb.astype(np.float32)), str(OUTPUT_DIR / "properties.faiss"))
-    faiss.write_index(create_faiss_index(class_emb.astype(np.float32)), str(OUTPUT_DIR / "classes.faiss"))
-
-    for filename, items in (("properties_meta.json", properties), ("classes_meta.json", classes)):
-        meta = [{"index": i, **item} for i, item in enumerate(items)]
-        (OUTPUT_DIR / filename).write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    logger.info("fatto. file salvati in %s", OUTPUT_DIR)
-    logger.info("  properties.faiss: %d voci", len(properties))
-    logger.info("  classes.faiss: %d voci", len(classes))
+    build_and_save(properties, classes, OUTPUT_DIR)
 
 if __name__ == "__main__":
     main()

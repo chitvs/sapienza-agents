@@ -11,14 +11,10 @@ import pytest
 import requests
 
 from pipeline import KGPipeline
+from conftest import contiene_risposta
+from conftest import is_ollama_running
 
 _INDEX_DIR = Path(__file__).resolve().parents[2] / "data" / "dbpedia_ontology"
-
-def is_ollama_running() -> bool:
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
 
 def is_dbpedia_reachable() -> bool:
     try:
@@ -40,20 +36,20 @@ def test_birth_place(pipeline):
     """proprietà diretta su una risorsa."""
     result = pipeline.run("Where was Albert Einstein born?")
     assert len(result.results) > 0
-    assert any("Ulm" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Ulm")
 
 @requires_stack
 def test_director_with_explicit_label(pipeline):
     """richiede rdfs:label esplicito: su DBpedia non esiste un servizio di etichette."""
     result = pipeline.run("Who directed The Matrix?")
     assert len(result.results) > 0
-    assert any("Wachowski" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Wachowski")
 
 @requires_stack
 def test_capital(pipeline):
     result = pipeline.run("What is the capital of France?")
     assert len(result.results) > 0
-    assert any("Paris" in str(row) for row in result.results)
+    assert contiene_risposta(result, "Paris")
 
 @requires_stack
 def test_count_aggregation(pipeline):

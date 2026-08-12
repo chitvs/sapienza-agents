@@ -23,6 +23,13 @@ function escapeAttr(text) {
   return escape(text).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+function formatDetail(detail) {
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || JSON.stringify(item)).join("; ");
+  }
+  return typeof detail === "string" ? detail : detail && JSON.stringify(detail);
+}
+
 function safeUrl(uri) {
   // gli uri arrivano dal knowledge graph, non da noi: uno schema "javascript:"
   // eseguirebbe codice al clic, quindi si ammettono solo http e https assoluti
@@ -40,7 +47,8 @@ function renderMeta(entries) {
 }
 
 function formatSeconds(ms) {
-  return ms ? `${(ms / 1000).toFixed(1)}s` : "?";
+  // 0 è un tempo misurato, non un dato mancante: solo null/undefined valgono "?"
+  return typeof ms === "number" ? `${(ms / 1000).toFixed(1)}s` : "?";
 }
 
 function columnsOf(rows) {
@@ -139,7 +147,7 @@ form.addEventListener("submit", async event => {
     } catch {
       throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
     }
-    if (!response.ok) throw new Error(data.detail || `errore ${response.status}`);
+    if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
     output.innerHTML = mode === "kg" ? renderKg(data) : renderOrchestrator(data);
   } catch (err) {
     output.innerHTML = `<p class="err">${escape(err.message)}</p>`;

@@ -1,4 +1,5 @@
 import re
+import threading
 from typing import Any
 
 import numpy as np
@@ -7,33 +8,30 @@ from cache.base_cache import BaseCache
 from configs.settings import settings
 from embeddings import get_embedding_model
 
-# Marcatori di domanda aggregata: identificano la forma della risposta attesa (un numero),
-# non l'argomento, quindi restano validi su qualunque knowledge graph.
+# identificano la forma della risposta attesa
 _AGGREGATION_MARKERS = (
-    r"how many", r"how much", r"the number of", r"count of", r"total number",
-    r"quanti", r"quante", r"numero di",
+    "how many", "how much", "the number of", "count of", "total number",
+    "quanti", "quante", "numero di",
 )
 
 class SemanticCache(BaseCache):
     """Cache in-memory che riconosce domande parafrasate confrontando gli embedding."""
 
-    def __init__(self, capacity: int | None = None, similarity_threshold: float | None = None) -> None:
+    def __init__(self, capacity: int | None = None) -> None:
         self.capacity = capacity if capacity is not None else settings.cache_capacity
-        self.similarity_threshold = (
-            similarity_threshold if similarity_threshold is not None else settings.cache_similarity_threshold
-        )
         self._entries: list[dict[str, Any]] = []
+        self._lock = threading.Lock()
 
     @staticmethod
     def _is_aggregation_question(question: str) -> bool:
         """Indica se la domanda chiede un conteggio anziché un elenco o un valore."""
         normalized = re.sub(r"\s+", " ", (question or "").lower())
-        return any(re.search(marker, normalized) for marker in _AGGREGATION_MARKERS)
+        return any(marker in normalized for marker in _AGGREGATION_MARKERS)
 
     @staticmethod
     def _numeric_tokens(question: str) -> tuple[str, ...]:
         """Numeri citati nella domanda: distinguono l'entità ma quasi non spostano l'embedding."""
-        return tuple(sorted(re.findall(r"\d+", question or "")))
+        return tuple(re.findall(r"\d+(?:[.,]\d+)*", question or ""))
 
     def _embed(self, text: str) -> np.ndarray:
         model = get_embedding_model()
@@ -61,7 +59,7 @@ class SemanticCache(BaseCache):
             sim = float(np.dot(embedding, entry["embedding"]))
             if sim > best_sim:
                 best_entry, best_sim = entry, sim
-        if best_entry is not None and best_sim >= self.similarity_threshold:
+        if best_entry is not None and best_sim >= settings.cache_similarity_threshold:
             return best_entry
         return None
 
@@ -69,45 +67,52 @@ class SemanticCache(BaseCache):
         """Restituisce (query, risultati, confidence) della domanda più simile sopra soglia."""
         if not self._entries:
             return None
-        match = self._find_match(
-            self._embed(question),
-            self._is_aggregation_question(question),
-            self._numeric_tokens(question),
-        )
-        if match is None:
-            return None
-        return match["query"], match["results"], match["confidence"]
+        embedding = self._embed(question)
+        with self._lock:
+            match = self._find_match(
+                embedding,
+                self._is_aggregation_question(question),
+                self._numeric_tokens(question),
+            )
+            if match is None:
+                return None
+            return match["query"], match["results"], match["confidence"]
 
     def set(self, question: str, query: str, results: list[dict], confidence: float = 1.0) -> None:
         """Memorizza l'esito, aggiornando la voce esistente se la domanda era già in cache."""
+        if self.capacity <= 0:
+            return
+
         embedding = self._embed(question)
         is_aggregation = self._is_aggregation_question(question)
         numbers = self._numeric_tokens(question)
 
-        existing = self._find_match(embedding, is_aggregation, numbers)
-        if existing is not None:
-            existing.update(
-                question=question,
-                embedding=embedding,
-                query=query,
-                results=results,
-                confidence=confidence,
-            )
-            return
+        with self._lock:
+            existing = self._find_match(embedding, is_aggregation, numbers)
+            if existing is not None:
+                existing.update(
+                    question=question,
+                    embedding=embedding,
+                    query=query,
+                    results=results,
+                    confidence=confidence,
+                )
+                return
 
-        if len(self._entries) >= self.capacity:
-            self._entries.pop(0)
+            while len(self._entries) >= self.capacity:
+                self._entries.pop(0)
 
-        self._entries.append({
-            "question": question,
-            "embedding": embedding,
-            "is_aggregation": is_aggregation,
-            "numbers": numbers,
-            "query": query,
-            "results": results,
-            "confidence": confidence,
-        })
+            self._entries.append({
+                "question": question,
+                "embedding": embedding,
+                "is_aggregation": is_aggregation,
+                "numbers": numbers,
+                "query": query,
+                "results": results,
+                "confidence": confidence,
+            })
 
     def clear(self) -> None:
         """Svuota la cache."""
-        self._entries.clear()
+        with self._lock:
+            self._entries.clear()
