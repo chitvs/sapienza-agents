@@ -113,5 +113,9 @@ class QueryResponse(BaseModel):
             "risposte grezze recuperate da kg-agent/multiapi-agent (dominio 'travel'), sotto le "
             "chiavi 'kg_agent'/'multiapi_agent', più l'eventuale request.context di partenza. "
             "None se non è stato recuperato/fornito alcun contesto."
-        ),
+        )
+    )
+    tool_calls: list[dict] | None = Field(
+        default=None,
+        description="Traccia del loop ReAct: contiene i thought, le azioni scelte e le osservazioni."
     )

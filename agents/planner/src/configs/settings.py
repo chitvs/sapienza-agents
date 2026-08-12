@@ -1,5 +1,6 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Literal
 
 current_path = Path(__file__).resolve().parent
 ROOT_DIR = current_path
@@ -42,8 +43,11 @@ class Settings(BaseSettings):
     multiapi_agent_url: str = "http://localhost:8002"
     external_call_timeout: float = 60.0
 
+    context_gathering_mode: Literal["deterministic", "react"] = "react"
+    max_react_steps: int = 3
+
     # planner: verbosità pipeline (log della risposta grezza dell'llm, ecc.)
-    planner_verbose: bool = False
+    planner_verbose: bool = True
 
     # pipeline: euristica di confidence (vedi PlannerPipeline._finalize)
     confidence_retry_penalty: float = 0.25

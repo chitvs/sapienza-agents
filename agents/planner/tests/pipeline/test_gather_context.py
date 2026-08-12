@@ -122,3 +122,35 @@ def test_travel_result_overwrites_conflicting_request_context_key():
 
     assert errors == []
     assert context["kg_agent"] == {"entities": ["Colosseo"]}
+
+def test_gather_context_react_success():
+    """Simula un loop ReAct: LLM chiama il meteo al primo step, poi decide di finire al secondo."""
+    
+    # Risposte sequenziali simulate dell'LLM
+    mock_decisions = [
+        {"thought": "Mi serve il meteo", "action": "call_tool", "tool": "multiapi_agent", "tool_input": "Meteo a Roma?"},
+        {"thought": "Ho tutto", "action": "finish"}
+    ]
+    
+    # Mock dello strumento reale
+    async def mock_multiapi(question):
+        return {"weather": "Sereno"}
+    
+    async def mock_llm_extract_json(*args, **kwargs):
+        return mock_decisions.pop(0)
+
+    with patch.object(PlannerPipeline, "_llm_extract_json", new=mock_llm_extract_json), \
+         patch.dict("pipeline.TOOL_REGISTRY", {"multiapi_agent": mock_multiapi}, clear=True):
+        
+        pipeline = PlannerPipeline(verbose=True)
+        context, errors, trace = asyncio.run(
+            pipeline._gather_context_react("travel", QueryRequest(question="Weekend a Roma"))
+        )
+    
+    # Verifiche
+    assert errors == []
+    assert len(trace) == 1 # Solo lo step "call_tool" finisce nel trace eseguito, il finish interrompe
+    assert trace[0]["tool"] == "multiapi_agent"
+    assert trace[0]["observation"] == {"weather": "Sereno"}
+    # Il context è una lista, come abbiamo stabilito per il ReAct
+    assert context["multiapi_agent"] == [{"weather": "Sereno"}]

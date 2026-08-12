@@ -14,6 +14,7 @@ crashare la pipeline.
 import httpx
 
 from configs.settings import settings
+from typing import Callable, Awaitable
 
 
 async def _call_agent(base_url: str, agent_name: str, question: str) -> dict:
@@ -43,3 +44,31 @@ async def query_kg(question: str) -> dict:
 async def query_multiapi(question: str) -> dict:
     """interroga multiapi-agent (POST {settings.multiapi_agent_url}/query)."""
     return await _call_agent(settings.multiapi_agent_url, "multiapi-agent", question)
+
+TOOL_REGISTRY: dict[str, Callable[[str], Awaitable[dict]]] = {
+    "kg_agent": query_kg,
+    "multiapi_agent": query_multiapi,
+}
+
+TOOL_DESCRIPTIONS = [
+    {
+        "name": "kg_agent",
+        "description": (
+            "Interroga il Knowledge Graph per ottenere fatti e informazioni strutturate "
+            "su entità specifiche (es. luoghi storici, persone, monumenti, concetti accademici)."
+        ),
+        "parameters": {
+            "tool_input": "La sotto-domanda specifica e mirata da porre in linguaggio naturale."
+        }
+    },
+    {
+        "name": "multiapi_agent",
+        "description": (
+            "Interroga API esterne in tempo reale. Usa questo tool ESCLUSIVAMENTE per: "
+            "1) Previsioni meteo. 2) Tassi di cambio. 3) Info geografiche base sui paesi."
+        ),
+        "parameters": {
+            "tool_input": "La sotto-domanda specifica e mirata da porre in linguaggio naturale."
+        }
+    }
+]

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse, ResponseDomain
 from configs.settings import settings
-from tools import query_kg, query_multiapi
+from tools import query_kg, query_multiapi, TOOL_REGISTRY, TOOL_DESCRIPTIONS
 from validators import validate_draft
 
 logger = logging.getLogger("planner_pipeline")
@@ -191,6 +191,46 @@ class PlannerPipeline:
 
         return context, errors
 
+
+    async def _gather_context_react(self, domain: PlanDomain, request: QueryRequest) -> tuple[dict, list[str], list[dict]]:
+        context: dict = dict(request.context or {})
+        errors: list[str] = []
+        trace: list[dict] = []
+        scratchpad: list[str] = []
+
+        for step in range(settings.max_react_steps):
+            decision = await self._llm_extract_json(
+                "gather_context_react.txt",
+                domain=domain, 
+                question=request.question,
+                scratchpad="\n".join(scratchpad) or "(vuoto)",
+                tools=json.dumps(TOOL_DESCRIPTIONS, ensure_ascii=False, indent=2) # <-- NUOVO
+            )
+            
+            if not decision or decision.get("action") not in ("call_tool", "finish"):
+                self._log(f"  [warn] azione ReAct non valida, interrompo: {decision!r}")
+                break
+            if decision["action"] == "finish":
+                self._log(f"  [react] finish - {decision.get('thought', '')}")
+                break
+
+            tool_name = decision.get("tool")
+            tool_input = decision.get("tool_input", request.question)
+            tool_fn = TOOL_REGISTRY.get(tool_name)
+            obs = {"error": f"tool sconosciuto: {tool_name!r}"} if tool_fn is None else await tool_fn(tool_input)
+
+            trace.append({"step": step + 1, "thought": decision.get("thought", ""),
+                        "tool": tool_name, "tool_input": tool_input, "observation": obs})
+            if "error" in obs:
+                errors.append(obs["error"])
+            else:
+                context.setdefault(tool_name, []).append(obs)  # lista: il tool può essere richiamato più volte
+            scratchpad.append(f"Thought: {decision.get('thought','')}\nAction: {tool_name}({tool_input})\nObservation: {json.dumps(obs, ensure_ascii=False)}")
+        else:
+            self._log(f"  [warn] raggiunto max_react_steps={settings.max_react_steps} senza 'finish'")
+
+        return context, errors, trace
+
     # ----- fase 3: drafting -----
 
     async def _draft(self, request: QueryRequest, domain: PlanDomain, context: dict) -> tuple[dict, int]:
@@ -247,6 +287,7 @@ class PlannerPipeline:
         draft_attempts: int,
         context: dict,
         context_errors: list[str],
+        trace: list[dict] | None = None,
     ) -> QueryResponse:
         try:
             days = [PlanDay(**d) for d in draft.get("days", [])]
@@ -281,6 +322,7 @@ class PlannerPipeline:
             confidence=confidence,
             execution_time_ms=elapsed_ms,
             gathered_context=context or None,
+            tool_calls=trace,
         )
 
     # ----- risposta esplicita per richieste fuori scope -----
@@ -312,15 +354,21 @@ class PlannerPipeline:
     # ----- entrypoint pubblico -----
 
     async def run(self, request: QueryRequest) -> QueryResponse:
-        start_time = time.time()
+            start_time = time.time()
 
-        domain = await self._classify_domain(request)
-        if domain == "unknown":
+            domain = await self._classify_domain(request)
+            if domain == "unknown":
+                elapsed_ms = round((time.time() - start_time) * 1000, 2)
+                return self._out_of_scope_response(request, elapsed_ms)
+
+            # --- LOGICA DI BIFORCAZIONE ---
+            if settings.context_gathering_mode == "react" and domain == "travel":
+                context, context_errors, trace = await self._gather_context_react(domain, request)
+            else:
+                context, context_errors = await self._gather_context(domain, request)
+                trace = None
+
+            draft, draft_attempts = await self._draft(request, domain, context)
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
-            return self._out_of_scope_response(request, elapsed_ms)
 
-        context, context_errors = await self._gather_context(domain, request)
-        draft, draft_attempts = await self._draft(request, domain, context)
-        elapsed_ms = round((time.time() - start_time) * 1000, 2)
-
-        return self._finalize(request, domain, draft, elapsed_ms, draft_attempts, context, context_errors)
+            return self._finalize(request, domain, draft, elapsed_ms, draft_attempts, context, context_errors, trace)
