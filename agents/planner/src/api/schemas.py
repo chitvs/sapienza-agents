@@ -111,8 +111,11 @@ class QueryResponse(BaseModel):
         default=None,
         description=(
             "risposte grezze recuperate da kg-agent/multiapi-agent (dominio 'travel'), sotto le "
-            "chiavi 'kg_agent'/'multiapi_agent', più l'eventuale request.context di partenza. "
-            "None se non è stato recuperato/fornito alcun contesto."
+            "chiavi 'kg_agent'/'multiapi_agent'. Ogni chiave contiene una lista di risposte grezze "
+            "(un solo elemento in modalità 'deterministic', uno o più in modalità 'react' se lo "
+            "stesso tool viene richiamato più volte nello stesso loop), più l'eventuale "
+            "request.context di partenza riportato così com'è. None se non è stato "
+            "recuperato/fornito alcun contesto."
         )
     )
     tool_calls: list[dict] | None = Field(

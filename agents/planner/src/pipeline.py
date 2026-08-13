@@ -23,10 +23,12 @@ _DRAFT_PROMPTS: dict[str, str] = {
 
 
 class PlannerPipeline:
-    """pipeline dell'agente planner: classifica il dominio, recupera contesto esterno in
-    modo deterministico, genera una bozza del piano e finalizza la risposta.
+    """pipeline dell'agente planner: classifica il dominio, recupera contesto esterno
+    (deterministico per 'study'/'routine', oppure via ReAct per 'travel' quando
+    settings.context_gathering_mode == "react"), genera una bozza del piano e finalizza
+    la risposta.
 
-    Fasi: classify_domain -> gather_context -> draft -> finalize
+    Fasi: classify_domain -> gather_context (deterministic o react) -> draft -> finalize
     """
 
     def __init__(self, verbose: bool = False):
@@ -182,8 +184,12 @@ class PlannerPipeline:
                     errors.append(result["error"])
                     self._log(f"  [warn] {key}: {result['error']}")
                 else:
+                    # lista per coerenza di shape con _gather_context_react (che può
+                    # accumulare più risposte per lo stesso tool): qui sarà sempre un
+                    # solo elemento, ma il consumer a valle (synthesizer/orchestrator)
+                    # non deve dover distinguere le due modalità.
                     # sovrascrive eventuali chiavi in conflitto già presenti da request.context
-                    context[key] = result
+                    context[key] = [result]
         # domain in ("study", "routine"): pass-through esplicito, nessuna chiamata di rete.
         # 'study' non fa pre-calcolo (vedi nota "paradosso study" nella roadmap): i parametri
         # necessari (settimane disponibili, giorni esclusi, budget orario) esistono solo nel
@@ -208,14 +214,18 @@ class PlannerPipeline:
             )
             
             if not decision or decision.get("action") not in ("call_tool", "finish"):
-                self._log(f"  [warn] azione ReAct non valida, interrompo: {decision!r}")
+                msg = f"gather_context_react: decisione non valida al passo {step + 1} ({decision!r}), interrotto"
+                self._log(f"  [warn] {msg}")
+                errors.append(msg)
                 break
             if decision["action"] == "finish":
                 self._log(f"  [react] finish - {decision.get('thought', '')}")
                 break
 
             tool_name = decision.get("tool")
-            tool_input = decision.get("tool_input", request.question)
+            # 'or' e non .get(key, default): un LLM può restituire "tool_input": null
+            # esplicito, che .get(..., default) non intercetterebbe
+            tool_input = decision.get("tool_input") or request.question
             tool_fn = TOOL_REGISTRY.get(tool_name)
             obs = {"error": f"tool sconosciuto: {tool_name!r}"} if tool_fn is None else await tool_fn(tool_input)
 
@@ -227,7 +237,9 @@ class PlannerPipeline:
                 context.setdefault(tool_name, []).append(obs)  # lista: il tool può essere richiamato più volte
             scratchpad.append(f"Thought: {decision.get('thought','')}\nAction: {tool_name}({tool_input})\nObservation: {json.dumps(obs, ensure_ascii=False)}")
         else:
-            self._log(f"  [warn] raggiunto max_react_steps={settings.max_react_steps} senza 'finish'")
+            msg = f"gather_context_react: raggiunto max_react_steps={settings.max_react_steps} senza 'finish'"
+            self._log(f"  [warn] {msg}")
+            errors.append(msg)
 
         return context, errors, trace
 

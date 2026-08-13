@@ -31,8 +31,8 @@ def test_travel_full_success():
         context, errors = asyncio.run(pipeline._gather_context("travel", QueryRequest(question="Weekend a Roma")))
 
     assert errors == []
-    assert context["kg_agent"] == {"entities": ["Colosseo"]}
-    assert context["multiapi_agent"] == {"weather": "sereno"}
+    assert context["kg_agent"] == [{"entities": ["Colosseo"]}]
+    assert context["multiapi_agent"] == [{"weather": "sereno"}]
 
 
 def test_travel_partial_degradation():
@@ -48,7 +48,7 @@ def test_travel_partial_degradation():
 
     assert errors == ["kg-agent: timeout dopo 60.0s"]
     assert "kg_agent" not in context
-    assert context["multiapi_agent"] == {"weather": "sereno"}
+    assert context["multiapi_agent"] == [{"weather": "sereno"}]
 
 
 def test_travel_total_degradation():
@@ -121,7 +121,7 @@ def test_travel_result_overwrites_conflicting_request_context_key():
         )
 
     assert errors == []
-    assert context["kg_agent"] == {"entities": ["Colosseo"]}
+    assert context["kg_agent"] == [{"entities": ["Colosseo"]}]
 
 def test_gather_context_react_success():
     """Simula un loop ReAct: LLM chiama il meteo al primo step, poi decide di finire al secondo."""

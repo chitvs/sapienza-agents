@@ -1,9 +1,12 @@
 """
-Tool deterministici per il recupero di contesto esterno (Step 5 della roadmap planner).
+Tool per il recupero di contesto esterno (Step 5 della roadmap planner).
 
-Funzioni async pure, nessun decoratore/tipo LangChain: il dispatch verso questi tool è
-deciso a monte da pipeline._gather_context in base al dominio già classificato in Fase 1,
-non dall'LLM (zero chiamate LLM aggiuntive per "decidere quali strumenti usare").
+Funzioni async pure, nessun decoratore/tipo LangChain. Il dispatch verso questi tool è
+ibrido: deciso a monte da pipeline._gather_context in base al dominio già classificato in
+Fase 1 quando settings.context_gathering_mode == "deterministic" (zero chiamate LLM
+aggiuntive); per il dominio 'travel' in modalità "react" (default) è invece
+pipeline._gather_context_react a farli scegliere dinamicamente all'LLM, tramite
+TOOL_REGISTRY/TOOL_DESCRIPTIONS definiti in fondo a questo modulo.
 
 Contratto: ogni funzione restituisce sempre un dict - la risposta grezza dell'agente in
 caso di successo, oppure {"error": "<descrizione specifica del fallimento>"} in caso di
