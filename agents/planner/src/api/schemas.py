@@ -48,6 +48,17 @@ class QueryRequest(BaseModel):
             "da _gather_context; ignorato se assente."
         ),
     )
+    session_id: str | None = Field(
+        default=None,
+        description=(
+            "identificativo di sessione/conversazione. Se presente e nello stato è già "
+            "salvato un piano per questo id, la richiesta viene classificata come "
+            "'new_plan' oppure 'replan' (modifica del piano esistente, vedi "
+            "PlannerPipeline._classify_intent); un 'replan' aggiorna il piano invece di "
+            "generarne uno da zero. Se assente, il comportamento è quello storico: nessuno "
+            "stato viene letto o salvato."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -121,4 +132,11 @@ class QueryResponse(BaseModel):
     tool_calls: list[dict] | None = Field(
         default=None,
         description="Traccia del loop ReAct: contiene i thought, le azioni scelte e le osservazioni."
+    )
+    replanned: bool = Field(
+        default=False,
+        description=(
+            "True se questa risposta è un aggiornamento di un piano esistente (replanning) "
+            "invece di un piano generato da zero."
+        ),
     )

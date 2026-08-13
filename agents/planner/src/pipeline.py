@@ -6,11 +6,14 @@ import time
 
 import httpx
 from pydantic import ValidationError
+from typing import Literal
 
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse, ResponseDomain
 from configs.settings import settings
+from state import plan_state_store, StoredPlan
 from tools import query_kg, query_multiapi, TOOL_REGISTRY, TOOL_DESCRIPTIONS
 from validators import validate_draft
+
 
 logger = logging.getLogger("planner_pipeline")
 
@@ -246,20 +249,9 @@ class PlannerPipeline:
     # ----- fase 3: drafting -----
 
     async def _draft(self, request: QueryRequest, domain: PlanDomain, context: dict) -> tuple[dict, int]:
-        """genera la bozza del piano via llm, con prompt specializzato per dominio.
-
-        Il contesto recuperato da `_gather_context` viene iniettato nel prompt tramite il
-        placeholder `{context}`, serializzato con json.dumps (non str(dict): evita virgolette
-        singole / None non-JSON che confonderebbero un modello che deve leggerlo come fatto
-        strutturato).
-
-        Se il validatore logico segnala errori (durate/orari inconsistenti, day_index non
-        sequenziali, ecc.), tenta fino a `settings.max_draft_retries` correzioni: rimanda al
-        modello la bozza rotta e i relativi errori, chiedendogli di correggerla (stesso
-        pattern di self-correction usato da kg-agent per le query SPARQL).
-
-        Restituisce una tupla (draft, tentativi_di_correzione_usati) - il secondo valore
-        alimenta l'euristica di confidence in _finalize.
+        """genera la bozza del piano via llm, con prompt specializzato per dominio. [...]
+        La validazione/correzione della bozza è delegata a `_validate_and_correct`,
+        condivisa con `_replan` (stesso ciclo, prompt di partenza diverso).
         """
         self._log(f"\n[info] [step] drafting piano (dominio={domain})")
         draft = await self._llm_extract_json(
@@ -267,6 +259,11 @@ class PlannerPipeline:
             question=request.question,
             context=json.dumps(context, ensure_ascii=False, indent=2),
         )
+        return await self._validate_and_correct(draft, domain, request)
+
+    async def _validate_and_correct(self, draft: dict | None, domain: PlanDomain, request: QueryRequest) -> tuple[dict, int]:
+        """ciclo di validazione/correzione condiviso da `_draft` e `_replan` (contenuto
+        identico al vecchio corpo di `_draft` dopo la generazione della bozza iniziale)."""
         errors = validate_draft(draft, domain)
 
         attempt = 0
@@ -287,6 +284,45 @@ class PlannerPipeline:
 
         self._log(f"  -> draft valido{f' dopo {attempt} correzioni' if attempt else ' al primo tentativo'}")
         return draft, attempt
+    
+    # ----- fase 2.5: replanning (modifica di un piano esistente, invece di generarne uno nuovo) -----
+
+    async def _classify_intent(self, request: QueryRequest, stored: StoredPlan) -> Literal["new_plan", "replan"]:
+        """invocato solo se esiste già un piano salvato per request.session_id: decide se
+        il messaggio è una richiesta di piano nuovo o una modifica del piano esistente.
+
+        Stesso principio di 'mai un fallback silenzioso su un valore a caso' già seguito in
+        _classify_domain: qui però un fallback è accettabile, perché il caso peggiore
+        (classificazione fallita) è ricadere sul comportamento storico 'new_plan', non
+        inventare una modifica non richiesta a un piano esistente.
+        """
+        self._log("\n[info] [step] classificazione intento (nuovo piano vs replanning)")
+        data = await self._llm_extract_json(
+            "classify_intent.txt",
+            question=request.question,
+            domain=stored.domain,
+            existing_title=stored.draft.get("title", ""),
+        )
+        intent = data.get("intent") if data else None
+        if intent in ("new_plan", "replan"):
+            self._log(f"  -> intento classificato: {intent}")
+            return intent
+        self._log(f"  [warn] intento non riconosciuto ({intent!r}), fallback su 'new_plan'")
+        return "new_plan"
+
+    async def _replan(self, request: QueryRequest, stored: StoredPlan) -> tuple[dict, int]:
+        """genera una bozza aggiornata a partire dal piano salvato in stato, invece che da
+        zero: stesso ciclo di validazione/correzione di _draft (_validate_and_correct), ma
+        il prompt riceve il piano precedente al posto del contesto esterno.
+        """
+        self._log(f"\n[info] [step] replanning (dominio={stored.domain}) a partire dallo stato salvato")
+        draft = await self._llm_extract_json(
+            "replan.txt",
+            question=request.question,
+            domain=stored.domain,
+            previous_plan=json.dumps(stored.draft, ensure_ascii=False, indent=2),
+        )
+        return await self._validate_and_correct(draft, stored.domain, request)
 
     # ----- fase 4: finalizzazione -----
 
@@ -300,6 +336,7 @@ class PlannerPipeline:
         context: dict,
         context_errors: list[str],
         trace: list[dict] | None = None,
+        replanned: bool = False,
     ) -> QueryResponse:
         try:
             days = [PlanDay(**d) for d in draft.get("days", [])]
@@ -368,6 +405,23 @@ class PlannerPipeline:
     async def run(self, request: QueryRequest) -> QueryResponse:
             start_time = time.time()
 
+            # --- REPLANNING: solo se esiste già un piano salvato per questa sessione ---
+            stored = plan_state_store.get(request.session_id)
+            if stored is not None:
+                intent = await self._classify_intent(request, stored)
+                if intent == "replan":
+                    draft, draft_attempts = await self._replan(request, stored)
+                    elapsed_ms = round((time.time() - start_time) * 1000, 2)
+                    response = self._finalize(
+                        request, stored.domain, draft, elapsed_ms, draft_attempts,
+                        context={}, context_errors=[], trace=None, replanned=True,
+                    )
+                    if draft.get("days"):
+                        plan_state_store.save(request.session_id, stored.domain, request.question, draft)
+                    return response
+                # intent == "new_plan": si prosegue con la generazione da zero qui sotto,
+                # che sovrascriverà il piano salvato in stato a fine funzione.
+
             domain = await self._classify_domain(request)
             if domain == "unknown":
                 elapsed_ms = round((time.time() - start_time) * 1000, 2)
@@ -383,4 +437,7 @@ class PlannerPipeline:
             draft, draft_attempts = await self._draft(request, domain, context)
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
 
-            return self._finalize(request, domain, draft, elapsed_ms, draft_attempts, context, context_errors, trace)
+            response = self._finalize(request, domain, draft, elapsed_ms, draft_attempts, context, context_errors, trace)
+            if draft.get("days"):
+                plan_state_store.save(request.session_id, domain, request.question, draft)
+            return response
