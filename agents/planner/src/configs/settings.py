@@ -1,13 +1,22 @@
+"""
+Configurazione centralizzata dell'applicazione.
+
+Gestisce il caricamento delle variabili d'ambiente (tramite pydantic-settings)
+e definisce i parametri globali (timeout, modelli LLM, URL dei servizi).
+"""
+
 from pathlib import Path
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Literal
 
-current_path = Path(__file__).resolve().parent
-ROOT_DIR = current_path
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+current_path: Path = Path(__file__).resolve().parent
+ROOT_DIR: Path = current_path
 for parent in current_path.parents:
     if (parent / ".env").exists() or (parent / "agents").exists():
         ROOT_DIR = parent
         break
+
 
 class Settings(BaseSettings):
     """Unico posto per tutte le configurazioni dell'agente."""
@@ -18,7 +27,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # percorsi
+    # Percorsi
     prompts_dir: Path = Path(__file__).resolve().parent / "prompts"
 
     # Selezione del Provider: "gemini" oppure "ollama"
@@ -35,10 +44,10 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2"
     ollama_timeout: float = 600.0
 
-    # pipeline: fallback
+    # Pipeline: fallback
     max_draft_retries: int = 2
 
-    # context gathering (Step 5)
+    # Context gathering 
     kg_agent_url: str = "http://localhost:8000"
     multiapi_agent_url: str = "http://localhost:8002"
     external_call_timeout: float = 60.0
@@ -46,12 +55,19 @@ class Settings(BaseSettings):
     context_gathering_mode: Literal["deterministic", "react"] = "react"
     max_react_steps: int = 3
 
-    # planner: verbosità pipeline (log della risposta grezza dell'llm, ecc.)
+    # Planner: verbosità pipeline (log della risposta grezza dell'llm, ecc.)
     planner_verbose: bool = True
 
-    # pipeline: euristica di confidence (vedi PlannerPipeline._finalize)
+    # Pipeline: euristica di confidence
     confidence_retry_penalty: float = 0.25
     confidence_context_error_penalty: float = 0.1
     confidence_floor: float = 0.5
 
-settings = Settings()
+    # Messaggi statici
+    out_of_scope_message: str = (
+        "Questa richiesta non riguarda pianificazione di studio, itinerari di viaggio o "
+        "routine giornaliere: il planner-agent non genera un piano per questo tipo di domanda."
+    )
+
+
+settings: Settings = Settings()

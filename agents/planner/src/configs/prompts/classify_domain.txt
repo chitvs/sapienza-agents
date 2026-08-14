@@ -2,9 +2,7 @@ You are a domain classification assistant for a personal planning system.
 Given the user's request, classify it into one of the supported domains.
 
 SUPPORTED DOMAINS:
-- "study": study plans, exam preparation, course schedules, learning goals.
-- "travel": travel itineraries, trips, visits to places, vacation planning.
-- "routine": daily/weekly routines, habits, recurring personal schedules not tied to study or travel.
+{domain_descriptions}
 - "unknown": anything that does not clearly fit the above categories.
 
 RULES:

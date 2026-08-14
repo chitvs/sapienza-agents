@@ -1,5 +1,5 @@
 """
-Schema Pydantic per l'agente Planner (Minerva).
+Schema Pydantic per l'agente Planner    .
 Percorso di destinazione previsto: agents/planner/src/api/schemas.py
 
 Segue le convenzioni già in uso in kg-agent e multiapi-agent:
@@ -11,17 +11,23 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-# domini supportati dal planner (usato anche per domain_hint: non ha senso forzare "unknown")
+# --- DOMAIN DEFINITIONS --- 
+
+# Verrà iniettato dinamicamente nel prompt di classificazione.
+DOMAIN_DESCRIPTIONS: dict[str, str] = {
+    "study": "study plans, exam preparation, course schedules, learning goals.",
+    "travel": "travel itineraries, trips, visits to places, vacation planning.",
+    "routine": "daily/weekly routines, habits, recurring personal schedules not tied to study or travel."
+}
+
+# Domini supportati dal planner (usato anche per domain_hint)
 PlanDomain = Literal["study", "travel", "routine"]
 
-# dominio effettivo restituito in output: può anche essere "unknown" se la richiesta
-# non rientra in nessuno dei domini gestiti dal planner
+# Dominio effettivo restituito in output (incluso l'out-of-scope)
 ResponseDomain = PlanDomain | Literal["unknown"]
 
 
-# ---------------------------------------------------------------------------
 # INPUT
-# ---------------------------------------------------------------------------
 
 class QueryRequest(BaseModel):
     """richiesta in ingresso al planner-agent."""
@@ -61,9 +67,7 @@ class QueryRequest(BaseModel):
     )
 
 
-# ---------------------------------------------------------------------------
 # OUTPUT
-# ---------------------------------------------------------------------------
 
 class TimeSlot(BaseModel):
     """unità minima di time-boxing: un'attività allocata in un intervallo di tempo."""
@@ -129,7 +133,7 @@ class QueryResponse(BaseModel):
             "recuperato/fornito alcun contesto."
         )
     )
-    tool_calls: list[dict] | None = Field(
+    tool_calls: list[dict[str, Any]] | None = Field(
         default=None,
         description="Traccia del loop ReAct: contiene i thought, le azioni scelte e le osservazioni."
     )

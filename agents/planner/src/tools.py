@@ -1,61 +1,119 @@
 """
-Tool per il recupero di contesto esterno (Step 5 della roadmap planner).
+Modulo che fornisce gli strumenti (tools) per l'integrazione con agenti esterni.
 
-Funzioni async pure, nessun decoratore/tipo LangChain. Il dispatch verso questi tool è
-ibrido: deciso a monte da pipeline._gather_context in base al dominio già classificato in
-Fase 1 quando settings.context_gathering_mode == "deterministic" (zero chiamate LLM
-aggiuntive); per il dominio 'travel' in modalità "react" (default) è invece
-pipeline._gather_context_react a farli scegliere dinamicamente all'LLM, tramite
-TOOL_REGISTRY/TOOL_DESCRIPTIONS definiti in fondo a questo modulo.
-
-Contratto: ogni funzione restituisce sempre un dict - la risposta grezza dell'agente in
-caso di successo, oppure {"error": "<descrizione specifica del fallimento>"} in caso di
-fallimento - mai un'eccezione propagata al chiamante. Nessun fallimento di rete deve far
-crashare la pipeline.
+Questo file contiene le funzioni client per interrogare i servizi esterni 
+(come kg-agent e multiapi-agent) al fine di arricchire il contesto del piano 
+con informazioni reali e aggiornate (es. meteo, entità del knowledge graph). 
+Garantisce che i fallimenti di rete vengano gestiti in modo 'graceful', 
+restituendo dizionari con l'errore formattato anziché sollevare eccezioni, 
+per non interrompere mai la pipeline principale del Planner.
 """
+
+import logging
+from typing import Any, Awaitable, Callable
 
 import httpx
 
 from configs.settings import settings
-from typing import Callable, Awaitable
+
+logger = logging.getLogger("planner_tools")
 
 
-async def _call_agent(base_url: str, agent_name: str, question: str) -> dict:
-    """POST {base_url}/query con {"question": question}; mai un'eccezione propagata."""
-    url = f"{base_url.rstrip('/')}/query"
+async def _call_agent(base_url: str, agent_name: str, question: str) -> dict[str, Any]:
+    """
+    Invia una richiesta POST all'endpoint /query di un agente esterno.
+    Gestisce internamente tutte le eccezioni di rete in modo graceful.
+
+    Args:
+        base_url (str): L'URL di base dell'agente (es. http://localhost:8000).
+        agent_name (str): Il nome dell'agente (usato per i log e i messaggi di errore).
+        question (str): La domanda in linguaggio naturale da inoltrare all'agente.
+
+    Returns:
+        dict[str, Any]: Il JSON restituito dall'agente in caso di successo, oppure
+        un dizionario con la chiave "error" contenente la descrizione del fallimento.
+    """
+    url: str = f"{base_url.rstrip('/')}/query"
     try:
         async with httpx.AsyncClient(timeout=settings.external_call_timeout) as client:
             resp = await client.post(url, json={"question": question})
             resp.raise_for_status()
             return resp.json()
+            
     except httpx.TimeoutException:
-        return {"error": f"{agent_name}: timeout dopo {settings.external_call_timeout}s"}
+        msg: str = f"{agent_name}: timeout dopo {settings.external_call_timeout}s"
+        logger.warning(f"Timeout contattando {agent_name} su {url}")
+        return {"error": msg}
+        
     except httpx.HTTPStatusError as err:
-        return {"error": f"{agent_name}: errore HTTP {err.response.status_code}"}
+        msg: str = f"{agent_name}: errore HTTP {err.response.status_code}"
+        logger.warning(f"Errore HTTP {err.response.status_code} da {agent_name} su {url}")
+        return {"error": msg}
+        
     except httpx.RequestError as err:
-        # copre errori di connessione (host irraggiungibile, connection refused, DNS, ecc.)
-        return {"error": f"{agent_name}: errore di connessione ({err.__class__.__name__})"}
-    except Exception as err:  # rete di sicurezza: mai far propagare un'eccezione imprevista
-        return {"error": f"{agent_name}: errore imprevisto ({err.__class__.__name__})"}
+        # Copre errori di connessione (host irraggiungibile, connection refused, DNS, ecc.)
+        msg: str = f"{agent_name}: errore di connessione ({err.__class__.__name__})"
+        logger.warning(f"Errore di connessione a {agent_name} su {url}: {err}")
+        return {"error": msg}
+        
+    except Exception as err:
+        # Rete di sicurezza: mai far propagare un'eccezione imprevista alla pipeline
+        msg: str = f"{agent_name}: errore imprevisto ({err.__class__.__name__})"
+        logger.error(f"Errore imprevisto chiamando {agent_name}: {err}", exc_info=True)
+        return {"error": msg}
 
 
 class KGAgentProvider:
-    """provider verso kg-agent."""
+    """
+    Provider per l'integrazione con il Knowledge Graph Agent.
+    """
 
-    def __init__(self, base_url: str | None = None):
-        self.base_url = base_url or settings.kg_agent_url
+    def __init__(self, base_url: str | None = None) -> None:
+        """
+        Inizializza il provider.
+        
+        Args:
+            base_url (str | None): URL dell'agente. Se None, usa il default nei settings.
+        """
+        self.base_url: str = base_url or settings.kg_agent_url
 
-    async def fetch(self, question: str) -> dict:
+    async def fetch(self, question: str) -> dict[str, Any]:
+        """
+        Inoltra la domanda al kg-agent.
+
+        Args:
+            question (str): La richiesta in linguaggio naturale.
+
+        Returns:
+            dict[str, Any]: La risposta dell'agente o il dizionario di errore.
+        """
         return await _call_agent(self.base_url, "kg-agent", question)
 
 
 class MultiApiProvider:
-    """provider verso multiapi-agent."""
+    """
+    Provider per l'integrazione con il Multi-API Agent.
+    """
 
-    def __init__(self, base_url: str | None = None):
-        self.base_url = base_url or settings.multiapi_agent_url
+    def __init__(self, base_url: str | None = None) -> None:
+        """
+        Inizializza il provider.
+        
+        Args:
+            base_url (str | None): URL dell'agente. Se None, usa il default nei settings.
+        """
+        self.base_url: str = base_url or settings.multiapi_agent_url
 
-    async def fetch(self, question: str) -> dict:
+    async def fetch(self, question: str) -> dict[str, Any]:
+        """
+        Inoltra la domanda al multiapi-agent.
+
+        Args:
+            question (str): La richiesta in linguaggio naturale.
+
+        Returns:
+            dict[str, Any]: La risposta dell'agente o il dizionario di errore.
+        """
         return await _call_agent(self.base_url, "multiapi-agent", question)
 
 
@@ -63,21 +121,40 @@ _kg_provider = KGAgentProvider()
 _multiapi_provider = MultiApiProvider()
 
 
-async def query_kg(question: str) -> dict:
-    """wrapper mantenuto per compatibilità: import diretto in pipeline.py/test_tools.py,
-    patch target 'pipeline.query_kg' in test_gather_context.py."""
+async def query_kg(question: str) -> dict[str, Any]:
+    """
+    Wrapper per interrogare il Knowledge Graph. Mantenuto per compatibilità
+    e per facilitare i mock nei test (es. in test_gather_context.py).
+
+    Args:
+        question (str): La sotto-domanda specifica da porre.
+
+    Returns:
+        dict[str, Any]: I risultati della ricerca o un messaggio di errore.
+    """
     return await _kg_provider.fetch(question)
 
 
-async def query_multiapi(question: str) -> dict:
+async def query_multiapi(question: str) -> dict[str, Any]:
+    """
+    Wrapper per interrogare il servizio Multi-API (meteo, valute, geo).
+
+    Args:
+        question (str): La sotto-domanda specifica da porre.
+
+    Returns:
+        dict[str, Any]: I risultati dell'API esterna o un messaggio di errore.
+    """
     return await _multiapi_provider.fetch(question)
 
-TOOL_REGISTRY: dict[str, Callable[[str], Awaitable[dict]]] = {
+
+# Registro degli strumenti disponibili per il loop ReAct (Gather Context)
+TOOL_REGISTRY: dict[str, Callable[[str], Awaitable[dict[str, Any]]]] = {
     "kg_agent": query_kg,
     "multiapi_agent": query_multiapi,
 }
 
-TOOL_DESCRIPTIONS = [
+TOOL_DESCRIPTIONS: list[dict[str, Any]] = [
     {
         "name": "kg_agent",
         "description": (

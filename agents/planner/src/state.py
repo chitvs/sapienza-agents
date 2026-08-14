@@ -1,11 +1,11 @@
 """
-Stato in-memory dei piani generati, usato dal replanning (vedi pipeline.py:
-PlannerPipeline._classify_intent / _replan / run).
+Gestione dello stato in-memory per i piani generati.
 
-Nota: stato per-processo, non condiviso tra worker/repliche e perso al riavvio - coerente
-col perimetro attuale (singolo processo). Se il planner-agent verrà distribuito su più
-repliche andrà sostituito con uno store esterno (Redis/DB), mantenendo la stessa interfaccia
-(get/save), senza toccare pipeline.py.
+Fornisce le strutture dati e lo store (per-processo) necessari per il replanning.
+Nota architetturale: lo stato è limitato al singolo processo e si azzera al riavvio.
+Se il microservizio verrà scalato su più repliche, questo modulo fungerà da
+interfaccia (facciata) per uno storage esterno (es. Redis o DB), lasciando
+intatta la pipeline.
 """
 
 from dataclasses import dataclass
@@ -16,33 +16,75 @@ from api.schemas import PlanDomain
 
 @dataclass
 class StoredPlan:
-    """ultimo piano valido per una sessione: dominio + draft grezzo (stessa shape
-    title/summary/days[]/contingency_notes usata da _draft/validate_draft), non il
-    QueryResponse già finalizzato - così _replan può reiniettarlo in un prompt LLM."""
-
+    """
+    Rappresenta l'ultimo piano valido generato per una specifica sessione.
+    
+    Conserva il dominio originario, la domanda posta dall'utente e il 
+    draft grezzo del piano (ovvero il JSON restituito dal LLM e validato).
+    Il draft viene salvato crudo e non come QueryResponse per poter 
+    essere re-iniettato agevolmente nel prompt in caso di replanning.
+    """
     domain: PlanDomain
     question: str
     draft: dict[str, Any]
 
 
 class PlanStateStore:
-    """Store in-memory dei piani per session_id: un solo piano attivo per sessione (una
-    nuova richiesta 'new_plan' sulla stessa sessione sovrascrive il piano precedente).
-    Nessuna scadenza/TTL per ora - nota per la roadmap, non un bug."""
+    """
+    Store in-memory (chiave-valore) per i piani attivi.
+    Associa ogni session_id all'ultimo StoredPlan generato.
+    
+    Nota sulla roadmap: attualmente non implementa meccanismi di scadenza (TTL).
+    Un intento 'new_plan' sulla stessa sessione sovrascrive semplicemente 
+    lo stato precedente.
+    """
 
     def __init__(self) -> None:
+        """Inizializza il dizionario interno vuoto per i piani."""
         self._plans: dict[str, StoredPlan] = {}
 
     def get(self, session_id: str | None) -> StoredPlan | None:
+        """
+        Recupera un piano salvato per un determinato ID di sessione.
+
+        Args:
+            session_id (str | None): L'identificativo della sessione.
+
+        Returns:
+            StoredPlan | None: Il piano memorizzato, oppure None se l'ID 
+            è assente o non valido.
+        """
         if session_id is None:
             return None
         return self._plans.get(session_id)
 
-    def save(self, session_id: str | None, domain: PlanDomain, question: str, draft: dict[str, Any]) -> None:
+    def save(
+        self, 
+        session_id: str | None, 
+        domain: PlanDomain, 
+        question: str, 
+        draft: dict[str, Any]
+    ) -> None:
+        """
+        Salva o sovrascrive un piano per l'ID di sessione specificato.
+
+        Args:
+            session_id (str | None): L'identificativo della sessione. Se None, 
+                                     il salvataggio viene ignorato.
+            domain (PlanDomain): Il dominio del piano.
+            question (str): La richiesta dell'utente.
+            draft (dict[str, Any]): Il JSON del piano generato e validato.
+        """
         if session_id is None:
             return
-        self._plans[session_id] = StoredPlan(domain=domain, question=question, draft=draft)
+        
+        self._plans[session_id] = StoredPlan(
+            domain=domain, 
+            question=question, 
+            draft=draft
+        )
 
 
-# istanza singola condivisa dal processo, stesso pattern di `settings = Settings()` in configs/settings.py
-plan_state_store = PlanStateStore()
+# Istanza singola condivisa dal processo (Singleton pattern rudimentale).
+# Segue lo stesso pattern di `settings = Settings()` in configs/settings.py.
+plan_state_store: PlanStateStore = PlanStateStore()
