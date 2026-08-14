@@ -293,6 +293,7 @@ class PlannerPipeline:
             execution_time_ms=elapsed_ms,
             gathered_context=context or None,
             tool_calls=trace,
+            replanned=replanned,
         )
 
     # ----- risposta esplicita per richieste fuori scope -----
