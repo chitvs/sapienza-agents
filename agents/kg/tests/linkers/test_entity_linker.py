@@ -34,7 +34,7 @@ def test_extract_proper_nouns_standalone():
     nouns_person = linker._fallback_extract_proper_nouns("Chi è Sergio Mattarella?")
     assert "Sergio Mattarella" in nouns_person
 
-class MockLLM:
+class _FakeLLM:
     """Le firme ricalcano quelle di OllamaClient: un finto che diverge nasconde le rotture."""
 
     def __init__(self, raw_output: str, parsed: str) -> None:
@@ -50,12 +50,13 @@ class MockLLM:
     def clean_code_block(self, raw_output):
         return self.parsed
 
-def test_disambiguate_candidates_json_parsing():
-    """La scelta dichiarata nel JSON deve vincere su quella solo nominata nel ragionamento."""
+def test_disambiguate_candidates_reads_the_json_choice():
+    """Il percorso completo di _disambiguate_candidates, filtro dei candidati compreso:
+    _select_from_output è verificato a parte in test_candidate_ranking.py."""
     # si sceglie di proposito il secondo candidato: sul primo il test passerebbe anche se
     # il parsing fallisse, perché il ripiego per notorietà indicherebbe comunque quello
     linker = EntityLinker.__new__(EntityLinker)
-    linker.llm_client = MockLLM(
+    linker.llm_client = _FakeLLM(
         raw_output='Thinking: Q126916 is a goddess, but the question is about the journal.\n'
         '```json\n{"selected_id": "Q15817918"}\n```',
         parsed='{"selected_id": "Q15817918"}',
@@ -65,12 +66,12 @@ def test_disambiguate_candidates_json_parsing():
         EntityCandidate(id="Q126916", label="Minerva", description="Roman goddess"),
         EntityCandidate(id="Q15817918", label="Minerva", description="journal"),
     ]
-    res = linker._disambiguate_candidates("Qual è l'editore del journal Minerva?", "Minerva", cands)
+    res = linker._disambiguate_candidates("Who publishes the journal Minerva?", "Minerva", cands)
     assert res.id == "Q15817918"
 
 def test_possessive_is_stripped_only_if_the_kg_knows_nothing():
     """"McDonald's" è un nome proprio, "Shakespeare's" un genitivo: decide il KG, non la regex."""
-    class FakeConnector:
+    class _FakeConnector:
         def __init__(self, known):
             self.known = known
             self.queried = []
@@ -81,11 +82,11 @@ def test_possessive_is_stripped_only_if_the_kg_knows_nothing():
 
     linker = EntityLinker.__new__(EntityLinker)
 
-    linker.connector = FakeConnector({"McDonald's"})
+    linker.connector = _FakeConnector({"McDonald's"})
     mention, candidates = linker._search_mention("McDonald's")
     assert mention == "McDonald's" and candidates
 
-    linker.connector = FakeConnector({"Shakespeare"})
+    linker.connector = _FakeConnector({"Shakespeare"})
     mention, candidates = linker._search_mention("Shakespeare's")
     assert mention == "Shakespeare" and candidates
 

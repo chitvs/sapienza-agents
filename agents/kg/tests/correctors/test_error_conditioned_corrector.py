@@ -21,12 +21,20 @@ def test_the_corrected_query_gets_the_structural_repairs():
             return "prompt"
 
         def chat(self, system_prompt, user_content, temperature=0.0, top_p=None):
-            # ?personLabel non è legata nel WHERE: postprocess deve redirigerla su ?person
-            return "```sparql\nSELECT ?personLabel WHERE { wd:Q937 wdt:P26 ?person . }\n```"
+            # ?city non è legata da nessuna parte nel WHERE: la riparazione deve spostare
+            # la proiezione sulla foglia della catena, altrimenti la query è vuota per sempre
+            return (
+                "```sparql\nSELECT ?cityLabel WHERE "
+                "{ wd:Q937 wdt:P26 ?spouse. ?spouse wdt:P19 ?birthPlace. }\n```"
+            )
 
     corrector = ErrorConditionedCorrector(WikidataSPARQLTranslator(), _FakeClient())
-    corrected = corrector.correct(question="who?", failed_query="SELECT ?x WHERE {}", error_message="boom")
-    assert "?personLabel" in corrected
+    corrected = corrector.correct(
+        question="where was einstein's wife born?", failed_query="SELECT ?x WHERE {}", error_message="boom"
+    )
+    # l'asserzione deve fallire se il correttore restituisce l'output grezzo del modello
+    assert "?cityLabel" not in corrected
+    assert "?birthPlaceLabel" in corrected
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_correct():

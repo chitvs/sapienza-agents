@@ -9,7 +9,6 @@ class KnowledgeGraphUnavailableError(Exception):
     def __init__(self, kg: str, detail: str) -> None:
         super().__init__(f"{kg} non raggiungibile: {detail}")
         self.kg = kg
-        self.detail = detail
 
 # strutture dati per le entità
 @dataclass
@@ -31,6 +30,7 @@ class BaseConnector(ABC):
     # convenzioni di citazione del KG ("wd:"/"wdt:" su Wikidata)
     entity_prefix: str = ""
     property_prefix: str = ""
+    class_prefix: str = ""
 
     # limite delle cache in-memory dei connettori che ne hanno; 0 significa nessun limite
     max_cache_size: int = 0
@@ -58,9 +58,10 @@ class BaseConnector(ABC):
         """Risolve id e URI grezzi in etichette leggibili."""
         raise NotImplementedError
 
-    def _set_cache_entry(self, cache_dict: dict, key: str, value: Any) -> None:
-        """Memorizza un elemento rispettando il limite della cache."""
-        if self.max_cache_size and len(cache_dict) >= self.max_cache_size and key not in cache_dict:
+    def _set_cache_entry(self, cache_dict: dict, key: str, value: Any, limit: int | None = None) -> None:
+        """Memorizza un elemento rispettando il limite della cache, o quello indicato."""
+        max_cache_size = self.max_cache_size if limit is None else limit
+        if max_cache_size and len(cache_dict) >= max_cache_size and key not in cache_dict:
             oldest = next(iter(cache_dict), None)
             if oldest is not None:
                 cache_dict.pop(oldest, None) # FIFO

@@ -11,9 +11,9 @@ from pathlib import Path
 
 import requests
 
-from ontology_index import build_and_save
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+
+from ontology_index import build_and_save  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

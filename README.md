@@ -70,9 +70,9 @@ dalla root del repository:
 docker compose up -d
 ```
 
-avvia l'intera catena in ordine: neo4j, poi kg-agent, poi orchestratore, infine l'interfaccia.
+avvia l'intera catena in ordine: neo4j, poi i tre agenti (kg, planner, multiapi), poi l'orchestratore, infine l'interfaccia. per lavorare sul solo agente kg basta `docker compose up -d kg-agent orchestrator ui`.
 
-il primo avvio è lento. il kg-agent precarica i modelli locali e al primo giro li scarica da huggingface: circa 2.7 gb, di cui 2 gb per il solo gliner, con le richieste non autenticate limitate in banda. finché non ha finito il servizio non risponde all'healthcheck e i servizi che dipendono da lui restano in attesa. per seguirlo:
+il primo avvio è lento. il kg-agent precarica i modelli locali e al primo giro li scarica da huggingface: circa 2.2 gb, di cui 2 gb per il solo gliner, con le richieste non autenticate limitate in banda. finché non ha finito il servizio non risponde all'healthcheck e i servizi che dipendono da lui restano in attesa. per seguirlo:
 
 ```bash
 docker compose logs -f kg-agent

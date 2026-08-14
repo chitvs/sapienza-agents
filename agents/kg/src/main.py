@@ -19,7 +19,7 @@ if str(src_dir) not in sys.path:
 
 from fastapi import FastAPI
 
-from api.routes import router as api_router
+from api.routes import close_pipelines, router as api_router
 from configs.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ def _warmup_models() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Precarica i modelli all'avvio del servizio."""
+    """Precarica i modelli all'avvio e rilascia le connessioni ai grafi allo spegnimento."""
     if settings.warmup_on_startup:
         try:
             logger.info("precaricamento dei modelli locali...")
@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI):
             # caricamento pigro invece di impedire l'avvio del servizio
             logger.warning("precaricamento fallito, si procede con caricamento pigro: %s", err)
     yield
+    close_pipelines()
 
 app = FastAPI(
     title="knowledge graph agent api",

@@ -31,6 +31,7 @@ class DBpediaConnector(BaseConnector):
     # si usa dbo:, l'ontologia curata e tipizzata, invece di dbp: estratto dalle infobox
     entity_prefix = "dbr:"
     property_prefix = "dbo:"
+    class_prefix = "dbo:"
     max_cache_size = 1000
 
     def __init__(self, language: str = "en") -> None:
@@ -135,7 +136,13 @@ class DBpediaConnector(BaseConnector):
                 ref_count = float(first(doc, "refCount") or 0.0)
             except ValueError:
                 ref_count = 0.0
-            self._set_cache_entry(self._reference_counts, local, ref_count)
+            # il limite è per candidato, non per ricerca: con lo stesso tetto di
+            # _search_cache i refCount si sfratterebbero 15 volte più in fretta dei
+            # candidati a cui appartengono, e candidate_prominence tornerebbe parziale
+            self._set_cache_entry(
+                self._reference_counts, local, ref_count,
+                limit=self.max_cache_size * settings.linker_candidates,
+            )
             candidates.append(
                 EntityCandidate(
                     id=local,
@@ -149,7 +156,11 @@ class DBpediaConnector(BaseConnector):
 
     def candidate_prominence(self, candidates: list[EntityCandidate]) -> dict[str, float]:
         """Numero di risorse che puntano al candidato, letto dalla Lookup API durante la ricerca."""
-        return {c.id: self._reference_counts[c.id] for c in candidates if c.id in self._reference_counts}
+        # o si conoscono tutti o nessuno: con un dizionario parziale la guardia neutra del
+        # linker non scatta, e un candidato di cui si è persa la conta verrebbe trattato
+        # come il meno noto in assoluto invece che come ignoto
+        counts = {c.id: self._reference_counts.get(c.id) for c in candidates}
+        return {} if any(v is None for v in counts.values()) else counts
 
     def is_valid_candidate(self, candidate: EntityCandidate) -> bool:
         """Scarta le pagine di disambiguazione e le categorie, che non sono entità."""

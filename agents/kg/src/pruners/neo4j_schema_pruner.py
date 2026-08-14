@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from connectors.base_connector import KnowledgeGraphUnavailableError
 from pruners.base_pruner import BasePruner, PrunedSchema
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ class Neo4jSchemaPruner(BasePruner):
         if seed_entity_ids:
             try:
                 seed_entities = self.connector.get_entities(seed_entity_ids).values()
+            except KnowledgeGraphUnavailableError:
+                # un grafo irraggiungibile non è un'entità senza fatti: degradare qui
+                # farebbe tradurre su uno schema monco per poi fallire all'esecuzione
+                raise
             except Exception as err:
                 logger.warning("entità seed non leggibili dal grafo: %s", err)
                 seed_entities = []

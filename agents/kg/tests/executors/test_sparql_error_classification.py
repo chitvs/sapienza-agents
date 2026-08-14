@@ -22,9 +22,14 @@ class _FakeResponse:
             raise requests.HTTPError(response=self)
 
     def json(self):
+        # requests non solleva la JSONDecodeError della libreria standard ma la propria
+        # sottoclasse: un finto che diverge qui nasconderebbe la rottura dell'esecutore
         import json
 
-        return json.loads(self.text)
+        try:
+            return json.loads(self.text)
+        except json.JSONDecodeError as err:
+            raise requests.exceptions.JSONDecodeError(err.msg, err.doc, err.pos) from None
 
 class _FakeSession:
     def __init__(self, response=None, error=None):
@@ -72,6 +77,15 @@ def test_a_write_query_never_reaches_the_network():
     with pytest.raises(SPARQLExecutionError):
         executor.execute("INSERT DATA { wd:Q1 rdfs:label 'x' } ; SELECT ?x WHERE { ?x ?p ?o }")
     assert session.requests == []
+
+def test_a_malformed_endpoint_is_reported_and_is_not_retryable():
+    """MissingSchema eredita anche da ValueError: intercettata come "JSON illeggibile"
+    diventava un UnboundLocalError, e la causa vera (endpoint mal configurato) spariva."""
+    executor = SPARQLExecutor(endpoint="dbpedia.org/sparql", timeout=1.0)
+    with pytest.raises(SPARQLExecutionError) as err:
+        executor.execute(QUERY)
+    assert "endpoint non valido" in str(err.value)
+    assert not err.value.retryable
 
 def test_ask_queries_return_the_boolean():
     executor = build_executor(_FakeSession(_FakeResponse(200, '{"boolean": true}')))

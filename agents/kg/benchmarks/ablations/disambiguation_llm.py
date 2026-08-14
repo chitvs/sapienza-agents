@@ -77,7 +77,12 @@ def main() -> None:
     print(f"\nmenzioni valutate: {len(cases)}")
     print(f"  primo candidato       {first_hits:4}/{len(cases)}  ({first_hits / len(cases):.3f})")
     print(f"  ranking senza llm     {ranking_hits:4}/{len(cases)}  ({ranking_hits / len(cases):.3f})")
-    print(f"  llm (solo conclusive) {llm_hits:4}/{len(cases)}  ({llm_hits / len(cases):.3f})")
+    # due denominatori diversi, perché rispondono a due domande diverse: quanto è
+    # accurato l'LLM quando decide, e quanto rende sull'intero carico di menzioni
+    conclusive = len(cases) - llm_inconclusive
+    if conclusive:
+        print(f"  llm (solo conclusive) {llm_hits:4}/{conclusive}  ({llm_hits / conclusive:.3f})")
+    print(f"  llm (su tutti i casi) {llm_hits:4}/{len(cases)}  ({llm_hits / len(cases):.3f})")
     print(f"  llm inconcludenti     {llm_inconclusive:4}/{len(cases)}")
 
 if __name__ == "__main__":

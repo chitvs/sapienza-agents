@@ -1,4 +1,5 @@
 import re
+import threading
 from typing import Any
 
 from executors.base_executor import BaseExecutor, QueryExecutionError
@@ -36,22 +37,26 @@ class CypherExecutor(BaseExecutor):
         self.database = database
         self.timeout = timeout
         self._driver: Any = None
+        # il driver apre un pool di connessioni: crearne due e perderne uno lascerebbe
+        # connessioni Bolt orfane, e gli endpoint sincroni girano nel threadpool di FastAPI
+        self._driver_lock = threading.Lock()
 
     def _get_driver(self) -> Any:
         """Crea il driver al primo uso, così importare il modulo non richiede un DB attivo."""
-        if self._driver is None:
-            try:
-                from neo4j import GraphDatabase
-            except ImportError as err:
-                raise CypherExecutionError(
-                    "driver neo4j non installato: eseguire 'pip install neo4j'", query=""
-                ) from err
-            self._driver = GraphDatabase.driver(
-                self.uri,
-                auth=(self.user, self.password),
-                connection_acquisition_timeout=self.timeout,
-            )
-        return self._driver
+        with self._driver_lock:
+            if self._driver is None:
+                try:
+                    from neo4j import GraphDatabase
+                except ImportError as err:
+                    raise CypherExecutionError(
+                        "driver neo4j non installato: eseguire 'pip install neo4j'"
+                    ) from err
+                self._driver = GraphDatabase.driver(
+                    self.uri,
+                    auth=(self.user, self.password),
+                    connection_acquisition_timeout=self.timeout,
+                )
+            return self._driver
 
     @classmethod
     def assert_read_only(cls, query: str) -> None:
@@ -66,7 +71,6 @@ class CypherExecutor(BaseExecutor):
                     f"SYNTAX_ERROR: la query contiene la clausola di scrittura '{clause}', "
                     f"ma questo agente può solo leggere dal grafo. Riscrivere la query "
                     f"usando esclusivamente MATCH/OPTIONAL MATCH/WHERE/RETURN.",
-                    query=query,
                 )
 
         for match in re.finditer(r"\bCALL\s+([\w.]+)", without_literals, flags=re.IGNORECASE):
@@ -75,15 +79,18 @@ class CypherExecutor(BaseExecutor):
                     f"SYNTAX_ERROR: la procedura '{match.group(1)}' non è fra quelle di sola "
                     f"lettura ammesse. Riscrivere la query usando esclusivamente "
                     f"MATCH/OPTIONAL MATCH/WHERE/RETURN.",
-                    query=query,
                 )
 
     def _run_with_params(self, query: str, params: dict[str, Any] | None) -> list[dict[str, Any]]:
         """Esegue la query in una transazione di sola lettura."""
         try:
-            from neo4j.exceptions import Neo4jError, ServiceUnavailable
+            from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired, TransientError
+            # un deadlock o un cambio di leader non dicono nulla sulla query: TransientError
+            # è un Neo4jError e SessionExpired un DriverError, quindi senza elencarle qui
+            # ricadevano fra gli errori definitivi e facevano riscrivere una query corretta
+            transient = (ServiceUnavailable, SessionExpired, TransientError)
         except ImportError:
-            Neo4jError = ServiceUnavailable = ()  # type: ignore[assignment, misc]
+            Neo4jError = transient = ()  # type: ignore[assignment, misc]
 
         session_kwargs = {"database": self.database} if self.database else {}
 
@@ -96,14 +103,14 @@ class CypherExecutor(BaseExecutor):
                     return [record.data() for record in tx.run(query, params or {})]
         except CypherExecutionError:
             raise
-        except ServiceUnavailable as err:
+        except transient as err:
             raise CypherExecutionError(
-                f"neo4j non raggiungibile su {self.uri}: {err}", query=query, retryable=True
+                f"neo4j non raggiungibile su {self.uri}: {err}", retryable=True
             ) from err
         except Neo4jError as err:
-            raise CypherExecutionError(str(err), query=query) from err
+            raise CypherExecutionError(str(err)) from err
         except Exception as err:
-            raise CypherExecutionError(f"errore durante l'esecuzione: {err}", query=query) from err
+            raise CypherExecutionError(f"errore durante l'esecuzione: {err}") from err
 
     def execute_trusted(self, query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Query di servizio scritta da noi: salta il controllo di keyword, non la guardia di sola lettura."""
@@ -116,13 +123,13 @@ class CypherExecutor(BaseExecutor):
             raise CypherExecutionError(
                 f"SYNTAX_ERROR: la query non contiene keyword Cypher valide, "
                 f"probabile risposta conversazionale dell'LLM: {query[:100]}",
-                query=query,
             )
         self.assert_read_only(query)
         return self._run_with_params(query, None)
 
     def close(self) -> None:
         """Chiude il driver se era stato aperto."""
-        if self._driver is not None:
-            self._driver.close()
-            self._driver = None
+        with self._driver_lock:
+            if self._driver is not None:
+                self._driver.close()
+                self._driver = None

@@ -44,3 +44,25 @@ def test_query():
     assert "execution_time_ms" in data
     assert data["execution_time_ms"] > 0
     assert "1879-03-14" in str(data["results"][0])
+
+def test_shutdown_releases_the_graph_connections():
+    """Le pipeline vivono per tutta la vita del processo: senza questo il pool Bolt di
+    Neo4j non veniva mai chiuso, e close() era un metodo pubblico senza chiamanti."""
+    import api.routes as routes
+
+    closed = []
+
+    class _FakeExecutor:
+        def close(self):
+            closed.append(True)
+
+    class _FakePipeline:
+        executor = _FakeExecutor()
+
+    routes._pipelines["neo4j"] = _FakePipeline()
+    try:
+        routes.close_pipelines()
+    finally:
+        routes._pipelines.clear()
+
+    assert closed == [True]

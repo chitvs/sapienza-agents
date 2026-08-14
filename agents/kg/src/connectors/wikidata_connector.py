@@ -24,6 +24,7 @@ class WikidataConnector(BaseConnector):
 
     entity_prefix = "wd:"
     property_prefix = "wdt:"
+    class_prefix = "wd:"
     max_cache_size = 1000
 
     def __init__(self, language: str = "en"):

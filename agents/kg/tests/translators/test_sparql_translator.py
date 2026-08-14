@@ -48,11 +48,6 @@ def test_sanitize_preserves_string_literals():
     query = 'SELECT ?x WHERE { ?x rdfs:label ?l . FILTER(CONTAINS(?l, "What? Really")) }'
     assert '"What? Really"' in SPARQLTranslator.sanitize(query)
 
-def test_sanitize_aggregate_alias():
-    query = "SELECT COUNT(?item) WHERE { wd:Q937 wdt:P31 ?item . }"
-    sanitized = SPARQLTranslator.sanitize(query)
-    assert "AS ?count" in sanitized
-
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_translate():
     translator = SPARQLTranslator()

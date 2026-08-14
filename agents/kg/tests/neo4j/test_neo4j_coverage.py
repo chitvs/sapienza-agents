@@ -11,26 +11,7 @@ confermare ciò che già sappiamo funzionare.
 import pytest
 
 from pipeline import KGPipeline
-from conftest import contains_answer
-from conftest import is_ollama_running
-
-def is_neo4j_ready() -> bool:
-    try:
-        from configs.settings import settings
-        from executors.cypher_executor import CypherExecutor
-
-        executor = CypherExecutor(
-            uri=settings.neo4j_uri,
-            user=settings.neo4j_user,
-            password=settings.neo4j_password,
-            database=settings.neo4j_database,
-            timeout=5.0,
-        )
-        rows = executor.execute_trusted("MATCH (m:Movie) RETURN count(m) AS c", {})
-        executor.close()
-        return bool(rows) and rows[0].get("c", 0) > 0
-    except Exception:
-        return False
+from conftest import contains_answer, is_neo4j_ready, is_ollama_running
 
 requires_stack = pytest.mark.skipif(
     not (is_ollama_running() and is_neo4j_ready()),

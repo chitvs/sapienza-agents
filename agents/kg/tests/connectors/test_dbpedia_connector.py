@@ -1,24 +1,12 @@
 """
 Test del connettore DBpedia.
 
-I test sull'escaping degli identificatori girano sempre (sono logica pura); quelli che
-interrogano l'endpoint pubblico vengono saltati se non è raggiungibile, perché è un
-servizio esterno soggetto a rate limit e a interruzioni.
+Qui sta la sola logica pura: escaping degli identificatori e grounding dei risultati.
+Ciò che interroga davvero l'endpoint pubblico vive in tests/dbpedia/test_dbpedia_endpoint.py.
 """
 import pytest
-import requests
 
 from connectors.dbpedia_connector import DBpediaConnector
-
-def is_dbpedia_reachable() -> bool:
-    try:
-        return requests.get("https://dbpedia.org/sparql", timeout=5).status_code < 500
-    except Exception:
-        return False
-
-requires_dbpedia = pytest.mark.skipif(
-    not is_dbpedia_reachable(), reason="endpoint pubblico DBpedia non raggiungibile"
-)
 
 def test_simple_resource_uses_short_form():
     c = DBpediaConnector()
@@ -50,18 +38,6 @@ def test_ground_results_converts_uris_to_readable_names():
     grounded = c.ground_results(raw)
     assert grounded[0]["birthPlace"] == "Princeton, New Jersey"
     assert grounded[1]["birthPlace"] == "1879-03-14"
-
-@requires_dbpedia
-def test_search_entity_live():
-    cands = DBpediaConnector().search_entity("Albert Einstein", limit=3)
-    assert cands
-    assert any(c.id == "Albert_Einstein" for c in cands)
-
-@requires_dbpedia
-def test_get_entity_live():
-    entity = DBpediaConnector().get_entity("Albert_Einstein")
-    assert entity.label == "Albert Einstein"
-    assert "birthPlace" in entity.properties
 
 def test_ground_results_keeps_source_uri():
     """L'uri originale va conservato accanto all'etichetta leggibile."""

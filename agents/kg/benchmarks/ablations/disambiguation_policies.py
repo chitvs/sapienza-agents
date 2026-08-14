@@ -13,14 +13,16 @@ def rescale(values: list[float]) -> list[float]:
     low, high = min(values), max(values)
     return [0.5] * len(values) if high == low else [(v - low) / (high - low) for v in values]
 
+# "attuale" marca la politica che il sistema usa davvero: EntityLinker._rank_candidates
+# media i tre segnali, quindi la baseline da battere è il primo candidato, non il contrario
 POLICIES = {
-    "primo (attuale)": lambda c, p, r: r,
+    "primo candidato (baseline)": lambda c, p, r: r,
     "solo contesto": lambda c, p, r: c,
     "solo notorieta": lambda c, p, r: p,
     "contesto+notorieta": lambda c, p, r: [(a + b) / 2 for a, b in zip(c, p)],
     "notorieta+rank": lambda c, p, r: [(a + b) / 2 for a, b in zip(p, r)],
     "contesto+rank": lambda c, p, r: [(a + b) / 2 for a, b in zip(c, r)],
-    "tutti e tre": lambda c, p, r: [(a + b + d) / 3 for a, b, d in zip(c, p, r)],
+    "tutti e tre (attuale)": lambda c, p, r: [(a + b + d) / 3 for a, b, d in zip(c, p, r)],
 }
 
 def main() -> None:

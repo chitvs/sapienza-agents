@@ -39,6 +39,8 @@ def main() -> None:
     parser.add_argument("--out", default=str(EVALUATIONS_DIR / "retry_trials.json"))
     args = parser.parse_args()
 
+    EVALUATIONS_DIR.mkdir(parents=True, exist_ok=True)
+
     from cache.null_cache import NullCache
     from pipeline import KGPipeline
 

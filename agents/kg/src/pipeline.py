@@ -7,11 +7,22 @@ from typing import NamedTuple
 from cache.base_cache import BaseCache
 from cache.semantic_cache import SemanticCache
 from configs.settings import settings
+from connectors.base_connector import KnowledgeGraphUnavailableError
 from executors.base_executor import QueryExecutionError
 from providers import build_provider
 from providers.base_provider import BaseProvider
 
 logger = logging.getLogger("kg_pipeline")
+
+def _is_infrastructure_failure(err: Exception) -> bool:
+    """Distingue un guasto del knowledge graph da una query che il modello ha sbagliato."""
+    # i tentativi di recupero degradano a zero righe quando è il modello a sbagliare, ma un
+    # endpoint irraggiungibile non è una risposta: restituire una lista vuota lo renderebbe
+    # indistinguibile da "il grafo non contiene questo dato", e nel benchmark il guasto di
+    # rete finirebbe addebitato alla traduzione
+    if isinstance(err, KnowledgeGraphUnavailableError):
+        return True
+    return isinstance(err, QueryExecutionError) and err.retryable
 
 class PipelineResult(NamedTuple):
     """Esito di KGPipeline.run(): risultati grounded, query eseguita, confidenza euristica."""
@@ -104,8 +115,9 @@ class KGPipeline:
             # qui si cattura di proposito qualunque eccezione, non le sole
             # QueryExecutionError: questo è un tentativo di recupero facoltativo, e anche
             # un guasto del correttore (che passa dall'LLM) deve degradare a zero righe
-            # invece di far fallire una domanda che aveva già una risposta parziale
             except Exception as err:
+                if _is_infrastructure_failure(err):
+                    raise
                 logger.info(f"  [warn] query alleggerita fallita: {err}")
 
         logger.info("\n[info] [step] rigenerazione query con feedback")
@@ -128,6 +140,8 @@ class KGPipeline:
             if retry_results:
                 return retry_results, retry_query, True
         except Exception as err:
+            if _is_infrastructure_failure(err):
+                raise
             logger.info(f"  [warn] rigenerazione fallita: {err}")
 
         return raw_results, current_query, True

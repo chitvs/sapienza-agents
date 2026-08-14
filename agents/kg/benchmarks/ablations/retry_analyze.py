@@ -16,14 +16,17 @@ configs = sorted({t["config"] for r in records for t in r["trials"]})
 print(f"\n{'config':12} {'identiche':>12} {'con righe':>12} {'errori':>8} {'>=1 recupero':>14}")
 for name in configs:
     trials = [t for r in records for t in r["trials"] if t["config"] == name]
-    identical = sum(1 for t in trials if t["identical"])
+    # i tentativi in cui l'LLM è fallito non hanno prodotto una query: tenerli nel
+    # denominatore farebbe sembrare la rigenerazione meno ripetitiva di quanto sia
+    comparable = [t for t in trials if t["identical"] is not None]
+    identical = sum(1 for t in comparable if t["identical"])
     with_rows = sum(1 for t in trials if t["outcome"] == "rows")
     errors = sum(1 for t in trials if t["outcome"].startswith(("error", "llm")))
     at_least_one = sum(
         1 for r in records
         if any(t["config"] == name and t["outcome"] == "rows" for t in r["trials"])
     )
-    print(f"{name:12} {identical:>6}/{len(trials):<5} {with_rows:>6}/{len(trials):<5} {errors:>8} {at_least_one:>8}/{len(records)}")
+    print(f"{name:12} {identical:>6}/{len(comparable):<5} {with_rows:>6}/{len(trials):<5} {errors:>8} {at_least_one:>8}/{len(records)}")
 
 print("\ncasi in cui almeno una configurazione ha recuperato righe:")
 for r in records:

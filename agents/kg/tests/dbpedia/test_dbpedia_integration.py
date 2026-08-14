@@ -8,19 +8,10 @@ vengono saltati invece di fallire.
 from pathlib import Path
 
 import pytest
-import requests
-
 from pipeline import KGPipeline
-from conftest import contains_answer
-from conftest import is_ollama_running
+from conftest import contains_answer, is_dbpedia_reachable, is_ollama_running
 
 _INDEX_DIR = Path(__file__).resolve().parents[2] / "data" / "dbpedia_ontology"
-
-def is_dbpedia_reachable() -> bool:
-    try:
-        return requests.get("https://dbpedia.org/sparql", timeout=5).status_code < 500
-    except Exception:
-        return False
 
 requires_stack = pytest.mark.skipif(
     not (is_ollama_running() and is_dbpedia_reachable() and (_INDEX_DIR / "properties.faiss").exists()),

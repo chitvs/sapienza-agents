@@ -42,7 +42,6 @@ class SPARQLExecutor(BaseExecutor):
                     f"SYNTAX_ERROR: la query contiene la clausola di scrittura '{clause}', "
                     f"ma questo agente può solo leggere dal grafo. Riscrivere la query "
                     f"come SELECT o ASK.",
-                    query=query,
                 )
 
     def execute(self, query: str) -> list[dict[str, Any]]:
@@ -51,7 +50,6 @@ class SPARQLExecutor(BaseExecutor):
             raise SPARQLExecutionError(
                 f"SYNTAX_ERROR: la query non contiene keyword SPARQL valide, "
                 f"probabile risposta conversazionale dell'LLM: {query[:100]}",
-                query=query,
             )
         self.assert_read_only(query)
 
@@ -63,22 +61,29 @@ class SPARQLExecutor(BaseExecutor):
             )
             response.raise_for_status()
             data = response.json()
-        except ValueError as err:
+        # va intercettata la sola JSONDecodeError, non ValueError: MissingSchema e InvalidURL
+        # ereditano anche da ValueError, sono sollevate da post() prima che `response` esista,
+        # e finivano in un UnboundLocalError che nascondeva un endpoint configurato male
+        except requests.exceptions.JSONDecodeError as err:
             raise SPARQLExecutionError(
-                f"risposta non interpretabile come JSON: {response.text[:200]}", query=query, retryable=True
+                f"risposta non interpretabile come JSON: {response.text[:200]}", retryable=True
             ) from err
         except requests.HTTPError as err:
             status = err.response.status_code if err.response is not None else None
             detail = f"HTTP {status}" if status else "HTTP Error"
             if err.response is not None:
                 detail += f": {err.response.text[:500]}"
-            raise SPARQLExecutionError(detail, query=query, retryable=status in _TRANSIENT_STATUS) from err
+            raise SPARQLExecutionError(detail, retryable=status in _TRANSIENT_STATUS) from err
         except requests.Timeout as err:
             raise SPARQLExecutionError(
-                "timeout superato durante l'esecuzione della query", query=query, retryable=True
+                "timeout superato durante l'esecuzione della query", retryable=True
             ) from err
+        except (requests.exceptions.MissingSchema, requests.exceptions.InvalidURL,
+                requests.exceptions.InvalidSchema) as err:
+            # un endpoint scritto male è un errore di configurazione: ripeterlo non lo cura
+            raise SPARQLExecutionError(f"endpoint non valido: {err}") from err
         except requests.RequestException as err:
-            raise SPARQLExecutionError(f"errore di connessione: {err}", query=query, retryable=True) from err
+            raise SPARQLExecutionError(f"errore di connessione: {err}", retryable=True) from err
 
         # le query ASK restituiscono un booleano invece dei binding
         if "boolean" in data:

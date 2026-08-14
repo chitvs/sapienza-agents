@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Any
 from configs.settings import settings
 
@@ -18,16 +19,20 @@ _ENTITY_LABELS = [
 ]
 
 _MODEL: Any = None
+# vale quanto detto in embeddings.py: due richieste concorrenti al primo avvio
+# caricherebbero due volte i 2 GB di GLiNER
+_MODEL_LOCK = threading.Lock()
 
 def _get_model() -> Any:
     """Carica il modello GLiNER al primo uso."""
     global _MODEL
-    if _MODEL is None:
-        logger.info("carico il modello GLiNER per l'estrazione zero-shot delle entità...")
-        from gliner import GLiNER
+    with _MODEL_LOCK:
+        if _MODEL is None:
+            logger.info("carico il modello GLiNER per l'estrazione zero-shot delle entità...")
+            from gliner import GLiNER
 
-        _MODEL = GLiNER.from_pretrained(_MODEL_NAME)
-    return _MODEL
+            _MODEL = GLiNER.from_pretrained(_MODEL_NAME)
+        return _MODEL
 
 def extract_entity_mentions(text: str) -> list[str]:
     """Estrae le menzioni di entità dal testo tramite NER zero-shot, senza duplicati."""

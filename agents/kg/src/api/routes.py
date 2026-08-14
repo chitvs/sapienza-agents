@@ -14,6 +14,15 @@ router = APIRouter()
 _pipelines: dict[str, KGPipeline] = {}
 _pipelines_lock = threading.Lock()
 
+def close_pipelines() -> None:
+    """Chiude le risorse dei knowledge graph allo spegnimento del servizio."""
+    with _pipelines_lock:
+        for pipeline in _pipelines.values():
+            close = getattr(pipeline.executor, "close", None)
+            if callable(close):
+                close()
+        _pipelines.clear()
+
 def get_pipeline(target_kg: str) -> KGPipeline:
     """Restituisce la pipeline del KG richiesto, creandola al primo utilizzo."""
     target_kg = (target_kg or "").strip().lower()

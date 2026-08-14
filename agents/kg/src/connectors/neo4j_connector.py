@@ -18,6 +18,10 @@ _NAME_PROPERTIES = ("name", "title", "label")
 # Lo schema di un grafo è regolare, quindi un campione piccolo basta a dedurre le
 # proprietà di una label senza pesare sui database grandi.
 _SCHEMA_SAMPLE_SIZE = 100
+# il meta-grafo delle relazioni tollera un campione molto più ampio delle proprietà,
+# perché deve scoprire anche i tipi rari; resta un limite perché senza è una
+# scansione di tutti gli archi
+_SCHEMA_RELATIONSHIP_SAMPLE = 50000
 
 class Neo4jConnector(BaseConnector):
     """Connettore verso un'istanza Neo4j: cerca le entità interrogando il grafo stesso."""
@@ -190,10 +194,14 @@ class Neo4jConnector(BaseConnector):
                 if label:
                     schema["labels"][label] = self._label_properties(label)
 
+            # il campione basta a scoprire quali relazioni esistono, come già si fa per le
+            # proprietà: senza limite è una scansione di tutti gli archi, che su un grafo
+            # grande supera il timeout e rende il KG inutilizzabile, perché il primo
+            # tentativo non riesce mai e non c'è schema alternativo
             rel_rows = self._run(
-                "MATCH (a)-[r]->(b) "
+                "MATCH (a)-[r]->(b) WITH a, r, b LIMIT $sample "
                 "RETURN DISTINCT labels(a)[0] AS from_label, type(r) AS rel_type, labels(b)[0] AS to_label",
-                {},
+                {"sample": _SCHEMA_RELATIONSHIP_SAMPLE},
             )
             schema["relationships"] = [
                 {"from": r.get("from_label"), "type": r.get("rel_type"), "to": r.get("to_label")}

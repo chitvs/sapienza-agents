@@ -35,7 +35,9 @@ def rescale(values: list[float]) -> list[float]:
     return [0.5] * len(values) if high == low else [(v - low) / (high - low) for v in values]
 
 def main() -> None:
+    EVALUATIONS_DIR.mkdir(parents=True, exist_ok=True)
     connector = WikidataConnector()
+    linker = EntityLinker(connector=connector)
     model = get_embedding_model(RETRIEVAL_MODEL_NAME)
     dataset = [e for e in load_dataset(BENCHMARK) if english_question(e)]
     entries = stratified_sample(dataset, SIZE, 0, BENCHMARK.predicates)
@@ -51,13 +53,12 @@ def main() -> None:
         except Exception:
             continue
 
-        for mention in mentions:
-            mention = EntityLinker._normalize_mention(mention)
+        for raw_mention in mentions:
             try:
-                cands = [c for c in connector.search_entity(mention, limit=15)
-                         if connector.is_valid_candidate(c)]
+                mention, found = linker._search_mention(raw_mention.strip())
             except Exception:
                 continue
+            cands = [c for c in found if connector.is_valid_candidate(c)]
             if len(cands) < 2 or not ({c.id.upper() for c in cands} & gold):
                 continue
 

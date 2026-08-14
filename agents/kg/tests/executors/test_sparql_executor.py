@@ -1,33 +1,6 @@
 import pytest
-import requests
 
 from executors.sparql_executor import SPARQLExecutor, SPARQLExecutionError
-
-def is_endpoint_reachable() -> bool:
-    try:
-        return requests.head("https://query.wikidata.org/sparql", timeout=3).status_code < 500
-    except Exception:
-        return False
-
-@pytest.mark.skipif(not is_endpoint_reachable(), reason="endpoint SPARQL non raggiungibile")
-def test_execute():
-    executor = SPARQLExecutor(endpoint="https://query.wikidata.org/sparql", timeout=30.0)
-    query = """
-    PREFIX wd: <http://www.wikidata.org/entity/>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?label WHERE {
-      wd:Q937 rdfs:label ?label .
-      FILTER(LANG(?label) = "en")
-    }
-    """
-    try:
-        results = executor.execute(query)
-        assert len(results) > 0
-        assert results[0]["label"]["value"] == "Albert Einstein"
-    except SPARQLExecutionError as e:
-        if e.retryable:
-            pytest.skip("endpoint SPARQL non raggiungibile o in errore transitorio")
-        raise
 
 def test_conversational_answer_is_rejected_locally():
     """La risposta a vuoto del modello va fermata prima della rete, non dall'endpoint."""

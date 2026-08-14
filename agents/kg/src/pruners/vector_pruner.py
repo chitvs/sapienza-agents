@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import faiss
 
-from connectors.base_connector import BaseConnector
+from connectors.base_connector import BaseConnector, KnowledgeGraphUnavailableError
 from models.embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
 from configs.settings import settings
 from pruners.base_pruner import BasePruner, PrunedSchema
@@ -56,15 +56,19 @@ class VectorPruner(BasePruner):
 
         logger.info("VectorPruner pronto (il modello viene caricato al primo uso).")
 
-    def _search(self, index: Any, meta: list[dict], question: str, top_k: int) -> list[dict]:
-        """Cerca i termini più affini alla domanda nell'indice indicato."""
-        if index is None:
-            return []
+    @staticmethod
+    def _embed_question(question: str) -> Any:
+        """Incorpora la domanda per la ricerca vettoriale."""
         model = get_embedding_model(RETRIEVAL_MODEL_NAME)
         # bge richiede il prefisso di istruzione solo lato query, non sul corpus
         q_vec = model.encode([BGE_QUERY_INSTRUCTION + question], convert_to_numpy=True).astype(np.float32)
         faiss.normalize_L2(q_vec)
+        return q_vec
 
+    def _search(self, index: Any, meta: list[dict], q_vec: Any, top_k: int) -> list[dict]:
+        """Cerca i termini più affini alla domanda già incorporata nell'indice indicato."""
+        if index is None:
+            return []
         scores, indices = index.search(q_vec, top_k)
         results = []
         for i, idx in enumerate(indices[0]):
@@ -88,6 +92,11 @@ class VectorPruner(BasePruner):
         """Descrive le entità seed e restituisce le proprietà che possiedono davvero."""
         try:
             entities_dict = self.connector.get_entities(seed_entity_ids)
+        except KnowledgeGraphUnavailableError:
+            # il connettore solleva di proposito invece di restituire un dizionario vuoto:
+            # degradare qui significherebbe spendere una traduzione LLM su uno schema privo
+            # di proprietà verificate, per poi fallire comunque all'esecuzione
+            raise
         except Exception as err:
             logger.warning("entità seed non leggibili dal KG: %s", err)
             entities_dict = {}
@@ -122,8 +131,11 @@ class VectorPruner(BasePruner):
         existing_pids = self._seed_context(seed_entity_ids, context_lines) if seed_entity_ids else set()
 
         if question:
+            # la domanda si incorpora una volta sola: proprietà e classi sono due indici
+            # ma la stessa query, e l'inferenza è l'intero costo di questo passo
+            q_vec = self._embed_question(question)
             relevant_props = self._search(
-                self.prop_index, self.prop_meta, question, settings.schema_search_pool
+                self.prop_index, self.prop_meta, q_vec, settings.schema_search_pool
             )
             if relevant_props:
                 verified = [p for p in relevant_props if p["id"] in existing_pids]
@@ -141,12 +153,12 @@ class VectorPruner(BasePruner):
                         self._describe(p, prefix) for p in suggested[:settings.schema_max_suggested]
                     )
 
-            relevant_classes = self._search(self.class_index, self.class_meta, question, _CLASS_RESULTS)
+            relevant_classes = self._search(self.class_index, self.class_meta, q_vec, _CLASS_RESULTS)
             if relevant_classes:
                 context_lines.append("")
                 context_lines.append("relevant classes for this question:")
                 context_lines.extend(
-                    self._describe(c, self.connector.entity_prefix) for c in relevant_classes
+                    self._describe(c, self.connector.class_prefix) for c in relevant_classes
                 )
 
         return PrunedSchema(context_text="\n".join(context_lines))

@@ -3,14 +3,15 @@ from translators.sparql_translator import WikidataSPARQLTranslator as SPARQLTran
 from conftest import is_ollama_running
 
 def test_sanitize_aggregations():
+    """Un aggregato senza alias non è SPARQL valido: va racchiuso e battezzato."""
     translator = SPARQLTranslator.__new__(SPARQLTranslator)
     raw = "SELECT COUNT (?item) WHERE { wd:Q458 wdt:P527 ?item . }"
-    sanitized = translator.sanitize(raw)
-    assert "SELECT (COUNT(?item) AS ?count) WHERE" in sanitized
+    assert translator.sanitize(raw).startswith("SELECT (COUNT(?item) AS ?count) WHERE")
 
     raw_distinct = "SELECT COUNT ( DISTINCT ?item ) WHERE { wd:Q458 wdt:P527 ?item . }"
-    sanitized_distinct = translator.sanitize(raw_distinct)
-    assert "COUNT(DISTINCT ?item)" in sanitized_distinct or "COUNT( DISTINCT ?item )" in sanitized_distinct
+    assert translator.sanitize(raw_distinct).startswith(
+        "SELECT (COUNT( DISTINCT ?item ) AS ?count) WHERE"
+    )
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_translate_count_query():
