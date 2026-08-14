@@ -1,15 +1,14 @@
 import asyncio
 import json
 import logging
-import re
 import time
 
-import httpx
 from pydantic import ValidationError
 from typing import Literal
 
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse, ResponseDomain
 from configs.settings import settings
+from llm_client import LLMClient
 from state import plan_state_store, StoredPlan
 from tools import query_kg, query_multiapi, TOOL_REGISTRY, TOOL_DESCRIPTIONS
 from validators import validate_draft
@@ -36,6 +35,7 @@ class PlannerPipeline:
 
     def __init__(self, verbose: bool = False):
         self.verbose = verbose
+        self.llm = LLMClient(verbose=verbose)
         self._prompts_cache: dict[str, str] = {}
 
     def _log(self, msg: str):
@@ -45,77 +45,6 @@ class PlannerPipeline:
 
     # -- llm helpers (stesso pattern di multiapi, self-contained) ----
 
-    async def _llm_generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
-        """Prova il provider configurato; se è gemini e fallisce, ripiega su ollama."""
-        if settings.llm_provider.lower() == "gemini":
-            try:
-                return await self._generate_gemini(prompt, temperature, json_mode)
-            except Exception as err:
-                self._log(f"  [warn] gemini non disponibile ({err.__class__.__name__}: {err}), fallback su ollama")
-                return await self._generate_ollama(prompt, temperature, json_mode)
-        return await self._generate_ollama(prompt, temperature, json_mode)
-
-    async def _generate_gemini(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
-        if not settings.gemini_api_key:
-            raise ValueError("GEMINI_API_KEY non configurata")
-
-        url = f"{settings.gemini_api_base}/models/{settings.gemini_model}:generateContent"
-        headers = {"x-goog-api-key": settings.gemini_api_key}
-
-        generation_config: dict = {}
-        if json_mode:
-            generation_config["response_mime_type"] = "application/json"
-        # temperature/top_p/top_k deprecati e ignorati da gemini-3.6-flash in poi
-        # (Google: verranno rifiutati con HTTP 400 nelle prossime generazioni) - non inviati.
-
-        payload: dict = {"contents": [{"parts": [{"text": prompt}]}]}
-        if generation_config:
-            payload["generationConfig"] = generation_config
-
-        async with httpx.AsyncClient(timeout=settings.gemini_timeout) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-
-            candidates = data.get("candidates", [])
-            if not candidates:
-                block_reason = data.get("promptFeedback", {}).get("blockReason")
-                self._log(f"  [warn] gemini: nessuna candidate, blockReason={block_reason!r}")
-                return ""
-
-            parts = candidates[0].get("content", {}).get("parts", [])
-            return parts[0].get("text", "").strip() if parts else ""
-
-    async def _generate_ollama(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
-        """Chiama Ollama locale via HTTP REST."""
-        url = f"{settings.ollama_host.rstrip('/')}/api/generate"
-        payload = {
-            "model": settings.ollama_model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": temperature},
-        }
-        if json_mode:
-            payload["format"] = "json"
-
-        async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            return resp.json().get("response", "").strip()
-
-    
-    @staticmethod
-    def _clean_json(raw: str) -> str:
-        """rimuove eventuali blocchi markdown (```json ... ```) dalla risposta llm."""
-        if not raw:
-            return ""
-        cleaned = raw.strip()
-        if "```" in cleaned:
-            match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.IGNORECASE | re.DOTALL)
-            if match:
-                return match.group(1).strip()
-        return cleaned
-
     def _load_prompt(self, filename: str) -> str:
         """carica un template prompt dalla cartella prompts (con cache)."""
         if filename not in self._prompts_cache:
@@ -124,18 +53,10 @@ class PlannerPipeline:
         return self._prompts_cache[filename]
 
     async def _llm_extract_json(self, prompt_file: str, **format_kwargs) -> dict | None:
-        """helper generico: carica un prompt, lo invia al llm, parsa il json di risposta."""
+        """carica il prompt (business-specific, resta qui) e delega dispatch/parsing a LLMClient."""
         template = self._load_prompt(prompt_file)
         prompt = template.format(**format_kwargs)
-        raw = await self._llm_generate(prompt, json_mode=True)
-        cleaned = self._clean_json(raw)
-        self._log(f"  -> risposta llm grezza: {raw}")
-
-        try:
-            return json.loads(cleaned)
-        except (json.JSONDecodeError, AttributeError):
-            self._log(f"  [warn] impossibile parsare json: {cleaned}")
-            return None
+        return await self.llm.extract_json(prompt)
 
     # ----- fase 1: classificazione del dominio -----
 

@@ -39,14 +39,38 @@ async def _call_agent(base_url: str, agent_name: str, question: str) -> dict:
         return {"error": f"{agent_name}: errore imprevisto ({err.__class__.__name__})"}
 
 
+class KGAgentProvider:
+    """provider verso kg-agent."""
+
+    def __init__(self, base_url: str | None = None):
+        self.base_url = base_url or settings.kg_agent_url
+
+    async def fetch(self, question: str) -> dict:
+        return await _call_agent(self.base_url, "kg-agent", question)
+
+
+class MultiApiProvider:
+    """provider verso multiapi-agent."""
+
+    def __init__(self, base_url: str | None = None):
+        self.base_url = base_url or settings.multiapi_agent_url
+
+    async def fetch(self, question: str) -> dict:
+        return await _call_agent(self.base_url, "multiapi-agent", question)
+
+
+_kg_provider = KGAgentProvider()
+_multiapi_provider = MultiApiProvider()
+
+
 async def query_kg(question: str) -> dict:
-    """interroga kg-agent (POST {settings.kg_agent_url}/query)."""
-    return await _call_agent(settings.kg_agent_url, "kg-agent", question)
+    """wrapper mantenuto per compatibilità: import diretto in pipeline.py/test_tools.py,
+    patch target 'pipeline.query_kg' in test_gather_context.py."""
+    return await _kg_provider.fetch(question)
 
 
 async def query_multiapi(question: str) -> dict:
-    """interroga multiapi-agent (POST {settings.multiapi_agent_url}/query)."""
-    return await _call_agent(settings.multiapi_agent_url, "multiapi-agent", question)
+    return await _multiapi_provider.fetch(question)
 
 TOOL_REGISTRY: dict[str, Callable[[str], Awaitable[dict]]] = {
     "kg_agent": query_kg,
