@@ -1,5 +1,5 @@
 from configs.settings import settings
-from llm import PROMPTS_DIR
+from models.llm import PROMPTS_DIR
 
 def test_defaults():
     assert settings.ollama_host == "http://localhost:11434"

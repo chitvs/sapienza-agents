@@ -6,7 +6,7 @@ from translators.base_translator import BaseTranslator
 from pruners.base_pruner import PrunedSchema
 
 class _FakeClient:
-    model_name = "finto"
+    model_name = "fake"
 
 class _FakeTranslator(BaseTranslator):
     def translate(self, question, schema_context="", temperature=0.0, top_p=None):
@@ -21,7 +21,7 @@ class _FakeConnector:
 
 class _FakePruner:
     def prune(self, seed_entity_ids, question=""):
-        return PrunedSchema(context_text="schema finto")
+        return PrunedSchema(context_text="fake schema")
 
 class _FakeLinker:
     def link(self, text):
@@ -43,18 +43,18 @@ class _FakeProvider:
         self.linker = _FakeLinker()
 
 @pytest.mark.parametrize(
-    "righe, atteso_in_cache",
-    [([], False), ([{"x": "valore"}], True)],
+    "rows, expected_in_cache",
+    [([], False), ([{"x": "value"}], True)],
 )
-def test_only_non_empty_results_are_cached(righe, atteso_in_cache):
+def test_only_non_empty_results_are_cached(rows, expected_in_cache):
     """
     Un risultato vuoto può nascere da un guasto transitorio assorbito dai retry: metterlo in
     cache lo renderebbe definitivo per la domanda e per ogni parafrasi sopra soglia.
     """
     cache = SemanticCache()
-    pipeline = KGPipeline(provider=_FakeProvider(righe), cache=cache, target_kg="wikidata")
+    pipeline = KGPipeline(provider=_FakeProvider(rows), cache=cache, target_kg="wikidata")
     pipeline.run("Who is the mayor of Rome?")
-    assert (cache.get("Who is the mayor of Rome?") is not None) is atteso_in_cache
+    assert (cache.get("Who is the mayor of Rome?") is not None) is expected_in_cache
 
 def test_cache_hit_exact():
     cache = SemanticCache(capacity=5)
@@ -82,7 +82,7 @@ def test_cache_miss_different_question():
 
 def test_cache_miss():
     cache = SemanticCache(capacity=5)
-    assert cache.get("Domanda non presente in cache") is None
+    assert cache.get("a question that was never cached") is None
 
 def test_count_question_does_not_hit_list_question():
     """Conteggio ed elenco hanno embedding quasi identici (0.9405) ma risposte di natura
@@ -140,27 +140,27 @@ def test_paraphrase_containing_the_same_number_still_hits():
     cache.set("when was kung fu panda 3 released", "SELECT ?d WHERE {...}", [{"d": "2016-01-23"}])
     assert cache.get("when was kung fu panda 3 released?") is not None
 
-def test_i_decimali_non_vengono_spezzati():
+def test_decimals_are_not_split():
     """Con \\d+ e sorted() "3.5" e "5.3" davano la stessa chiave, e la partizione che
     doveva separarli li rimetteva insieme."""
     assert SemanticCache._numeric_tokens("da 3.5 a 5.3") == ("3.5", "5.3")
     assert SemanticCache._numeric_tokens("da 5.3 a 3.5") == ("5.3", "3.5")
 
-def test_capacita_non_positiva_disattiva_la_cache():
+def test_a_non_positive_capacity_disables_the_cache():
     """Azzerare la capacità da ambiente è il modo naturale di spegnerla: non deve sollevare."""
     cache = SemanticCache(capacity=0)
-    cache.set("quando è uscito kung fu panda", "q", [{"d": "2008"}])
-    assert cache.get("quando è uscito kung fu panda") is None
+    cache.set("when kung fu panda was released", "q", [{"d": "2008"}])
+    assert cache.get("when kung fu panda was released") is None
 
-def test_lo_sfratto_rispetta_la_capacita():
+def test_eviction_respects_the_capacity():
     cache = SemanticCache(capacity=1)
     cache.set("when kung fu panda was released", "q1", [{"d": "2008"}])
     cache.set("when kung fu panda 3 was released", "q2", [{"d": "2016"}])
     assert len(cache._entries) == 1
     assert cache.get("when kung fu panda was released") is None
 
-def test_clear_svuota_davvero():
+def test_clear_really_empties_the_cache():
     cache = SemanticCache()
-    cache.set("domanda", "q", [{"x": 1}])
+    cache.set("a question", "q", [{"x": 1}])
     cache.clear()
-    assert cache.get("domanda") is None
+    assert cache.get("a question") is None

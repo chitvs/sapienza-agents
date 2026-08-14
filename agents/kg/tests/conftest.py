@@ -15,11 +15,11 @@ def is_ollama_running() -> bool:
     except Exception:
         return False
 
-def contiene_risposta(result, atteso: str) -> bool:
+def contains_answer(result, expected: str) -> bool:
     """Cerca il testo fra i soli valori di risposta, ignorando le chiavi con underscore.
 
     Asserire su `str(row)` è ingannevole: la riga contiene anche l'URI in `_sources` e il
     timestamp in `_provenance`, quindi la sottostringa si trova anche a logica rotta.
     """
-    valori = (v for row in result.results for k, v in row.items() if not str(k).startswith("_"))
-    return any(atteso.lower() in str(v).lower() for v in valori)
+    values = (v for row in result.results for k, v in row.items() if not str(k).startswith("_"))
+    return any(expected.lower() in str(v).lower() for v in values)

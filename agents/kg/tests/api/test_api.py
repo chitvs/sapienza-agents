@@ -23,10 +23,10 @@ def test_missing_prerequisite_explains_itself(monkeypatch):
     """
     import api.routes as routes
 
-    def build_fallito(*args, **kwargs):
+    def failing_build(*args, **kwargs):
         raise FileNotFoundError("Indice FAISS delle proprietà non trovato. Eseguire 'python scripts/ingest_wikidata.py'.")
 
-    monkeypatch.setattr(routes, "KGPipeline", build_fallito)
+    monkeypatch.setattr(routes, "KGPipeline", failing_build)
     monkeypatch.setattr(routes, "_pipelines", {})
 
     res = client.post("/query", json={"question": "x", "target_kg": "wikidata"})

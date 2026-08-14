@@ -7,7 +7,7 @@ import numpy as np
 import faiss
 
 from connectors.base_connector import BaseConnector
-from embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
+from models.embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
 from configs.settings import settings
 from pruners.base_pruner import BasePruner, PrunedSchema
 

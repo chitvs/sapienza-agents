@@ -45,8 +45,8 @@ def _warmup_models() -> None:
     # caricarli all'avvio sposta l'attesa dove non si vede. I modelli Ollama non si
     # toccano: li gestisce Ollama, e sollecitarli qui li caricherebbe solo per farli
     # sfrattare a vicenda dalla VRAM.
-    from embeddings import SIMILARITY_MODEL_NAME, RETRIEVAL_MODEL_NAME, get_embedding_model
-    from mention_extraction import extract_entity_mentions
+    from models.embeddings import SIMILARITY_MODEL_NAME, RETRIEVAL_MODEL_NAME, get_embedding_model
+    from models.mention_extraction import extract_entity_mentions
 
     for model_name in (RETRIEVAL_MODEL_NAME, SIMILARITY_MODEL_NAME):
         get_embedding_model(model_name)

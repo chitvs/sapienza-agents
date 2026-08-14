@@ -1,6 +1,6 @@
 import re
 
-from query_text import apply_outside_literals, mask_literals
+from utils.query_text import apply_outside_literals, mask_literals
 from translators.base_translator import BaseTranslator
 
 class SPARQLTranslator(BaseTranslator):

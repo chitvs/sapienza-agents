@@ -66,9 +66,9 @@ class KGPipeline:
 
                 # la query è valida e il guasto è transitorio: si ripete identica
                 if err.retryable:
-                    attesa = settings.retry_backoff_seconds * (attempt + 1)
-                    logger.info(f"  [retry] guasto transitorio dell'endpoint, attesa {attesa}s...")
-                    time.sleep(attesa)
+                    backoff = settings.retry_backoff_seconds * (attempt + 1)
+                    logger.info(f"  [retry] guasto transitorio dell'endpoint, attesa {backoff}s...")
+                    time.sleep(backoff)
                     continue
 
                 corrections_used += 1

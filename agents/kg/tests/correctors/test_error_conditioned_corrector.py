@@ -11,11 +11,11 @@ def test_classify_error():
     assert corrector.classify_error("Request timed out") == "TIMEOUT"
     assert corrector.classify_error("Unknown DB failure") == "GENERAL_ERROR"
 
-def test_la_query_corretta_riceve_le_riparazioni_strutturali():
+def test_the_corrected_query_gets_the_structural_repairs():
     """Il correttore deve applicare le stesse riparazioni della traduzione: la sua query
     nasce nelle condizioni peggiori ed è quella che ne ha più bisogno."""
-    class ClientFinto:
-        model_name = "finto"
+    class _FakeClient:
+        model_name = "fake"
 
         def load_prompt(self, prompt_filename, **kwargs):
             return "prompt"
@@ -24,15 +24,15 @@ def test_la_query_corretta_riceve_le_riparazioni_strutturali():
             # ?personLabel non è legata nel WHERE: postprocess deve redirigerla su ?person
             return "```sparql\nSELECT ?personLabel WHERE { wd:Q937 wdt:P26 ?person . }\n```"
 
-    corrector = ErrorConditionedCorrector(WikidataSPARQLTranslator(), ClientFinto())
-    corretta = corrector.correct(question="chi?", failed_query="SELECT ?x WHERE {}", error_message="boom")
-    assert "?personLabel" in corretta
+    corrector = ErrorConditionedCorrector(WikidataSPARQLTranslator(), _FakeClient())
+    corrected = corrector.correct(question="who?", failed_query="SELECT ?x WHERE {}", error_message="boom")
+    assert "?personLabel" in corrected
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_correct():
     corrector = ErrorConditionedCorrector(WikidataSPARQLTranslator())
     query = corrector.correct(
-        question="Chi è Einstein?",
+        question="Who is Einstein?",
         failed_query="SELECT * WHERE { wd:Q937 ?p ?o }",
         error_message="Undefined prefix wd:",
     )

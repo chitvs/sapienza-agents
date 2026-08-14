@@ -28,8 +28,8 @@ def test_sanitize_service_outside_where():
     sanitized = SPARQLTranslator.sanitize(query)
     # non basta che il blocco ci sia ancora: era già nell'input, quindi il test passava
     # anche se la rilocazione non avveniva. Deve finire dentro le graffe del WHERE.
-    apertura, chiusura = SPARQLTranslator._where_span(sanitized)
-    assert apertura < sanitized.index("SERVICE wikibase:label") < chiusura
+    opening, closing = SPARQLTranslator._where_span(sanitized)
+    assert opening < sanitized.index("SERVICE wikibase:label") < closing
 
 def test_sanitize_leaves_service_already_inside_where():
     """Con un UNION il SERVICE non va spostato: finirebbe dentro un ramo, e le etichette

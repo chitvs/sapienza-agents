@@ -12,7 +12,7 @@ from executors.sparql_executor import SPARQLExecutor, SPARQLExecutionError
 
 QUERY = "SELECT ?x WHERE { ?x ?p ?o }"
 
-class RispostaFinta:
+class _FakeResponse:
     def __init__(self, status: int, text: str):
         self.status_code = status
         self.text = text
@@ -26,53 +26,53 @@ class RispostaFinta:
 
         return json.loads(self.text)
 
-class SessioneFinta:
-    def __init__(self, risposta=None, errore=None):
-        self.risposta = risposta
-        self.errore = errore
-        self.richieste: list[dict] = []
+class _FakeSession:
+    def __init__(self, response=None, error=None):
+        self.response = response
+        self.error = error
+        self.requests: list[dict] = []
 
     def post(self, url, data=None, timeout=None):
-        self.richieste.append({"url": url, "data": data})
-        if self.errore is not None:
-            raise self.errore
-        return self.risposta
+        self.requests.append({"url": url, "data": data})
+        if self.error is not None:
+            raise self.error
+        return self.response
 
-def esecutore(sessione) -> SPARQLExecutor:
-    executor = SPARQLExecutor(endpoint="http://finto.localhost/sparql", timeout=1.0)
-    executor.session = sessione
+def build_executor(session) -> SPARQLExecutor:
+    executor = SPARQLExecutor(endpoint="http://fake.localhost/sparql", timeout=1.0)
+    executor.session = session
     return executor
 
-def test_html_al_posto_del_json_e_un_guasto_ritentabile():
+def test_html_instead_of_json_is_a_retryable_failure():
     """Un endpoint sotto carico risponde 200 con una pagina di errore: è transitorio."""
-    executor = esecutore(SessioneFinta(RispostaFinta(200, "<html>502 Bad Gateway</html>")))
+    executor = build_executor(_FakeSession(_FakeResponse(200, "<html>502 Bad Gateway</html>")))
     with pytest.raises(SPARQLExecutionError) as err:
         executor.execute(QUERY)
     assert err.value.retryable
 
-def test_il_timeout_e_ritentabile():
-    executor = esecutore(SessioneFinta(errore=requests.Timeout("troppo lento")))
+def test_a_timeout_is_retryable():
+    executor = build_executor(_FakeSession(error=requests.Timeout("too slow")))
     with pytest.raises(SPARQLExecutionError) as err:
         executor.execute(QUERY)
     assert err.value.retryable
 
-@pytest.mark.parametrize("status, ritentabile", [(429, True), (503, True), (400, False), (500, False)])
-def test_solo_alcuni_codici_http_sono_transitori(status, ritentabile):
+@pytest.mark.parametrize("status, retryable", [(429, True), (503, True), (400, False), (500, False)])
+def test_only_some_http_codes_are_transient(status, retryable):
     """500 è escluso di proposito: Blazegraph lo usa per i timeout di query, che ripetere
     identica non risolve — quella va riscritta dal correttore."""
-    executor = esecutore(SessioneFinta(RispostaFinta(status, "errore")))
+    executor = build_executor(_FakeSession(_FakeResponse(status, "error")))
     with pytest.raises(SPARQLExecutionError) as err:
         executor.execute(QUERY)
-    assert err.value.retryable is ritentabile
+    assert err.value.retryable is retryable
 
-def test_una_query_di_scrittura_non_raggiunge_mai_la_rete():
+def test_a_write_query_never_reaches_the_network():
     """La guardia deve fermarla prima della POST, non affidarsi al rifiuto dell'endpoint."""
-    sessione = SessioneFinta(RispostaFinta(200, "{}"))
-    executor = esecutore(sessione)
+    session = _FakeSession(_FakeResponse(200, "{}"))
+    executor = build_executor(session)
     with pytest.raises(SPARQLExecutionError):
         executor.execute("INSERT DATA { wd:Q1 rdfs:label 'x' } ; SELECT ?x WHERE { ?x ?p ?o }")
-    assert sessione.richieste == []
+    assert session.requests == []
 
-def test_le_ask_restituiscono_il_booleano():
-    executor = esecutore(SessioneFinta(RispostaFinta(200, '{"boolean": true}')))
+def test_ask_queries_return_the_boolean():
+    executor = build_executor(_FakeSession(_FakeResponse(200, '{"boolean": true}')))
     assert executor.execute("ASK { ?x ?p ?o }") == [{"boolean": True}]

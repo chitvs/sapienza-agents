@@ -13,7 +13,7 @@ def is_wikidata_reachable() -> bool:
 needs_wikidata = pytest.mark.skipif(not is_wikidata_reachable(), reason="Wikidata non raggiungibile")
 
 @pytest.mark.parametrize(
-    "valore, atteso",
+    "value, expected",
     [
         # l'endpoint sparql non antepone il segno, l'api wbgetentities sì: entrambe le forme
         # sono la stessa data e devono arrivare all'utente leggibili
@@ -26,9 +26,9 @@ needs_wikidata = pytest.mark.skipif(not is_wikidata_reachable(), reason="Wikidat
         ("1879-03-14", "1879-03-14"),
     ],
 )
-def test_iso_dates_are_made_readable(valore, atteso):
-    grounded = WikidataConnector().ground_results([{"v": {"value": valore}}])
-    assert grounded[0]["v"] == atteso
+def test_iso_dates_are_made_readable(value, expected):
+    grounded = WikidataConnector().ground_results([{"v": {"value": value}}])
+    assert grounded[0]["v"] == expected
 
 @needs_wikidata
 def test_search_entity():

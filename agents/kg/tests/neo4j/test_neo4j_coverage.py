@@ -11,7 +11,7 @@ confermare ciò che già sappiamo funzionare.
 import pytest
 
 from pipeline import KGPipeline
-from conftest import contiene_risposta
+from conftest import contains_answer
 from conftest import is_ollama_running
 
 def is_neo4j_ready() -> bool:
@@ -47,14 +47,14 @@ def test_writer_relationship(pipeline: KGPipeline) -> None:
     # nel dataset The Matrix non ha sceneggiatore: si usa un film che ce l'ha davvero
     result = pipeline.run("Who wrote A Few Good Men?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Sorkin")
+    assert contains_answer(result, "Sorkin")
 
 @requires_stack
 def test_producer_relationship(pipeline: KGPipeline) -> None:
     """relazione PRODUCED."""
     result = pipeline.run("Who produced The Matrix?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Silver")
+    assert contains_answer(result, "Silver")
 
 @requires_stack
 def test_person_to_person_relationship(pipeline: KGPipeline) -> None:
@@ -62,7 +62,7 @@ def test_person_to_person_relationship(pipeline: KGPipeline) -> None:
     # nel dataset Jessica Thompson è seguita ma non segue nessuno: la direzione conta
     result = pipeline.run("Who follows Jessica Thompson?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Thompson") or contiene_risposta(result, "Scope")
+    assert contains_answer(result, "Thompson") or contains_answer(result, "Scope")
 
 @requires_stack
 def test_relationship_property(pipeline: KGPipeline) -> None:
@@ -111,7 +111,7 @@ def test_ambiguous_title_prefix(pipeline: KGPipeline) -> None:
     """
     result = pipeline.run("When was The Matrix released?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "1999")
+    assert contains_answer(result, "1999")
 
 @requires_stack
 def test_person_who_both_acted_and_directed(pipeline: KGPipeline) -> None:

@@ -1,5 +1,5 @@
 from correctors.base_corrector import BaseCorrector
-from llm import build_llm_client
+from models.llm import build_llm_client
 from shared.ollama_client import OllamaClient
 from translators.base_translator import BaseTranslator
 

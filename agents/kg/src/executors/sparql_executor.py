@@ -4,7 +4,7 @@ from typing import Any
 import requests
 
 from executors.base_executor import BaseExecutor, QueryExecutionError
-from query_text import mask_literals
+from utils.query_text import mask_literals
 
 _TRANSIENT_STATUS = {429, 502, 503, 504}
 

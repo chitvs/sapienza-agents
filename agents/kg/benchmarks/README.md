@@ -1,0 +1,73 @@
+# Valutazione dell'agente kg
+
+La cartella contiene due cose diverse, che conviene non confondere:
+
+- due benchmark pubblici, entrambi eseguiti da `evaluate_qald.py`;
+- cinque esperimenti interni in `ablations/`, che non misurano la qualità del sistema ma giustificano singole scelte di progetto.
+
+Tutti gli script si lanciano dalla directory `agents/kg` e scrivono i risultati in `data/evaluations/`.
+
+## I benchmark: QALD-10 e QALD-9-plus
+
+`evaluate_qald.py` valuta la pipeline su due dataset della famiglia QALD, che condividono lo stesso formato e la stessa metrica ma insistono su knowledge graph diversi. Il knowledge graph non si sceglie: è una proprietà del dataset, e l'opzione `--benchmark` seleziona entrambi insieme.
+
+| `--benchmark` | dataset | kg | domande |
+|---|---|---|---:|
+| `qald10` (default) | [QALD-10](https://github.com/KGQA/QALD-10) | wikidata | 394 |
+| `qald9plus` | [QALD-9-plus](https://github.com/KGQA/QALD_9_plus), split di test | dbpedia | 150 |
+
+```bash
+uv run python benchmarks/evaluate_qald.py --gold executed                       # qald-10, tutte
+uv run python benchmarks/evaluate_qald.py --benchmark qald9plus --gold executed # qald-9-plus, tutte
+uv run python benchmarks/evaluate_qald.py --sample 30                           # campione stratificato
+uv run python benchmarks/evaluate_qald.py --dry-run                             # solo la composizione
+```
+
+Di QALD-9-plus si valuta lo split di test; il train non servirebbe, dato che la pipeline è zero-shot. Il dataset è multilingue, ma qui si usa la sola formulazione inglese, perché l'agente kg lavora in inglese e la traduzione è responsabilità dell'orchestratore.
+
+La metrica è la macro-F1 con le convenzioni QALD, riportata anche divisa per tipo di domanda: `ask`, `count`, `single` (un solo hop) e `multi`. Il tipo si deduce dalla query gold contando i predicati, e il conteggio è specifico del grafo: Wikidata cita le proprietà con `wdt:`/`p:`/`ps:`/`pq:`, mentre su DBpedia i predicati si riconoscono dalla convenzione dell'ontologia, che scrive in minuscolo le proprietà e in maiuscolo le classi. Il campione con `--sample` è stratificato, cioè mantiene le proporzioni fra i quattro tipi del dataset completo, e con lo stesso `--seed` restituisce sempre le stesse domande.
+
+L'opzione `--gold` sceglie le risposte di riferimento e cambia il significato del numero:
+
+- `recorded` (default) usa le risposte registrate nel dataset, che risalgono alla sua costruzione;
+- `executed` le rigenera eseguendo ora le query gold sull'endpoint. Le risposte rigenerate restano in cache accanto al dataset (`data/qald_10_executed.json`, `data/qald_9_plus_test_dbpedia_executed.json`), quindi il costo si paga una volta sola.
+
+Su QALD-9-plus `--gold executed` non è un raffinamento ma una necessità: 35 delle 150 domande non hanno più alcuna risposta registrata, e su un gold vuoto la convenzione QALD «nessuna attesa, nessuna prodotta» assegnerebbe F1 = 1.0 anche a una pipeline che è esplosa. Le domande senza gold utilizzabile vengono quindi escluse, e il loro numero è stampato all'inizio della run. Su QALD-10 il problema è di natura diversa e più sottile: le risposte registrate ci sono quasi tutte, ma Wikidata nel frattempo è cambiata e sui conteggi il disallineamento è sistematico, così senza `--gold executed` si misura in parte l'età del dataset invece della qualità della nostra traduzione.
+
+Il report completo, domanda per domanda con la query prodotta, finisce in `data/evaluations/<benchmark>_<timestamp>.json`.
+
+Serve Ollama attivo e l'indice ontologico del grafo già costruito (`scripts/ingest_wikidata.py` o `scripts/ingest_dbpedia.py`). Con un modello 7B su GPU consumer una domanda costa nell'ordine del minuto, quindi la valutazione completa è un lavoro di ore (conviene partire da `--sample`).
+
+## Gli esperimenti in `ablations/`
+
+Non producono un punteggio di sistema. Ognuno risponde a una domanda del tipo «questo componente serve davvero, e conviene tenerlo così com'è?». Sono tutti su Wikidata, perché usano i QID della query gold di QALD-10 come verità di riferimento.
+
+### Disambiguazione delle entità: quale segnale usare
+
+Quando l'LLM non sa scegliere fra i candidati di una menzione, la scelta ricade su un ranking basato su tre segnali: affinità della descrizione col contesto della domanda, notorietà dell'entità (numero di sitelink) e posizione restituita dalla ricerca. Questi due script misurano quale combinazione sbaglia meno.
+
+```bash
+uv run python benchmarks/ablations/disambiguation_collect.py 400   # raccolta, con rete
+uv run python benchmarks/ablations/disambiguation_policies.py      # analisi, offline
+```
+
+Il primo estrae le menzioni con GLiNER, interroga Wikidata per i candidati e salva i tre segnali in `data/evaluations/disambiguation_signals.json`, usando come verità di riferimento i QID che compaiono nella query gold. Il secondo confronta sette politiche di combinazione su quel file, in un secondo e senza rete.
+
+Il conteggio riguarda solo i casi in cui il QID corretto è fra i candidati, così misura l'ordinamento e non il richiamo della ricerca.
+
+### Disambiguazione delle entità: l'LLM ripaga il suo costo?
+
+```bash
+uv run python benchmarks/ablations/disambiguation_llm.py
+```
+
+Riusa `disambiguation_signals.json` e confronta, sugli stessi casi, tre scelte: quella dell'LLM, quella del ranking senza LLM e quella banale del primo candidato.
+
+### Rigenerazione ReAct: la seconda query è davvero diversa?
+
+```bash
+uv run python benchmarks/ablations/retry_collect.py --sample 40   # raccolta, con pipeline e llm
+uv run python benchmarks/ablations/retry_analyze.py               # riepilogo, offline
+```
+
+Quando una query si esegue senza errori ma restituisce zero righe, la pipeline la rigenera passando al modello un prompt di feedback. L'esperimento arriva fino alla prima esecuzione e, sui casi a zero righe, rigenera a più configurazioni di campionamento (temperatura 0.0 e 1.0 con top-p 0.9) registrando quante volte l'output è identico all'originale e quante volte recupera righe. A temperatura bassa una rigenerazione identica costa una chiamata all'LLM per nulla, ed è il motivo per cui l'esperimento esiste.

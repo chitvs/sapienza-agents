@@ -2,7 +2,7 @@ import re
 from typing import Any
 
 from executors.base_executor import BaseExecutor, QueryExecutionError
-from query_text import mask_literals
+from utils.query_text import mask_literals
 
 class CypherExecutionError(QueryExecutionError):
     """Errore durante la validazione o l'esecuzione di una query Cypher."""

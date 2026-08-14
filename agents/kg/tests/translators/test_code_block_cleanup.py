@@ -9,7 +9,7 @@ import pytest
 from shared.ollama_client import OllamaClient
 
 @pytest.mark.parametrize(
-    "grezzo, atteso",
+    "raw, expected",
     [
         ("```sparql\nSELECT ?x WHERE {}\n```", "SELECT ?x WHERE {}"),
         # il tag può essere qualunque: elencarne solo alcuni lasciava "text" nella query
@@ -22,8 +22,8 @@ from shared.ollama_client import OllamaClient
         # blocco non chiuso, tipico quando il modello viene troncato
         ('```json\n{"a": 1}', '{"a": 1}'),
         ("SELECT ?x WHERE {}", "SELECT ?x WHERE {}"),
-        ("Sure! ```cypher\nMATCH (n) RETURN n\n``` spero sia utile", "MATCH (n) RETURN n"),
+        ("Sure! ```cypher\nMATCH (n) RETURN n\n``` hope it helps", "MATCH (n) RETURN n"),
     ],
 )
-def test_code_block_is_stripped(grezzo, atteso):
-    assert OllamaClient.clean_code_block(grezzo) == atteso
+def test_code_block_is_stripped(raw, expected):
+    assert OllamaClient.clean_code_block(raw) == expected

@@ -6,7 +6,7 @@ import numpy as np
 
 from cache.base_cache import BaseCache
 from configs.settings import settings
-from embeddings import get_embedding_model
+from models.embeddings import get_embedding_model
 
 # identificano la forma della risposta attesa
 _AGGREGATION_MARKERS = (

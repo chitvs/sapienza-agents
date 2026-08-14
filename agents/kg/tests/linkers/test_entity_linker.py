@@ -1,12 +1,11 @@
 import pytest
 from connectors.base_connector import EntityCandidate
 from connectors.wikidata_connector import WikidataConnector
-from linkers.base_linker import LinkedEntity
 from linkers.entity_linker import EntityLinker
 from conftest import is_ollama_running
 
 @pytest.mark.parametrize(
-    "mention, atteso",
+    "mention, expected",
     [
         ("Shakespeare's", "Shakespeare"),
         ("Shakespeare’s", "Shakespeare"),
@@ -19,12 +18,12 @@ from conftest import is_ollama_running
         ("Paris", "Paris"),
     ],
 )
-def test_normalize_mention_preserves_proper_nouns(mention, atteso):
+def test_normalize_mention_preserves_proper_nouns(mention, expected):
     """Il possessivo va rimosso, il plurale no: sono due cose diverse."""
-    assert EntityLinker._normalize_mention(mention) == atteso
+    assert EntityLinker._normalize_mention(mention) == expected
 
 def test_extract_proper_nouns_standalone():
-    """Test the regex-based fallback extraction of proper nouns."""
+    """Estrazione dei nomi propri via regex, il ripiego quando GLiNER non trova nulla."""
     linker = EntityLinker.__new__(EntityLinker)
     nouns_en = linker._fallback_extract_proper_nouns("What is the capital of France?")
     assert "France" in nouns_en

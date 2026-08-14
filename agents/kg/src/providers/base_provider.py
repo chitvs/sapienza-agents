@@ -29,7 +29,7 @@ class BaseProvider(ABC):
     def _client_for(self, model_name: str) -> Any:
         """Restituisce il client Ollama del modello, riusandolo se già creato."""
         if model_name not in self._clients:
-            from llm import build_llm_client
+            from models.llm import build_llm_client
 
             self._clients[model_name] = build_llm_client(model_name)
         return self._clients[model_name]

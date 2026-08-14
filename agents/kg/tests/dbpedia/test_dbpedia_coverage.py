@@ -13,7 +13,7 @@ import pytest
 import requests
 
 from pipeline import KGPipeline
-from conftest import contiene_risposta
+from conftest import contains_answer
 from conftest import is_ollama_running
 
 _INDEX_DIR = Path(__file__).resolve().parents[2] / "data" / "dbpedia_ontology"
@@ -64,14 +64,14 @@ def test_date_property(pipeline: KGPipeline) -> None:
     """proprietà di tipo data, che va restituita come letterale e non risolta come risorsa."""
     result = pipeline.run("When was Albert Einstein born?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "1879")
+    assert contains_answer(result, "1879")
 
 @requires_stack
 def test_death_place(pipeline: KGPipeline) -> None:
     """il valore è una risorsa con virgola nell'URI (Princeton,_New_Jersey)."""
     result = pipeline.run("Where did Albert Einstein die?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Princeton")
+    assert contains_answer(result, "Princeton")
 
 @requires_stack
 def test_multi_valued_property(pipeline: KGPipeline) -> None:

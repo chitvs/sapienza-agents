@@ -4,7 +4,7 @@ aggregazioni e domande booleane. Confermano che le riparazioni già fatte reggon
 """
 import pytest
 from pipeline import KGPipeline
-from conftest import contiene_risposta
+from conftest import contains_answer
 from conftest import is_ollama_running
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
@@ -49,28 +49,28 @@ def test_elevation_rome():
     pipeline = KGPipeline()
     result = pipeline.run("What is the elevation of Rome?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "21")
+    assert contains_answer(result, "21")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_capital_germany():
     pipeline = KGPipeline()
     result = pipeline.run("What is the capital of Germany?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Berlin")
+    assert contains_answer(result, "Berlin")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_penicillin_discoverer():
     pipeline = KGPipeline()
     result = pipeline.run("Who discovered penicillin?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Fleming")
+    assert contains_answer(result, "Fleming")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_julius_caesar_birthplace():
     pipeline = KGPipeline()
     result = pipeline.run("Where was Julius Caesar born?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Rome")
+    assert contains_answer(result, "Rome")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_psg_coach():
@@ -83,21 +83,21 @@ def test_highest_mountain_spain():
     pipeline = KGPipeline()
     result = pipeline.run("What is the highest mountain in Spain?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Teide") or contiene_risposta(result, "Mulhacén")
+    assert contains_answer(result, "Teide") or contains_answer(result, "Mulhacén")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_world_war_two_end():
     pipeline = KGPipeline()
     result = pipeline.run("When did World War II end?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "1945")
+    assert contains_answer(result, "1945")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_marie_curie_birth():
     pipeline = KGPipeline()
     result = pipeline.run("When was Marie Curie born?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "1867")
+    assert contains_answer(result, "1867")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_juventus_stadium():
@@ -110,14 +110,14 @@ def test_tokyo_country():
     pipeline = KGPipeline()
     result = pipeline.run("What country is Tokyo located in?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Japan")
+    assert contains_answer(result, "Japan")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_divine_comedy_author():
     pipeline = KGPipeline()
     result = pipeline.run("Who wrote the Divine Comedy?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Dante")
+    assert contains_answer(result, "Dante")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_capital_most_populous_country():
@@ -136,7 +136,7 @@ def test_highest_mountain_italy():
     pipeline = KGPipeline()
     result = pipeline.run("What is the highest mountain in Italy?")
     assert len(result.results) > 0
-    assert any(contiene_risposta(result, n) for n in ("Mont Blanc", "Monte Bianco", "Blanc"))
+    assert any(contains_answer(result, n) for n in ("Mont Blanc", "Monte Bianco", "Blanc"))
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_mayor_capital_france():
@@ -149,14 +149,14 @@ def test_director_inception_birth_country():
     pipeline = KGPipeline()
     result = pipeline.run("In what country was the director of Inception born?")
     assert len(result.results) > 0
-    assert any(contiene_risposta(result, n) for n in ("United Kingdom", "UK", "England"))
+    assert any(contains_answer(result, n) for n in ("United Kingdom", "UK", "England"))
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_real_madrid_stadium_city():
     pipeline = KGPipeline()
     result = pipeline.run("In which city is the Real Madrid stadium located?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Madrid")
+    assert contains_answer(result, "Madrid")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_shakespeare_hometown_country():
@@ -169,18 +169,18 @@ def test_penicillin_discoverer_birthdate():
     pipeline = KGPipeline()
     result = pipeline.run("What is the birth date of the person who discovered penicillin?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "1881")
+    assert contains_answer(result, "1881")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_polonium_discoverer():
     pipeline = KGPipeline()
     result = pipeline.run("Who discovered polonium?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Curie")
+    assert contains_answer(result, "Curie")
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_mona_lisa_museum():
     pipeline = KGPipeline()
     result = pipeline.run("In which museum is the Mona Lisa located?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Louvre")
+    assert contains_answer(result, "Louvre")

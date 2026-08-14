@@ -3,7 +3,7 @@ from pathlib import Path
 from configs.settings import settings
 from shared.ollama_client import OllamaClient
 
-PROMPTS_DIR = Path(__file__).resolve().parent / "configs" / "prompts"
+PROMPTS_DIR = Path(__file__).resolve().parent.parent / "configs" / "prompts"
 
 def build_llm_client(model_name: str | None = None) -> OllamaClient:
     """Costruisce il client Ollama secondo la configurazione dell'agente."""

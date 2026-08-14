@@ -5,10 +5,10 @@ import re
 from typing import Any
 
 from connectors.base_connector import BaseConnector, EntityCandidate
-from embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
+from models.embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
 from linkers.base_linker import BaseLinker, LinkedEntity
-from llm import build_llm_client
-from mention_extraction import extract_entity_mentions
+from models.llm import build_llm_client
+from models.mention_extraction import extract_entity_mentions
 from shared.ollama_client import OllamaClient
 from configs.settings import settings
 

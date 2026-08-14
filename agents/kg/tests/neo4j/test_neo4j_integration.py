@@ -13,7 +13,7 @@ aggregazione e superlativo.
 import pytest
 
 from pipeline import KGPipeline
-from conftest import contiene_risposta
+from conftest import contains_answer
 from conftest import is_ollama_running
 
 def is_neo4j_ready() -> bool:
@@ -49,14 +49,14 @@ def test_movies_acted_in_by_person(pipeline):
     """traversata diretta, seguendo la direzione della relazione."""
     result = pipeline.run("Which movies did Tom Hanks act in?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Apollo 13") or contiene_risposta(result, "Forrest Gump")
+    assert contains_answer(result, "Apollo 13") or contains_answer(result, "Forrest Gump")
 
 @requires_stack
 def test_director_of_movie(pipeline):
     """traversata CONTRO la direzione della relazione: (:Movie)<-[:DIRECTED]-(:Person)."""
     result = pipeline.run("Who directed The Matrix?")
     assert len(result.results) > 0
-    assert contiene_risposta(result, "Wachowski")
+    assert contains_answer(result, "Wachowski")
 
 @requires_stack
 def test_co_actors_two_hops(pipeline):
