@@ -15,6 +15,7 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from configs.settings import settings
+from http_client import get_http_client
 
 logger = logging.getLogger("planner_tools")
 
@@ -35,10 +36,10 @@ async def _call_agent(base_url: str, agent_name: str, question: str) -> dict[str
     """
     url: str = f"{base_url.rstrip('/')}/query"
     try:
-        async with httpx.AsyncClient(timeout=settings.external_call_timeout) as client:
-            resp = await client.post(url, json={"question": question})
-            resp.raise_for_status()
-            return resp.json()
+        client = get_http_client()
+        resp = await client.post(url, json={"question": question}, timeout=settings.external_call_timeout)
+        resp.raise_for_status()
+        return resp.json()
             
     except httpx.TimeoutException:
         msg: str = f"{agent_name}: timeout dopo {settings.external_call_timeout}s"

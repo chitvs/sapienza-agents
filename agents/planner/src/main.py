@@ -7,7 +7,9 @@ quando eseguito come script standalone.
 """
 
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 # Risoluzione dinamica dei percorsi per gli import locali.
 # Garantisce che i moduli dentro 'src' vengano trovati correttamente 
@@ -21,10 +23,28 @@ import uvicorn
 from fastapi import FastAPI
 
 from api.routes import router as api_router
+from http_client import close_http_client, get_http_client
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """
+    Gestisce il ciclo di vita dell'app: inizializza il client HTTP condiviso
+    all'avvio (riutilizzato da tutte le chiamate verso LLM e agenti esterni)
+    e lo chiude correttamente allo shutdown.
+
+    Args:
+        app (FastAPI): L'istanza dell'applicazione.
+    """
+    get_http_client()
+    yield
+    await close_http_client()
+
 
 app: FastAPI = FastAPI(
     title="Planner Agent",
     description="Microservizio che scompone richieste di pianificazione (studio, viaggi, routine) in piani strutturati.",
+    lifespan=lifespan,
 )
 
 app.include_router(api_router)

@@ -11,9 +11,8 @@ import logging
 import re
 from typing import Any
 
-import httpx
-
 from configs.settings import settings
+from http_client import get_http_client
 
 logger = logging.getLogger("planner_llm_client")
 
@@ -99,23 +98,23 @@ class LLMClient:
         if generation_config:
             payload["generationConfig"] = generation_config
 
-        async with httpx.AsyncClient(timeout=settings.gemini_timeout) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_http_client()
+        resp = await client.post(url, headers=headers, json=payload, timeout=settings.gemini_timeout)
+        resp.raise_for_status()
+        data = resp.json()
 
-            candidates = data.get("candidates", [])
-            if not candidates:
-                # Gestiamo il caso in cui Gemini censuri la risposta o la blocchi per policy
-                block_reason = data.get("promptFeedback", {}).get("blockReason")
-                self._log(
-                    f"  [warn] gemini: nessuna candidate, blockReason={block_reason!r}",
-                    level=logging.WARNING,
-                )
-                return ""
+        candidates = data.get("candidates", [])
+        if not candidates:
+            # Gestiamo il caso in cui Gemini censuri la risposta o la blocchi per policy
+            block_reason = data.get("promptFeedback", {}).get("blockReason")
+            self._log(
+                f"  [warn] gemini: nessuna candidate, blockReason={block_reason!r}",
+                level=logging.WARNING,
+            )
+            return ""
 
-            parts = candidates[0].get("content", {}).get("parts", [])
-            return parts[0].get("text", "").strip() if parts else ""
+        parts = candidates[0].get("content", {}).get("parts", [])
+        return parts[0].get("text", "").strip() if parts else ""
 
     async def _generate_ollama(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
         """
@@ -142,10 +141,10 @@ class LLMClient:
         if json_mode:
             payload["format"] = "json"
 
-        async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            return resp.json().get("response", "").strip()
+        client = get_http_client()
+        resp = await client.post(url, json=payload, timeout=settings.ollama_timeout)
+        resp.raise_for_status()
+        return resp.json().get("response", "").strip()
 
     @staticmethod
     def clean_json(raw: str) -> str:
