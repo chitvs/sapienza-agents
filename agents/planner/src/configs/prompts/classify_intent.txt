@@ -23,5 +23,7 @@ EXAMPLES:
 - "Segna come fatta la sessione di ripasso di lunedì" -> {{"intent": "replan"}}
 - "Organizzami invece un weekend a Napoli" -> {{"intent": "new_plan"}}
 - "Devo prepararmi per un altro esame, Analisi 2" -> {{"intent": "new_plan"}}
+- "Aggiungi anche un ripasso di Analisi 1 al piano attuale" -> {{"intent": "replan"}}
+- "Cambiamo completamente il ritmo di questo piano, è troppo intenso" -> {{"intent": "replan"}}
 
 User message: "{question}"

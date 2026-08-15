@@ -527,9 +527,20 @@ class PlannerPipeline:
             elapsed_ms = round((time.time() - start_time) * 1000, 2)
             return self._out_of_scope_response(request, elapsed_ms)
 
-        # La logica di biforcazione del gathering è legata unicamente
-        # alle configurazioni di rete e alla tipologia 'travel'.
-        if settings.context_gathering_mode == "react" and domain == "travel":
+        # 'react': il loop decide da sé se/quali tool chiamare, in qualsiasi dominio.
+        # 'deterministic': chiama kg-agent/multiapi-agent solo per 'travel' (logica
+        #   già interna a _gather_context, invariata).
+        # 'none': nessun recupero di contesto esterno, si propaga solo request.context.
+        context: dict[str, Any]
+        context_errors: list[str]
+        trace: list[dict[str, Any]] | None
+
+        if settings.context_gathering_mode == "none":
+            self._log("\n[info] [step] recupero contesto esterno disattivato (context_gathering_mode='none')")
+            context = dict(request.context or {})
+            context_errors = []
+            trace = None
+        elif settings.context_gathering_mode == "react":
             context, context_errors, trace = await self._gather_context_react(domain, request)  # type: ignore
         else:
             context, context_errors = await self._gather_context(domain, request)  # type: ignore

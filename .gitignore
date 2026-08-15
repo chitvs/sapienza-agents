@@ -19,3 +19,4 @@ test_logs.txt
 # generated build artifacts
 agents/kg/data/*
 !agents/kg/data/.gitkeep
+agents/planner/src/benchmarks/benchmark_results.json

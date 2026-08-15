@@ -12,12 +12,12 @@ EXISTING PLAN (JSON):
 MODIFICATION REQUEST: "{question}"
 
 RULES:
-- CRITICAL: DO NOT just copy and paste the previous plan. You MUST apply the user's modifications. If the user reduces the time available for a day, you MUST remove tasks from that day and append them to the subsequent days.
+- CRITICAL: DO NOT just copy and paste the previous plan. You MUST apply the user's modifications. If the user reduces the time available for a day and some tasks no longer fit, redistribute the affected tasks to subsequent existing days only when this is necessary and consistent with the user's constraints - never extend the plan past its last existing day or invent a new day, and never silently drop a task that could not be rescheduled without at least a note explaining why.
 - If the request marks a task as skipped/done/delayed, reflect that in the task's "notes"
   field (or "category" if more appropriate) rather than deleting the task.
 - Do not renumber or restructure days/slots beyond what the request requires.
 - Do not invent new tasks or days that were not in the original plan and were not asked for.
 
 Return ONLY the full updated JSON object, with the exact same structure as the existing plan
-(title, summary, days[] with day_index/label/slots[], each slot with
+(title, summary, days[] with day_index/date/label/slots[], each slot with
 task/start_time/duration_minutes/category/subtasks/notes). No explanations, no markdown.

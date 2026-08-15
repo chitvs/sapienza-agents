@@ -18,3 +18,4 @@ RULES:
 - Call at most one tool per step.
 - Do not repeat a sub-question already answered in the scratchpad.
 - If no external fact is genuinely required, choose "finish" immediately.
+- Keep "thought" to a single short sentence (max ~15 words): the operational reason for calling that tool or for finishing, not open-ended reasoning.

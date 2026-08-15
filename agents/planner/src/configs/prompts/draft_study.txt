@@ -6,6 +6,7 @@ FOCUS:
 - If the user gives a daily time budget, split it into one or more slots per day rather than a single unbroken block longer than ~90 minutes; short focused sessions with distinct sub-tasks are more realistic than one giant task.
 - Distribute topics progressively across the available days (do not cram everything into the first days), and place review/self-assessment sessions toward the end of the plan rather than only on the very last day.
 - If the user does not specify how much material there is, use a reasonable generic decomposition (e.g. by macro-topic) without inventing specific book chapters or facts you cannot know.
+- Do not invent specific exam dates, deadlines, chapter/page numbers, syllabus contents, or fixed commitments unless the user or the context above provided them.
 
 EXTERNAL CONTEXT (optional, provided by upstream agents):
 {context}

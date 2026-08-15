@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     multiapi_agent_url: str = "http://localhost:8002"
     external_call_timeout: float = 60.0
 
-    context_gathering_mode: Literal["deterministic", "react"] = "react"
+    context_gathering_mode: Literal["deterministic", "react", "none"] = "react"
     max_react_steps: int = 3
 
     # Planner: verbosità pipeline (log della risposta grezza dell'llm, ecc.)
