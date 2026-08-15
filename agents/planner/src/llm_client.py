@@ -16,6 +16,7 @@ from http_client import get_http_client
 
 logger = logging.getLogger("planner_llm_client")
 
+_OPENAI_COMPATIBLE_TIMEOUT: float = 30.0
 
 class LLMClient:
     """
@@ -24,6 +25,12 @@ class LLMClient:
     """
 
     def __init__(self, verbose: bool = False) -> None:
+        """
+        Inizializza la pipeline e il client LLM sottostante.
+
+        Args:
+            verbose (bool): Se True, abilita la stampa a schermo dei log e dei passaggi.
+        """
         self.verbose: bool = verbose
 
     def _log(self, msg: str, level: int = logging.INFO) -> None:
@@ -43,7 +50,8 @@ class LLMClient:
 
     async def generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
         """
-        Prova il provider configurato; se è impostato su 'gemini' e fallisce, ripiega su 'ollama'.
+        Prova il provider configurato (gemini, una chiave di settings.openai_providers,
+        oppure ollama); se il provider primario è remoto e fallisce, ripiega su 'ollama'.
 
         Args:
             prompt (str): Il testo del prompt da inviare.
@@ -53,18 +61,36 @@ class LLMClient:
         Returns:
             str: Il testo generato dal modello LLM.
         """
-        if settings.llm_provider.lower() == "gemini":
-            try:
+        provider: str = settings.llm_provider.lower()
+
+        if provider == "ollama":
+            return await self._generate_ollama(prompt, temperature, json_mode)
+
+        try:
+            if provider == "gemini":
                 return await self._generate_gemini(prompt, temperature, json_mode)
-            except Exception as err:
-                # Il fallback cattura l'errore senza crashare e riprova in locale
-                self._log(
-                    f"  [warn] gemini non disponibile ({err.__class__.__name__}: {err}), fallback su ollama",
-                    level=logging.WARNING,
+
+            provider_config = settings.openai_providers.get(provider)
+            if provider_config is None:
+                raise ValueError(
+                    f"provider '{provider}' non riconosciuto: non è 'gemini'/'ollama' "
+                    "né una chiave presente in openai_providers"
                 )
-                return await self._generate_ollama(prompt, temperature, json_mode)
-        
-        return await self._generate_ollama(prompt, temperature, json_mode)
+
+            return await self._generate_openai_compatible(
+                prompt,
+                temperature,
+                json_mode,
+                base_url=provider_config.get("base_url", ""),
+                api_key=provider_config.get("api_key", ""),
+                model=provider_config.get("model", ""),
+            )
+        except Exception as err:
+            self._log(
+                f"  [warn] {provider} non disponibile ({err.__class__.__name__}: {err}), fallback su ollama",
+                level=logging.WARNING,
+            )
+            return await self._generate_ollama(prompt, temperature, json_mode)
 
     async def _generate_gemini(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
         """
@@ -115,6 +141,61 @@ class LLMClient:
 
         parts = candidates[0].get("content", {}).get("parts", [])
         return parts[0].get("text", "").strip() if parts else ""
+    
+
+    async def _generate_openai_compatible(
+        self,
+        prompt: str,
+        temperature: float,
+        json_mode: bool,
+        base_url: str,
+        api_key: str,
+        model: str,
+    ) -> str:
+        """
+        Chiama un endpoint compatibile con l'API chat/completions di OpenAI
+        (es. OpenRouter) tramite HTTPX.
+
+        Args:
+            prompt (str): Il testo del prompt da inviare.
+            temperature (float): La temperatura di campionamento.
+            json_mode (bool): Se True, richiede output JSON via response_format.
+            base_url (str): URL base dell'endpoint (es. https://openrouter.ai/api/v1).
+            api_key (str): Chiave API per l'autenticazione Bearer.
+            model (str): Nome del modello da invocare presso questo provider.
+
+        Returns:
+            str: La risposta testuale del modello.
+
+        Raises:
+            ValueError: Se base_url, api_key o model sono mancanti.
+            httpx.HTTPError: Se c'è un problema di rete o l'API risponde con un errore.
+        """
+        if not base_url or not api_key or not model:
+            raise ValueError("configurazione provider incompleta: servono base_url, api_key e model")
+
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        client = get_http_client()
+        resp = await client.post(url, headers=headers, json=payload, timeout=_OPENAI_COMPATIBLE_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices", [])
+        if not choices:
+            self._log("  [warn] openai-compatible: nessuna choice nella risposta", level=logging.WARNING)
+            return ""
+
+        return choices[0].get("message", {}).get("content", "").strip()
 
     async def _generate_ollama(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
         """

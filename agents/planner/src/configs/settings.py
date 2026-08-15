@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 current_path: Path = Path(__file__).resolve().parent
 ROOT_DIR: Path = current_path
@@ -43,6 +44,12 @@ class Settings(BaseSettings):
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
     ollama_timeout: float = 600.0
+
+    # Configurazioni multiple per provider OpenAI-compatibili (es. OpenRouter),
+    # caricate come JSON da .env: la chiave è il nome del provider (lo stesso valore 
+    # usabile in LLM_PROVIDER), il valore un dict con base_url/api_key/model.
+    # Es. OPENAI_PROVIDERS={"openrouter_gpt": {"base_url": "...", "api_key": "...", "model": "..."}, ...}
+    openai_providers: dict[str, dict[str, str]] = Field(default_factory=dict)
 
     # Pipeline: fallback
     max_draft_retries: int = 2
