@@ -3,9 +3,9 @@ import logging
 import re
 import time
 from typing import Any
-
+from urllib.parse import unquote
 import requests
-
+from configs.settings import settings
 from connectors.base_connector import (
     BaseConnector,
     EntityCandidate,
@@ -13,31 +13,35 @@ from connectors.base_connector import (
     KnowledgeGraphUnavailableError,
 )
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
+# variabili globali
 DBPEDIA_LOOKUP_API = "https://lookup.dbpedia.org/api/search"
-DBPEDIA_SPARQL = "https://dbpedia.org/sparql"
 DBPEDIA_RESOURCE_NS = "http://dbpedia.org/resource/"
 DBPEDIA_ONTOLOGY_NS = "http://dbpedia.org/ontology/"
 
-# Caratteri ammessi in un nome prefissato SPARQL: se il nome locale della risorsa ne
-# esce (es. "Mercury_(planet)") va citato con l'URI completo fra parentesi angolari.
+# caratteri ammessi in un nome prefissato SPARQL.
 _SAFE_LOCAL_NAME = re.compile(r"^[A-Za-z0-9_\-.%]+$")
 
 class DBpediaConnector(BaseConnector):
     """Connettore verso DBpedia."""
 
-    # si usa dbo:, l'ontologia curata e tipizzata, invece di dbp: estratto dalle infobox
+    # si usa dbo: (l'ontologia curata e tipizzata) invece di dbp: (estratto dalle infobox)
     entity_prefix = "dbr:"
     property_prefix = "dbo:"
+    class_prefix = "dbo:"
+    max_cache_size = 1000
 
-    def __init__(self, language: str = "en", timeout: float = 30.0, max_cache_size: int = 1000) -> None:
+    def __init__(self, language: str = "en") -> None:
         self.language = language
-        self.timeout = timeout
-        self.max_cache_size = max_cache_size
+        self.timeout = settings.dbpedia_timeout
+        self.endpoint = settings.dbpedia_endpoint
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "kg-agent/1.0 (https://github.com/chitvs/sapienza-agents)"})
         self._entity_cache: dict[str, EntityData] = {}
+        self._search_cache: dict[str, list[EntityCandidate]] = {}
+        self._reference_counts: dict[str, float] = {}
 
     @staticmethod
     def _local_name(uri: str) -> str:
@@ -56,12 +60,7 @@ class DBpediaConnector(BaseConnector):
     @staticmethod
     def _readable(local_name: str) -> str:
         """Rende leggibile un nome locale: 'Princeton,_New_Jersey' -> 'Princeton, New Jersey'."""
-        try:
-            from urllib.parse import unquote
-            local_name = unquote(local_name)
-        except Exception:
-            pass
-        return local_name.replace("_", " ").strip()
+        return unquote(local_name).replace("_", " ").strip()
 
     def format_entity_ref(self, entity_id: str) -> str:
         """Cita la risorsa come dbr:Nome se lecito, altrimenti con l'URI completo."""
@@ -69,16 +68,12 @@ class DBpediaConnector(BaseConnector):
             return f"{self.entity_prefix}{entity_id}"
         return f"<{DBPEDIA_RESOURCE_NS}{entity_id}>"
 
-    def looks_like_entity_id(self, value: str) -> bool:
-        """Riconosce sia gli URI completi sia la forma prefissata dbr:."""
-        return str(value).startswith(DBPEDIA_RESOURCE_NS) or str(value).startswith("dbr:")
-
     def _run_sparql(self, query: str) -> list[dict[str, Any]]:
         """Esegue una query di servizio sull'endpoint pubblico, con un retry sul rate limit."""
         for attempt in range(2):
             try:
                 response = self.session.get(
-                    DBPEDIA_SPARQL,
+                    self.endpoint,
                     params={"query": query, "format": "application/sparql-results+json"},
                     timeout=self.timeout,
                 )
@@ -92,8 +87,6 @@ class DBpediaConnector(BaseConnector):
                     logger.debug("query dbpedia fallita, ritento: %s", err)
                     time.sleep(1.5)
                     continue
-                # esauriti i tentativi l'errore va dichiarato: restituire una lista
-                # vuota lo renderebbe indistinguibile da un'entità priva di fatti
                 raise KnowledgeGraphUnavailableError("dbpedia", str(err)) from err
         raise KnowledgeGraphUnavailableError("dbpedia", "nessuna risposta dall'endpoint")
 
@@ -101,6 +94,10 @@ class DBpediaConnector(BaseConnector):
         """Cerca entità con la Lookup API, che indicizza etichette e abstract."""
         if not text or not text.strip():
             return []
+
+        cache_key = f"{text.strip().lower()}:{limit}"
+        if cache_key in self._search_cache:
+            return self._search_cache[cache_key]
 
         try:
             response = self.session.get(
@@ -132,6 +129,15 @@ class DBpediaConnector(BaseConnector):
             type_name = self._strip_highlight(first(doc, "typeName"))
             if type_name:
                 description = f"{type_name}: {description}" if description else type_name
+            try:
+                ref_count = float(first(doc, "refCount") or 0.0)
+            except ValueError:
+                ref_count = 0.0
+            # il limite è per candidato, non per ricerca
+            self._set_cache_entry(
+                self._reference_counts, local, ref_count,
+                limit=self.max_cache_size * settings.linker_candidates,
+            )
             candidates.append(
                 EntityCandidate(
                     id=local,
@@ -139,7 +145,26 @@ class DBpediaConnector(BaseConnector):
                     description=description,
                 )
             )
+
+        self._set_cache_entry(self._search_cache, cache_key, candidates)
         return candidates
+
+    def candidate_prominence(self, candidates: list[EntityCandidate]) -> dict[str, float]:
+        """Numero di risorse che puntano al candidato, letto dalla Lookup API durante la ricerca."""
+        # o si conoscono tutti o nessuno
+        counts = {c.id: self._reference_counts.get(c.id) for c in candidates}
+        return {} if any(v is None for v in counts.values()) else counts
+
+    def is_valid_candidate(self, candidate: EntityCandidate) -> bool:
+        """Scarta le pagine di disambiguazione e le categorie, che non sono entità."""
+        # senza questo filtro finiscono fra i candidati passati al disambiguatore e possono
+        # essere scelte come entità seed, ancorando la query a una pagina di servizio
+        identifier = candidate.id
+        if not identifier:
+            return False
+        if identifier.startswith(("Category:", "List_of_", "Template:")):
+            return False
+        return "(disambiguation)" not in identifier.lower()
 
     def get_entity(self, entity_id: str) -> EntityData:
         """Legge etichetta e proprietà dell'ontologia dbo: di una risorsa."""
@@ -149,7 +174,7 @@ class DBpediaConnector(BaseConnector):
         ref = self.format_entity_ref(entity_id)
         # si escludono: i link di navigazione wiki e i testi lunghi (rumore che
         # saturerebbe il contesto) e i letterali in lingue diverse da quella richiesta,
-        # perche' dbpedia replica molte proprieta' testuali in decine di lingue.
+        # perché dbpedia replica molte proprietà testuali in decine di lingue.
         query = f"""
         SELECT ?p ?o WHERE {{
           {ref} ?p ?o .
@@ -191,16 +216,16 @@ class DBpediaConnector(BaseConnector):
             properties=properties,
         )
 
-        if len(self._entity_cache) >= self.max_cache_size:
-            self._entity_cache.pop(next(iter(self._entity_cache)))
-        self._entity_cache[entity_id] = entity
+        self._set_cache_entry(self._entity_cache, entity_id, entity)
         return entity
 
     def ground_results(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Converte i binding SPARQL in valori leggibili."""
-        # l'URI contiene già il nome dell'entità, quindi l'etichetta si ricava dal nome
-        # locale: una query per valore renderebbe il grounding la parte più fragile e
-        # lenta della pipeline su un endpoint pubblico con rate limit
+        # le ASK restituiscono un booleano, non binding
+        if len(raw_results) == 1 and set(raw_results[0]) == {"boolean"}:
+            return [dict(raw_results[0])]
+
+        # l'URI contiene già il nome dell'entità, quindi l'etichetta si ricava dal nome locale
         grounded = []
         for row in raw_results:
             clean_row: dict[str, Any] = {}
@@ -208,8 +233,7 @@ class DBpediaConnector(BaseConnector):
             for key, binding in row.items():
                 value = binding.get("value", "") if isinstance(binding, dict) else binding
                 if isinstance(value, str) and value.startswith(DBPEDIA_RESOURCE_NS):
-                    # l'uri originale si conserva a parte: permette all'interfaccia di
-                    # rendere il valore un link verificabile alla fonte
+                    # l'uri originale si conserva a parte
                     sources[key] = value
                     value = self._readable(self._local_name(value))
                 clean_row[key] = value

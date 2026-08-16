@@ -17,13 +17,38 @@ function escape(text) {
   return div.innerHTML;
 }
 
+function escapeAttr(text) {
+  // textContent non tocca gli apici: dentro un attributo servono anche quelli,
+  // altrimenti un valore che ne contiene uno chiude l'attributo e ne apre altri
+  return escape(text).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function formatDetail(detail) {
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || JSON.stringify(item)).join("; ");
+  }
+  return typeof detail === "string" ? detail : detail && JSON.stringify(detail);
+}
+
+function safeUrl(uri) {
+  // gli uri arrivano dal knowledge graph, non da noi: uno schema "javascript:"
+  // eseguirebbe codice al clic, quindi si ammettono solo http e https assoluti
+  try {
+    const parsed = new URL(String(uri));
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function renderMeta(entries) {
   const cells = entries.map(([label, value]) => `<span>${escape(label)}: ${escape(value)}</span>`);
   return `<div class="meta">${cells.join("")}</div>`;
 }
 
 function formatSeconds(ms) {
-  return ms ? `${(ms / 1000).toFixed(1)}s` : "?";
+  // 0 è un tempo misurato, non un dato mancante: solo null/undefined valgono "?"
+  return typeof ms === "number" ? `${(ms / 1000).toFixed(1)}s` : "?";
 }
 
 function columnsOf(rows) {
@@ -40,9 +65,9 @@ function renderCell(row, column) {
   const value = row[column];
   if (value === null || value === undefined) return "";
   const text = escape(String(value));
-  const uri = row._sources ? row._sources[column] : null;
+  const uri = row._sources ? safeUrl(row._sources[column]) : null;
   return uri
-    ? `${text}<a class="src" href="${escape(uri)}" target="_blank" rel="noopener">fonte</a>`
+    ? `${text}<a class="src" href="${escapeAttr(uri)}" target="_blank" rel="noopener">fonte</a>`
     : text;
 }
 
@@ -115,8 +140,14 @@ form.addEventListener("submit", async event => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(body),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `errore ${response.status}`);
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+    }
+    if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
     output.innerHTML = mode === "kg" ? renderKg(data) : renderOrchestrator(data);
   } catch (err) {
     output.innerHTML = `<p class="err">${escape(err.message)}</p>`;

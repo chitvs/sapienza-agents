@@ -1,6 +1,6 @@
 import logging
 from typing import Any
-
+from executors.cypher_executor import CypherExecutionError
 from connectors.base_connector import (
     BaseConnector,
     EntityCandidate,
@@ -8,15 +8,21 @@ from connectors.base_connector import (
     KnowledgeGraphUnavailableError,
 )
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
-# Chiavi con cui un umano (e quindi anche l'LLM) identifica un nodo scrivendo Cypher,
+# chiavi con cui un umano (e quindi anche l'LLM) identifica un nodo scrivendo Cypher,
 # in ordine di preferenza: (:Person {name: ...}), (:Movie {title: ...}).
 _NAME_PROPERTIES = ("name", "title", "label")
 
-# Lo schema di un grafo è regolare, quindi un campione piccolo basta a dedurre le
+# lo schema di un grafo è regolare, quindi un campione piccolo basta a dedurre le
 # proprietà di una label senza pesare sui database grandi.
 _SCHEMA_SAMPLE_SIZE = 100
+
+# il meta-grafo delle relazioni tollera un campione molto più ampio delle proprietà,
+# perché deve scoprire anche i tipi rari; resta un limite perché senza è una
+# scansione di tutti gli archi
+_SCHEMA_RELATIONSHIP_SAMPLE = 50000
 
 class Neo4jConnector(BaseConnector):
     """Connettore verso un'istanza Neo4j: cerca le entità interrogando il grafo stesso."""
@@ -25,24 +31,8 @@ class Neo4jConnector(BaseConnector):
     entity_prefix = ""
     property_prefix = ""
 
-    def __init__(
-        self,
-        executor: Any = None,
-        uri: str | None = None,
-        user: str | None = None,
-        password: str | None = None,
-    ) -> None:
-        if executor is not None:
-            self.executor = executor
-        else:
-            from configs.settings import settings
-            from executors.cypher_executor import CypherExecutor
-
-            self.executor = CypherExecutor(
-                uri=uri or settings.neo4j_uri,
-                user=user or settings.neo4j_user,
-                password=password or settings.neo4j_password,
-            )
+    def __init__(self, executor: Any) -> None:
+        self.executor = executor
         self._schema_cache: dict[str, Any] | None = None
 
     @staticmethod
@@ -59,7 +49,7 @@ class Neo4jConnector(BaseConnector):
 
     def _run(self, query: str, params: dict[str, Any]) -> list[dict[str, Any]]:
         """Esegue una query di servizio del connettore."""
-        return self.executor.run_internal(query, params)
+        return self.executor.execute_trusted(query, params)
 
     def search_entity(self, text: str, limit: int = 5) -> list[EntityCandidate]:
         """Cerca nodi per nome, dando la precedenza al match esatto su quello parziale."""
@@ -149,10 +139,9 @@ class Neo4jConnector(BaseConnector):
                 ({"name": r["prop"], "type": self._normalize_type(r.get("type"))} for r in rows if r.get("prop")),
                 key=lambda p: p["name"],
             )
-        except Exception:
+        except CypherExecutionError:
             logger.debug("valueType() non disponibile per :%s, deduco il tipo da un campione", label)
 
-        # valueType() esiste solo dalle versioni recenti di Neo4j 5
         try:
             rows = self._run(
                 f"MATCH (n:`{label}`) WITH n LIMIT $sample "
@@ -193,8 +182,7 @@ class Neo4jConnector(BaseConnector):
 
     def get_schema(self) -> dict[str, Any]:
         """Introspeziona label, proprietà e meta-grafo delle relazioni, con cache per istanza."""
-        # lo schema non cambia durante l'esecuzione: rileggerlo a ogni domanda
-        # costerebbe diversi round-trip inutili
+        # lo schema non cambia durante l'esecuzione
         if self._schema_cache is not None:
             return self._schema_cache
 
@@ -205,10 +193,11 @@ class Neo4jConnector(BaseConnector):
                 if label:
                     schema["labels"][label] = self._label_properties(label)
 
+            # il campione basta a scoprire quali relazioni esistono
             rel_rows = self._run(
-                "MATCH (a)-[r]->(b) "
+                "MATCH (a)-[r]->(b) WITH a, r, b LIMIT $sample "
                 "RETURN DISTINCT labels(a)[0] AS from_label, type(r) AS rel_type, labels(b)[0] AS to_label",
-                {},
+                {"sample": _SCHEMA_RELATIONSHIP_SAMPLE},
             )
             schema["relationships"] = [
                 {"from": r.get("from_label"), "type": r.get("rel_type"), "to": r.get("to_label")}

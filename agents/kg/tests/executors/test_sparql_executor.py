@@ -1,27 +1,36 @@
+"""
+Test dell'esecutore SPARQL.
+"""
+
 import pytest
 from executors.sparql_executor import SPARQLExecutor, SPARQLExecutionError
 
-def test_execute():
-    executor = SPARQLExecutor(timeout=30.0)
-    query = """
-    PREFIX wd: <http://www.wikidata.org/entity/>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?label WHERE {
-      wd:Q937 rdfs:label ?label .
-      FILTER(LANG(?label) = "en")
-    }
-    """
-    try:
-        results = executor.execute(query)
-        assert len(results) > 0
-        assert results[0]["label"]["value"] == "Albert Einstein"
-    except SPARQLExecutionError as e:
-        err_str = str(e)
-        if "Timeout" in err_str or "HTTP 5" in err_str or "502" in err_str or "503" in err_str:
-            pytest.skip("Wikidata SPARQL endpoint non raggiungibile o errore server")
-        raise
+def test_conversational_answer_is_rejected_locally():
+    executor = SPARQLExecutor(endpoint="http://invalido.localhost/sparql", timeout=1.0)
+    with pytest.raises(SPARQLExecutionError, match="SYNTAX_ERROR"):
+        executor.execute("Certainly! Here is the query you asked for.")
 
-def test_execute_syntax_error():
-    executor = SPARQLExecutor(timeout=30.0)
-    with pytest.raises(SPARQLExecutionError):
-        executor.execute("SELECT ?x WHERE { wd:Q937 ")
+@pytest.mark.parametrize(
+    "query",
+    [
+        "INSERT DATA { wd:Q1 rdfs:label 'x' } ; SELECT ?x WHERE { ?x ?p ?o }",
+        "DELETE WHERE { ?x ?p ?o } SELECT ?x WHERE { ?x ?p ?o }",
+        "DROP GRAPH <http://example.org/g> SELECT ?x WHERE { ?x ?p ?o }",
+        "SELECT ?x WHERE { ?x ?p ?o } LOAD <http://example.org/d>",
+    ],
+)
+def test_update_queries_are_rejected(query):
+    executor = SPARQLExecutor(endpoint="http://invalido.localhost/sparql", timeout=1.0)
+    with pytest.raises(SPARQLExecutionError, match="clausola di scrittura"):
+        executor.execute(query)
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT ?x WHERE { ?x rdfs:label 'Move' }",
+        "SELECT ?add WHERE { ?add ?p <http://dbpedia.org/resource/Move> }",
+        "SELECT ?x WHERE { ?x dbo:type dbr:Add }",
+    ],
+)
+def test_read_only_guard_does_not_reject_valid_queries(query):
+    SPARQLExecutor.assert_read_only(query)

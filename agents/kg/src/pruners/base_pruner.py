@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from connectors.base_connector import BaseConnector
 
 @dataclass
 class PrunedSchema:
@@ -9,22 +9,10 @@ class PrunedSchema:
 class BasePruner(ABC):
     """Seleziona la porzione di schema del KG da passare all'LLM."""
 
-    @staticmethod
-    def _prefixes(connector_or_client: Any) -> tuple[str, str]:
-        """Legge dal connector i prefissi di entità e proprietà del KG in uso."""
-        return (
-            getattr(connector_or_client, "entity_prefix", ""),
-            getattr(connector_or_client, "property_prefix", ""),
-        )
+    def __init__(self, connector: BaseConnector) -> None:
+        self.connector = connector
 
     @abstractmethod
-    def prune(
-        self,
-        seed_entity_ids: list[str],
-        connector_or_client: Any = None,
-        max_items: int = 40,
-        question: str = "",
-        max_hops: int = 2,
-    ) -> PrunedSchema:
+    def prune(self, seed_entity_ids: list[str], question: str = "") -> PrunedSchema:
         """Estrae e formatta il contesto di schema per l'LLM."""
         raise NotImplementedError

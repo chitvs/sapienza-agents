@@ -60,7 +60,11 @@ async def supervisor_node(state: AgentState) -> dict:
         "Rispondi esclusivamente con un JSON in formato oggetto (es. {\"selected_agents\": [\"planner_agent\"]}) oppure un array (es. [\"planner_agent\"])."
     )
 
-    response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=question)])
+    try:
+        response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=question)])
+    except Exception as err:
+        logger.warning("Supervisor non raggiungibile: %s", err)
+        return {"selected_agents": []}
 
     selected = []
     try:
@@ -159,5 +163,10 @@ async def synthesizer_node(state: AgentState) -> dict:
     )
     user_content = f"Domanda: {question}\n\nEvidenze:\n{context_str}"
 
-    response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_content)])
+    try:
+        response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_content)])
+    except Exception as err:
+        logger.warning("Sintesi della risposta fallita: %s", err)
+        return {"final_response": f"modello locale non raggiungibile, verifica che ollama sia in esecuzione ({err})"}
+
     return {"final_response": response.content}

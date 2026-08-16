@@ -3,29 +3,36 @@ import time
 import logging
 import requests
 from typing import Any
+from configs.settings import settings
 from connectors.base_connector import (
     BaseConnector,
     EntityCandidate,
     EntityData,
-    EntityReference,
     KnowledgeGraphUnavailableError,
 )
 
+# configurazione logger
 logger = logging.getLogger(__name__)
+
+# variabili globali
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 
 # forma degli uri con cui l'endpoint restituisce i riferimenti a entità
 WIKIDATA_ENTITY_NS = "wikidata.org/entity/Q"
 
-class WikimediaConnector(BaseConnector):
+_ISO_DATETIME = re.compile(r"^[+-]?\d{4,}-\d{2}-\d{2}T[\d:]+Z$")
+
+class WikidataConnector(BaseConnector):
     """Connettore verso le API REST di Wikidata, con cache in-memory e richieste batch."""
 
     entity_prefix = "wd:"
     property_prefix = "wdt:"
+    class_prefix = "wd:"
+    max_cache_size = 1000
 
-    def __init__(self, language: str = "en", max_cache_size: int = 1000):
+    def __init__(self, language: str = "en"):
         self.language = language
-        self.max_cache_size = max_cache_size
+        self.timeout = settings.wikidata_timeout
         self.session = requests.Session()
         self.session.headers.update({
             "User-Agent": "kg-agent/1.0 (https://github.com/chitvs/sapienza-agents)",
@@ -35,20 +42,15 @@ class WikimediaConnector(BaseConnector):
         self._entity_cache: dict[str, EntityData] = {}
         self._search_cache: dict[str, list[EntityCandidate]] = {}
 
-    def _set_cache_entry(self, cache_dict: dict, key: str, value: Any) -> None:
-        """Memorizza un elemento in cache rispettando il limite massimo."""
-        if len(cache_dict) >= self.max_cache_size and key not in cache_dict:
-            first_key = next(iter(cache_dict))
-            del cache_dict[first_key]
-        cache_dict[key] = value
-
     def _get_with_retry(self, params: dict[str, str]) -> requests.Response:
         """Esegue una GET con retry e backoff in caso di rate limiting (HTTP 429)."""
         max_retries = 5
         for attempt in range(max_retries):
             try:
                 time.sleep(0.15)
-                response = self.session.get(WIKIDATA_API, params=params)
+                # senza timeout una connessione che si pianta blocca per sempre il thread
+                # che serve la richiesta, e i retry non entrano mai in gioco
+                response = self.session.get(WIKIDATA_API, params=params, timeout=self.timeout)
                 if response.status_code == 429:
                     logger.info("rate limit 429 incontrato, attesa %d s...", 3 * (attempt + 1))
                     time.sleep(3.0 * (attempt + 1))
@@ -108,15 +110,42 @@ class WikimediaConnector(BaseConnector):
                     label_str = self._extract_multilingual_text(labels) or pid
                     self._set_cache_entry(self._property_label_cache, pid, (label_str, is_identifier))
             except Exception as err:
+                # il ripiego non va messo in cache: un guasto transitorio lascerebbe quelle
+                # proprietà senza etichetta per tutta la vita del processo
                 logger.warning("recupero etichette proprietà fallito: %s", err)
-                for pid in batch:
-                    self._set_cache_entry(self._property_label_cache, pid, (pid, False))
 
         return {p: self._property_label_cache.get(p, (p, False)) for p in prop_ids}
 
-    def search_entity(self, text: str, limit: int = 5, language: str | None = None) -> list[EntityCandidate]:
+    @staticmethod
+    def _claim_value(claim: dict) -> str:
+        """Riduce uno statement al suo valore testuale, o stringa vuota se non ne ha uno leggibile."""
+        val = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
+        if isinstance(val, str):
+            return val
+        if not isinstance(val, dict):
+            return ""
+        if "id" in val:
+            return str(val["id"])
+        if "time" in val:
+            # +1879-03-14T00:00:00Z -> 1879-03-14
+            return str(val["time"]).lstrip("+").split("T")[0]
+        if "amount" in val:
+            return str(val["amount"]).lstrip("+")
+        return ""
+
+    @classmethod
+    def _claims_to_properties(cls, entity: dict) -> dict[str, list[str]]:
+        """Estrae le proprietà dai claim dell'entità, scartando quelle senza valori leggibili."""
+        properties: dict[str, list[str]] = {}
+        for prop_id, claims in (entity.get("claims") or {}).items():
+            values = [v for v in (cls._claim_value(c) for c in claims) if v]
+            if values:
+                properties[prop_id] = values
+        return properties
+
+    def search_entity(self, text: str, limit: int = 5) -> list[EntityCandidate]:
         """Cerca entità su Wikidata a partire dal testo di una menzione."""
-        search_lang = language or self.language
+        search_lang = self.language
         cache_key = f"{text.strip().lower()}:{limit}:{search_lang}"
         if cache_key in self._search_cache:
             return self._search_cache[cache_key]
@@ -177,31 +206,7 @@ class WikimediaConnector(BaseConnector):
                 entities = data.get("entities", {})
 
                 # le proprietà di tutte le entità si raccolgono insieme per risolverne le etichette in un colpo solo
-                all_raw_props = {}
-                for eid in batch:
-                    ent_data = entities.get(eid, {})
-                    raw_properties = {}
-                    if "claims" in ent_data:
-                        for prop_id, claims_list in ent_data["claims"].items():
-                            values = []
-                            for claim in claims_list:
-                                if "mainsnak" in claim and "datavalue" in claim["mainsnak"]:
-                                    if "value" in claim["mainsnak"]["datavalue"]:
-                                        val = claim["mainsnak"]["datavalue"]["value"]
-                                        if isinstance(val, dict):
-                                            if "id" in val:
-                                                values.append(EntityReference(id=val["id"]))
-                                            elif "time" in val:
-                                                raw_time = str(val["time"]).lstrip("+")
-                                                date_part = raw_time.split("T")[0]
-                                                values.append(date_part)
-                                            elif "amount" in val:
-                                                values.append(str(val["amount"]).lstrip("+"))
-                                        elif isinstance(val, str):
-                                            values.append(val)
-                            if values:
-                                raw_properties[prop_id] = values
-                    all_raw_props[eid] = raw_properties
+                all_raw_props = {eid: self._claims_to_properties(entities.get(eid, {})) for eid in batch}
 
                 all_prop_ids = list({pid for props in all_raw_props.values() for pid in props})
                 prop_meta = self._fetch_property_labels(all_prop_ids)
@@ -236,17 +241,33 @@ class WikimediaConnector(BaseConnector):
         res = self.get_entities([entity_id])
         return res.get(entity_id, EntityData(id=entity_id, label=entity_id, description="", properties={}))
 
-    def looks_like_entity_id(self, value: str) -> bool:
-        """Su Wikidata i riferimenti a entità sono QID nella forma Q seguita da cifre."""
-        return bool(re.match(r"^Q\d+$", str(value)))
+    def candidate_prominence(self, candidates: list[EntityCandidate]) -> dict[str, float]:
+        """Conta i sitelink di ogni candidato: è la misura di notorietà che Wikidata espone."""
+        ids = [c.id for c in candidates if re.match(r"^Q\d+$", c.id)]
+        counts: dict[str, float] = {}
+        for i in range(0, len(ids), 50):
+            params = {
+                "action": "wbgetentities",
+                "ids": "|".join(ids[i:i + 50]),
+                "props": "sitelinks",
+                "format": "json",
+            }
+            try:
+                entities = self._get_with_retry(params).json().get("entities", {})
+            except Exception as err:
+                # senza prior la disambiguazione resta possibile con la sola descrizione
+                logger.warning("recupero sitelink dei candidati fallito: %s", err)
+                return {}
+            for qid, data in entities.items():
+                counts[qid] = float(len(data.get("sitelinks") or {}))
+        return counts
 
     def is_valid_candidate(self, candidate: EntityCandidate) -> bool:
         """Accetta solo QID ben formati, escludendo disambigue e categorie Wikimedia."""
-        cid = str(getattr(candidate, "id", "") or "")
-        if not re.match(r"^Q\d+$", cid):
+        if not re.match(r"^Q\d+$", candidate.id):
             return False
 
-        desc = (getattr(candidate, "description", "") or "").lower()
+        desc = (candidate.description or "").lower()
         junk_markers = ("disambiguation", "wikimedia category", "categoria wikimedia")
         return not any(marker in desc for marker in junk_markers)
 
@@ -258,6 +279,9 @@ class WikimediaConnector(BaseConnector):
 
     def ground_results(self, raw_results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Risolve gli id grezzi in etichette leggibili con un'unica richiesta batch."""
+        if len(raw_results) == 1 and set(raw_results[0]) == {"boolean"}:
+            return [dict(raw_results[0])]
+
         entity_ids: set[str] = set()
         for row in raw_results:
             for var_data in row.values():
@@ -282,11 +306,10 @@ class WikimediaConnector(BaseConnector):
                 if WIKIDATA_ENTITY_NS in val:
                     entity_id = val.split("/")[-1]
                     grounded_row[var_name] = resolved_labels.get(entity_id, val)
-                    # l'uri originale si conserva a parte: permette all'interfaccia di
-                    # rendere il valore un link verificabile alla fonte
+                    # l'uri originale si conserva a parte
                     sources[var_name] = val
-                elif val.startswith(("+", "-")) and "T" in val and "Z" in val:
-                    # date ISO 8601 Wikidata: +1879-03-14T00:00:00Z -> 1879-03-14
+                elif _ISO_DATETIME.match(val):
+                    # +1879-03-14T00:00:00Z -> 1879-03-14, tenendo il segno degli anni a.C.
                     grounded_row[var_name] = val.lstrip("+").split("T")[0]
                 else:
                     grounded_row[var_name] = val
