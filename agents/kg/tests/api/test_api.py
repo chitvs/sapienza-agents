@@ -1,6 +1,11 @@
-from fastapi.testclient import TestClient
-from main import app
+"""
+Test per l'API.
+"""
+
 import pytest
+from fastapi.testclient import TestClient
+import api.routes as routes
+from main import app
 from conftest import is_ollama_running
 
 client = TestClient(app)
@@ -16,13 +21,6 @@ def test_unsupported_kg_is_rejected():
     assert "yago" in res.json()["detail"]
 
 def test_missing_prerequisite_explains_itself(monkeypatch):
-    """
-    L'indice FAISS è un artefatto di build: se manca, il messaggio che spiega come generarlo
-    deve arrivare al client. Il codice è 500 e non 503, perché è un guasto nostro e non del
-    knowledge graph, che invece è perfettamente raggiungibile.
-    """
-    import api.routes as routes
-
     def failing_build(*args, **kwargs):
         raise FileNotFoundError("Indice FAISS delle proprietà non trovato. Eseguire 'python scripts/ingest_wikidata.py'.")
 
@@ -46,10 +44,6 @@ def test_query():
     assert "1879-03-14" in str(data["results"][0])
 
 def test_shutdown_releases_the_graph_connections():
-    """Le pipeline vivono per tutta la vita del processo: senza questo il pool Bolt di
-    Neo4j non veniva mai chiuso, e close() era un metodo pubblico senza chiamanti."""
-    import api.routes as routes
-
     closed = []
 
     class _FakeExecutor:

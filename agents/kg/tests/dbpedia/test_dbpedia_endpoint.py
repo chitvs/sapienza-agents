@@ -1,11 +1,8 @@
 """
-Test che interrogano davvero DBpedia: la Lookup API e l'endpoint SPARQL pubblico.
-
-Stavano fra i test di unità di connectors/, dove la sonda di rete girava al momento della
-collection e faceva pagare un round-trip anche a chi lanciava solo i test offline.
+Test sulla Lookup API e sull'endpoint SPARQL di DBpedia.
 """
-import pytest
 
+import pytest
 from conftest import is_dbpedia_reachable
 from connectors.dbpedia_connector import DBpediaConnector
 
@@ -27,8 +24,6 @@ def test_get_entity_live():
 
 @requires_dbpedia
 def test_prominence_is_complete_or_empty():
-    """La guardia neutra del linker scatta solo su un dizionario vuoto: una notorietà
-    parziale farebbe passare per "il meno noto" un candidato semplicemente sconosciuto."""
     connector = DBpediaConnector()
     cands = connector.search_entity("Mercury", limit=5)
     prominence = connector.candidate_prominence(cands)

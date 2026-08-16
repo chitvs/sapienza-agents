@@ -1,12 +1,8 @@
 """
-Test che interrogano davvero Wikidata: le API di ricerca e l'endpoint SPARQL.
-
-Stavano fra i test di unità di connectors/ ed executors/, dove la sonda di rete girava
-al momento della collection e faceva pagare un round-trip anche a chi lanciava solo
-`pytest tests/cache`. Qui sono insieme agli altri test end-to-end su Wikidata.
+Test sulle API di ricerca e sull'endpoint SPARQL di Wikidata.
 """
-import pytest
 
+import pytest
 from conftest import is_wikidata_endpoint_reachable, is_wikidata_reachable
 from connectors.wikidata_connector import WikidataConnector
 from executors.sparql_executor import SPARQLExecutionError, SPARQLExecutor
@@ -39,14 +35,12 @@ def test_ground_results():
 
 @needs_wikidata
 def test_ground_results_keeps_source_uri():
-    """L'uri originale va conservato: senza, l'interfaccia non può linkare la fonte."""
     connector = WikidataConnector()
     raw = [{"item": {"value": "http://www.wikidata.org/entity/Q937"},
             "date": {"value": "+1879-03-14T00:00:00Z"}}]
     grounded = connector.ground_results(raw)[0]
     assert grounded["item"] == "Albert Einstein"
     assert grounded["_sources"]["item"] == "http://www.wikidata.org/entity/Q937"
-    # i letterali non sono entità e non hanno fonte da linkare
     assert "date" not in grounded["_sources"]
 
 @needs_endpoint

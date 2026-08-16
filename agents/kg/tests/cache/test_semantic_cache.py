@@ -1,5 +1,8 @@
-import pytest
+"""
+Test della cache semantica.
+"""
 
+import pytest
 from cache.semantic_cache import SemanticCache
 from pipeline import KGPipeline
 from translators.base_translator import BaseTranslator
@@ -28,8 +31,6 @@ class _FakeLinker:
         return []
 
 class _FakeProvider:
-    """Provider con componenti finti: serve a esercitare la politica di caching senza rete né LLM."""
-
     def __init__(self, rows):
         class Executor:
             def execute(self, query):
@@ -47,10 +48,6 @@ class _FakeProvider:
     [([], False), ([{"x": "value"}], True)],
 )
 def test_only_non_empty_results_are_cached(rows, expected_in_cache):
-    """
-    Un risultato vuoto può nascere da un guasto transitorio assorbito dai retry: metterlo in
-    cache lo renderebbe definitivo per la domanda e per ogni parafrasi sopra soglia.
-    """
     cache = SemanticCache()
     pipeline = KGPipeline(provider=_FakeProvider(rows), cache=cache, target_kg="wikidata")
     pipeline.run("Who is the mayor of Rome?")
@@ -66,7 +63,6 @@ def test_cache_hit_exact():
     assert confidence == 0.9
 
 def test_cache_hit_paraphrase():
-    """domande semanticamente equivalenti devono fare hit anche se il testo è diverso."""
     cache = SemanticCache(capacity=5)
     cache.set("What is the capital of France?", "SELECT ?c WHERE {...}", [{"capital": "Paris"}], confidence=1.0)
     res = cache.get("What's the capital city of France?")
@@ -74,7 +70,6 @@ def test_cache_hit_paraphrase():
     assert res[1][0]["capital"] == "Paris"
 
 def test_cache_miss_different_question():
-    """domande diverse (anche se su entità o proprietà correlate) non devono fare hit."""
     cache = SemanticCache(capacity=5)
     cache.set("What is the capital of France?", "SELECT ?c WHERE {...}", [{"capital": "Paris"}])
     assert cache.get("What is the capital of Germany?") is None
@@ -85,8 +80,6 @@ def test_cache_miss():
     assert cache.get("a question that was never cached") is None
 
 def test_count_question_does_not_hit_list_question():
-    """Conteggio ed elenco hanno embedding quasi identici (0.9405) ma risposte di natura
-    diversa, e nessuna soglia li separa: una vera parafrasi scora 0.9442, appena sopra."""
     cache = SemanticCache()
     cache.set(
         "Which movies did Tom Hanks act in?",
@@ -96,7 +89,6 @@ def test_count_question_does_not_hit_list_question():
     assert cache.get("How many movies did Tom Hanks act in?") is None
 
 def test_list_question_does_not_hit_count_question():
-    """la partizione deve valere in entrambe le direzioni."""
     cache = SemanticCache()
     cache.set(
         "How many official languages does Switzerland have?",
@@ -106,7 +98,6 @@ def test_list_question_does_not_hit_count_question():
     assert cache.get("What are the official languages of Switzerland?") is None
 
 def test_paraphrase_of_a_count_question_still_hits():
-    """due domande di conteggio equivalenti devono continuare a fare hit."""
     cache = SemanticCache()
     cache.set(
         "How many movies did Tom Hanks act in?",
@@ -116,38 +107,30 @@ def test_paraphrase_of_a_count_question_still_hits():
     assert cache.get("How many movies has Tom Hanks acted in?") is not None
 
 def test_sequel_number_does_not_hit_the_base_title():
-    """Il numero del seguito distingue due film ma non l'embedding: 0.9375 contro una soglia
-    di 0.92, mentre una parafrasi vera sta a 0.9567 e nessuna soglia le separa."""
     cache = SemanticCache()
     cache.set("when kung fu panda was released", "SELECT ?d WHERE {...}", [{"d": "2008-06-06"}])
     assert cache.get("when kung fu panda 3 was released") is None
 
 def test_base_title_does_not_hit_the_sequel():
-    """La partizione deve valere in entrambe le direzioni."""
     cache = SemanticCache()
     cache.set("when kung fu panda 3 was released", "SELECT ?d WHERE {...}", [{"d": "2016-01-23"}])
     assert cache.get("when kung fu panda was released") is None
 
 def test_different_years_never_share_an_answer():
-    """Stesso meccanismo su un qualificatore temporale, dove il numero è l'intera domanda."""
     cache = SemanticCache()
     cache.set("what was the population of France in 2010", "SELECT ?p WHERE {...}", [{"p": "64"}])
     assert cache.get("what was the population of France in 2020") is None
 
 def test_paraphrase_containing_the_same_number_still_hits():
-    """La partizione separa numeri diversi, non penalizza le domande che ne contengono uno."""
     cache = SemanticCache()
     cache.set("when was kung fu panda 3 released", "SELECT ?d WHERE {...}", [{"d": "2016-01-23"}])
     assert cache.get("when was kung fu panda 3 released?") is not None
 
 def test_decimals_are_not_split():
-    """Con \\d+ e sorted() "3.5" e "5.3" davano la stessa chiave, e la partizione che
-    doveva separarli li rimetteva insieme."""
     assert SemanticCache._numeric_tokens("da 3.5 a 5.3") == ("3.5", "5.3")
     assert SemanticCache._numeric_tokens("da 5.3 a 3.5") == ("5.3", "3.5")
 
 def test_a_non_positive_capacity_disables_the_cache():
-    """Azzerare la capacità da ambiente è il modo naturale di spegnerla: non deve sollevare."""
     cache = SemanticCache(capacity=0)
     cache.set("when kung fu panda was released", "q", [{"d": "2008"}])
     assert cache.get("when kung fu panda was released") is None

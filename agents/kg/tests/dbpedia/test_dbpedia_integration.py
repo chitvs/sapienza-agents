@@ -1,12 +1,8 @@
 """
 Test di integrazione end-to-end su DBpedia.
-
-Richiedono Ollama attivo, l'endpoint pubblico DBpedia raggiungibile e l'indice FAISS
-dell'ontologia già costruito (scripts/ingest_dbpedia.py). Se manca qualcosa i test
-vengono saltati invece di fallire.
 """
-from pathlib import Path
 
+from pathlib import Path
 import pytest
 from pipeline import KGPipeline
 from conftest import contains_answer, is_dbpedia_reachable, is_ollama_running
@@ -24,14 +20,12 @@ def pipeline():
 
 @requires_stack
 def test_birth_place(pipeline):
-    """proprietà diretta su una risorsa."""
     result = pipeline.run("Where was Albert Einstein born?")
     assert len(result.results) > 0
     assert contains_answer(result, "Ulm")
 
 @requires_stack
 def test_director_with_explicit_label(pipeline):
-    """richiede rdfs:label esplicito: su DBpedia non esiste un servizio di etichette."""
     result = pipeline.run("Who directed The Matrix?")
     assert len(result.results) > 0
     assert contains_answer(result, "Wachowski")
@@ -49,7 +43,6 @@ def test_count_aggregation(pipeline):
 
 @requires_stack
 def test_multi_hop_to_final_value(pipeline):
-    """catena a due hop: il risultato deve essere la popolazione, non il nome della capitale."""
     result = pipeline.run("What is the population of the capital of Japan?")
     assert len(result.results) > 0
     assert any(any(ch.isdigit() for ch in str(v)) for row in result.results for v in row.values())

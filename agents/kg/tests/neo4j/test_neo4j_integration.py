@@ -1,17 +1,10 @@
 """
-Test di integrazione end-to-end sul knowledge graph Neo4j (dominio cinema).
-
-Richiedono due cose attive: un'istanza Neo4j con il movie graph ufficiale caricato
-(vedi scripts/setup_neo4j_movies.py) e Ollama. Se manca una delle due, i test vengono
-saltati invece di fallire, così la suite resta eseguibile anche su una macchina che
-sta lavorando solo su Wikidata.
-
-Le domande coprono le stesse dimensioni di complessità già verificate su Wikidata:
-traversata diretta, traversata contro la direzione della relazione, catena a due hop,
-aggregazione e superlativo.
+Test di integrazione end-to-end su Neo4j.
 """
-import pytest
 
+import pytest
+from configs.settings import settings
+from executors.cypher_executor import CypherExecutor, CypherExecutionError
 from pipeline import KGPipeline
 from conftest import contains_answer, is_neo4j_ready, is_ollama_running
 
@@ -26,43 +19,33 @@ def pipeline():
 
 @requires_stack
 def test_movies_acted_in_by_person(pipeline):
-    """traversata diretta, seguendo la direzione della relazione."""
     result = pipeline.run("Which movies did Tom Hanks act in?")
     assert len(result.results) > 0
     assert contains_answer(result, "Apollo 13") or contains_answer(result, "Forrest Gump")
 
 @requires_stack
 def test_director_of_movie(pipeline):
-    """traversata CONTRO la direzione della relazione: (:Movie)<-[:DIRECTED]-(:Person)."""
     result = pipeline.run("Who directed The Matrix?")
     assert len(result.results) > 0
     assert contains_answer(result, "Wachowski")
 
 @requires_stack
 def test_co_actors_two_hops(pipeline):
-    """catena a due hop attraverso un nodo intermedio (il film) verso altri attori."""
     result = pipeline.run("Which actors worked with Keanu Reeves?")
     assert len(result.results) > 0
 
 @requires_stack
 def test_count_aggregation(pipeline):
-    """aggregazione COUNT."""
     result = pipeline.run("How many movies did Tom Hanks act in?")
     assert len(result.results) > 0
 
 @requires_stack
 def test_superlative_most_recent(pipeline):
-    """superlativo: ORDER BY + LIMIT su una proprietà numerica."""
     result = pipeline.run("What is the most recent movie in the graph?")
     assert len(result.results) > 0
 
 @requires_stack
 def test_destructive_question_never_modifies_the_graph(pipeline):
-    """Davanti a una richiesta di cancellazione la pipeline può legittimamente fallire, ma
-    non deve mai modificare il grafo: è quest'ultima la proprietà da garantire."""
-    from executors.cypher_executor import CypherExecutor, CypherExecutionError
-    from configs.settings import settings
-
     counter = CypherExecutor(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
@@ -75,11 +58,9 @@ def test_destructive_question_never_modifies_the_graph(pipeline):
 
     try:
         result = pipeline.run("Delete all movies from the database")
-        # se la pipeline ha restituito una query, deve essere di sola lettura
         if result.query:
             CypherExecutor.assert_read_only(result.query)
     except CypherExecutionError:
-        # il guard ha rifiutato la query di scrittura: esito accettabile
         pass
 
     after = counter.execute_trusted(count_query, {})[0]["c"]

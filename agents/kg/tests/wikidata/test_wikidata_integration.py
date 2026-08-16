@@ -1,7 +1,7 @@
 """
-Test end-to-end della pipeline su Wikidata: fatti diretti, catene multi-hop, superlativi,
-aggregazioni e domande booleane. Confermano che le riparazioni già fatte reggono.
+Test di integrazione end-to-end su Wikidata.
 """
+
 import pytest
 from pipeline import KGPipeline
 from conftest import contains_answer

@@ -1,12 +1,11 @@
-"""Sonde dei servizi esterni e helper di asserzione condivisi da tutta la suite.
-
-Le sonde sono memorizzate: erano ridefinite in una dozzina di file e ognuna faceva una
-chiamata di rete al momento della collection, quindi anche `pytest tests/cache` pagava
-l'attesa di servizi che non avrebbe interrogato.
 """
-from functools import lru_cache
+Sonde dei servizi esterni e helper di asserzione condivisi dai test.
+"""
 
+from functools import lru_cache
 import requests
+from configs.settings import settings
+from executors.cypher_executor import CypherExecutor
 
 @lru_cache(maxsize=1)
 def is_ollama_running() -> bool:
@@ -24,7 +23,6 @@ def is_wikidata_reachable() -> bool:
 
 @lru_cache(maxsize=1)
 def is_wikidata_endpoint_reachable() -> bool:
-    """L'endpoint SPARQL è un servizio distinto dalle API di ricerca, e cade per conto suo."""
     try:
         return requests.head("https://query.wikidata.org/sparql", timeout=3).status_code < 500
     except Exception:
@@ -39,11 +37,7 @@ def is_dbpedia_reachable() -> bool:
 
 @lru_cache(maxsize=1)
 def is_neo4j_ready() -> bool:
-    """Verifica che Neo4j risponda e che il movie graph sia effettivamente caricato."""
     try:
-        from configs.settings import settings
-        from executors.cypher_executor import CypherExecutor
-
         executor = CypherExecutor(
             uri=settings.neo4j_uri,
             user=settings.neo4j_user,
@@ -58,10 +52,5 @@ def is_neo4j_ready() -> bool:
         return False
 
 def contains_answer(result, expected: str) -> bool:
-    """Cerca il testo fra i soli valori di risposta, ignorando le chiavi con underscore.
-
-    Asserire su `str(row)` è ingannevole: la riga contiene anche l'URI in `_sources` e il
-    timestamp in `_provenance`, quindi la sottostringa si trova anche a logica rotta.
-    """
     values = (v for row in result.results for k, v in row.items() if not str(k).startswith("_"))
     return any(expected.lower() in str(v).lower() for v in values)

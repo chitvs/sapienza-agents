@@ -1,16 +1,16 @@
-import pytest
+"""
+Test del connettore Wikidata.
+"""
 
+import pytest
 from connectors.wikidata_connector import WikidataConnector
 
 @pytest.mark.parametrize(
     "value, expected",
     [
-        # l'endpoint sparql non antepone il segno, l'api wbgetentities sì: entrambe le forme
-        # sono la stessa data e devono arrivare all'utente leggibili
         ("1879-03-14T00:00:00Z", "1879-03-14"),
         ("+1879-03-14T00:00:00Z", "1879-03-14"),
         ("-0044-03-15T00:00:00Z", "-0044-03-15"),
-        # non sono date e non vanno toccate
         ("The Matrix", "The Matrix"),
         ("21", "21"),
         ("1879-03-14", "1879-03-14"),

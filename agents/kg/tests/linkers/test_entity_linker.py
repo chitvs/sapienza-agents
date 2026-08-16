@@ -1,3 +1,7 @@
+"""
+Test dell'entity linker.
+"""
+
 import pytest
 from connectors.base_connector import EntityCandidate
 from connectors.wikidata_connector import WikidataConnector
@@ -10,7 +14,6 @@ from conftest import is_ollama_running
         ("Shakespeare's", "Shakespeare"),
         ("Shakespeare’s", "Shakespeare"),
         ("the Beatles'", "the Beatles"),
-        # la 's' finale appartiene al nome: toglierla cercherebbe un'altra entità
         ("Tom Hanks", "Tom Hanks"),
         ("United States", "United States"),
         ("The Rolling Stones", "The Rolling Stones"),
@@ -19,11 +22,9 @@ from conftest import is_ollama_running
     ],
 )
 def test_normalize_mention_preserves_proper_nouns(mention, expected):
-    """Il possessivo va rimosso, il plurale no: sono due cose diverse."""
     assert EntityLinker._normalize_mention(mention) == expected
 
 def test_extract_proper_nouns_standalone():
-    """Estrazione dei nomi propri via regex, il ripiego quando GLiNER non trova nulla."""
     linker = EntityLinker.__new__(EntityLinker)
     nouns_en = linker._fallback_extract_proper_nouns("What is the capital of France?")
     assert "France" in nouns_en
@@ -35,8 +36,6 @@ def test_extract_proper_nouns_standalone():
     assert "Sergio Mattarella" in nouns_person
 
 class _FakeLLM:
-    """Le firme ricalcano quelle di OllamaClient: un finto che diverge nasconde le rotture."""
-
     def __init__(self, raw_output: str, parsed: str) -> None:
         self.raw_output = raw_output
         self.parsed = parsed
@@ -51,10 +50,6 @@ class _FakeLLM:
         return self.parsed
 
 def test_disambiguate_candidates_reads_the_json_choice():
-    """Il percorso completo di _disambiguate_candidates, filtro dei candidati compreso:
-    _select_from_output è verificato a parte in test_candidate_ranking.py."""
-    # si sceglie di proposito il secondo candidato: sul primo il test passerebbe anche se
-    # il parsing fallisse, perché il ripiego per notorietà indicherebbe comunque quello
     linker = EntityLinker.__new__(EntityLinker)
     linker.llm_client = _FakeLLM(
         raw_output='Thinking: Q126916 is a goddess, but the question is about the journal.\n'
@@ -70,7 +65,6 @@ def test_disambiguate_candidates_reads_the_json_choice():
     assert res.id == "Q15817918"
 
 def test_possessive_is_stripped_only_if_the_kg_knows_nothing():
-    """"McDonald's" è un nome proprio, "Shakespeare's" un genitivo: decide il KG, non la regex."""
     class _FakeConnector:
         def __init__(self, known):
             self.known = known

@@ -1,9 +1,12 @@
+"""
+Test del traduttore SPARQL su query complesse.
+"""
+
 import pytest
 from translators.sparql_translator import WikidataSPARQLTranslator as SPARQLTranslator
 from conftest import is_ollama_running
 
 def test_sanitize_aggregations():
-    """Un aggregato senza alias non è SPARQL valido: va racchiuso e battezzato."""
     translator = SPARQLTranslator.__new__(SPARQLTranslator)
     raw = "SELECT COUNT (?item) WHERE { wd:Q458 wdt:P527 ?item . }"
     assert translator.sanitize(raw).startswith("SELECT (COUNT(?item) AS ?count) WHERE")

@@ -1,3 +1,7 @@
+"""
+Test della configurazione e dei prompt.
+"""
+
 from configs.settings import settings
 from models.llm import PROMPTS_DIR
 
