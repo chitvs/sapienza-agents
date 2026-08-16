@@ -1,5 +1,10 @@
-from typing import Any
+"""
+Contratto HTTP di /query.
 
+Definisce QueryRequest e QueryResponse, ovvero come devono essere richieste e risposte.
+"""
+
+from typing import Any
 from pydantic import BaseModel, Field
 
 class QueryRequest(BaseModel):
@@ -8,7 +13,6 @@ class QueryRequest(BaseModel):
         description="domanda in linguaggio naturale, in inglese",
         json_schema_extra={"examples": ["What is the birth date of Albert Einstein?"]},
     )
-    # se non viene impostato un target_kg, viene preso dai settings
     target_kg: str | None = Field(
         default=None,
         description="knowledge graph da interrogare: 'wikidata', 'dbpedia' o 'neo4j'",

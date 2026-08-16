@@ -1,8 +1,13 @@
+"""
+Endpoint HTTP dell'agente kg:
+
+    - GET /health
+    - POST /query
+"""
+
 import threading
 import time
-
 from fastapi import APIRouter, HTTPException
-
 from api.schemas import QueryRequest, QueryResponse
 from configs.settings import settings
 from connectors.base_connector import KnowledgeGraphUnavailableError
