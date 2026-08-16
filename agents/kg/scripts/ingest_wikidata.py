@@ -8,16 +8,17 @@ import logging
 import sys
 import time
 from pathlib import Path
-
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from ontology_index import build_and_save  # noqa: E402
+from ontology_index import build_and_save
 
+# configurazione logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# variabili globali
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "wikidata_ontology"
@@ -96,8 +97,6 @@ def fetch_common_classes(top_n: int = 500) -> list[dict]:
         if qid.startswith("Q"):
             class_ids.append(qid)
 
-    # le etichette si risolvono a parte: unendo SERVICE wikibase:label alla query di
-    # aggregazione il join avverrebbe prima del raggruppamento e andrebbe in timeout
     logger.info("risolvo etichette e descrizioni di %d classi...", len(class_ids))
     classes = []
     for start in range(0, len(class_ids), BATCH_SIZE):

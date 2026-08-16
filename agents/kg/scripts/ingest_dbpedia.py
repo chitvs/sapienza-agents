@@ -8,16 +8,17 @@ import logging
 import sys
 import time
 from pathlib import Path
-
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from ontology_index import build_and_save  # noqa: E402
+from ontology_index import build_and_save
 
+# configurazione logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# variabili globali
 DBPEDIA_SPARQL = "https://dbpedia.org/sparql"
 DBPEDIA_ONTOLOGY_NS = "http://dbpedia.org/ontology/"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "dbpedia_ontology"
@@ -29,7 +30,7 @@ SESSION.headers.update({
 })
 
 def run_sparql(query: str, retries: int = 3) -> list[dict]:
-    """Esegue una query sull'endpoint pubblico."""
+    """Esegue una query sull'endpoint pubblico e ne restituisce le righe dei risultati JSON."""
     for attempt in range(retries):
         try:
             response = SESSION.get(
@@ -37,6 +38,8 @@ def run_sparql(query: str, retries: int = 3) -> list[dict]:
                 params={"query": query, "format": "application/sparql-results+json"},
                 timeout=120,
             )
+            # 429 e 503 sono codici di endpoint occupato
+            # aspettiamo e ritentiamo
             if response.status_code in (429, 503):
                 wait = 3.0 * (attempt + 1)
                 logger.warning("endpoint occupato (%s), attendo %.0fs...", response.status_code, wait)
@@ -52,6 +55,7 @@ def run_sparql(query: str, retries: int = 3) -> list[dict]:
     return []
 
 def local_name(uri: str) -> str:
+    """Trasforma un URI nel suo nome locale."""
     return uri[len(DBPEDIA_ONTOLOGY_NS):] if uri.startswith(DBPEDIA_ONTOLOGY_NS) else uri.rsplit("/", 1)[-1]
 
 def fetch_ontology_terms(term_type: str) -> list[dict]:

@@ -1,4 +1,6 @@
-"""Costruzione dell'indice FAISS dell'ontologia, condivisa dai due script di ingest."""
+"""
+Costruzione dell'indice FAISS dell'ontologia, condivisa dai due script di ingest.
+"""
 
 import json
 import logging
@@ -8,7 +10,9 @@ from pathlib import Path
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from models.embeddings import RETRIEVAL_MODEL_NAME
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
 def build_embedding_text(item: dict) -> str:
@@ -27,16 +31,9 @@ def create_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatIP:
 
 def build_and_save(properties: list[dict], classes: list[dict], output_dir: Path) -> None:
     """Incorpora proprietà e classi e scrive indici e metadati, allineati per posizione."""
-    # la guardia sta qui e non nei due chiamanti: un insieme vuoto farebbe costruire
-    # l'indice da una matrice priva di dimensioni, con un IndexError che arriverebbe a
-    # scaricamento ed embedding già pagati
     if not properties or not classes:
         missing = "proprietà" if not properties else "classi"
         sys.exit(f"nessuna {missing} scaricata: l'endpoint potrebbe essere non disponibile, riprova più tardi.")
-
-    # il modello va letto da src: l'indice deve nascere nello stesso spazio vettoriale in
-    # cui il VectorPruner incorpora le domande a runtime
-    from models.embeddings import RETRIEVAL_MODEL_NAME
 
     logger.info("carico il modello di embedding (%s)...", RETRIEVAL_MODEL_NAME)
     model = SentenceTransformer(RETRIEVAL_MODEL_NAME)
@@ -44,8 +41,7 @@ def build_and_save(properties: list[dict], classes: list[dict], output_dir: Path
     output_dir.mkdir(parents=True, exist_ok=True)
     for name, items in (("properties", properties), ("classes", classes)):
         logger.info("genero gli embedding per %d %s...", len(items), name)
-        # si incorporano i testi del corpus, quindi senza il prefisso di istruzione che
-        # bge richiede solo lato query
+
         emb = model.encode(
             [build_embedding_text(i) for i in items], show_progress_bar=True, convert_to_numpy=True
         )
