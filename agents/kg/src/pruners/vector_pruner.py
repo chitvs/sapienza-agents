@@ -2,17 +2,17 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
-
 import numpy as np
 import faiss
-
 from connectors.base_connector import BaseConnector, KnowledgeGraphUnavailableError
 from models.embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
 from configs.settings import settings
 from pruners.base_pruner import BasePruner, PrunedSchema
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
+# variabili globali
 _DEFAULT_INDEX_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "wikidata_ontology"
 
 # le classi servono solo a suggerire il tipo del soggetto: oltre le prime aggiungono rumore
@@ -93,9 +93,6 @@ class VectorPruner(BasePruner):
         try:
             entities_dict = self.connector.get_entities(seed_entity_ids)
         except KnowledgeGraphUnavailableError:
-            # il connettore solleva di proposito invece di restituire un dizionario vuoto:
-            # degradare qui significherebbe spendere una traduzione LLM su uno schema privo
-            # di proprietà verificate, per poi fallire comunque all'esecuzione
             raise
         except Exception as err:
             logger.warning("entità seed non leggibili dal KG: %s", err)
@@ -131,8 +128,6 @@ class VectorPruner(BasePruner):
         existing_pids = self._seed_context(seed_entity_ids, context_lines) if seed_entity_ids else set()
 
         if question:
-            # la domanda si incorpora una volta sola: proprietà e classi sono due indici
-            # ma la stessa query, e l'inferenza è l'intero costo di questo passo
             q_vec = self._embed_question(question)
             relevant_props = self._search(
                 self.prop_index, self.prop_meta, q_vec, settings.schema_search_pool

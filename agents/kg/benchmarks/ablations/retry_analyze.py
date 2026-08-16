@@ -1,4 +1,6 @@
-"""Riassume i risultati di retry_collect.py: identicita' e recupero per configurazione."""
+"""
+Riassume i risultati di retry_collect.py.
+"""
 
 import json
 import sys
@@ -16,8 +18,7 @@ configs = sorted({t["config"] for r in records for t in r["trials"]})
 print(f"\n{'config':12} {'identiche':>12} {'con righe':>12} {'errori':>8} {'>=1 recupero':>14}")
 for name in configs:
     trials = [t for r in records for t in r["trials"] if t["config"] == name]
-    # i tentativi in cui l'LLM è fallito non hanno prodotto una query: tenerli nel
-    # denominatore farebbe sembrare la rigenerazione meno ripetitiva di quanto sia
+    # i tentativi in cui l'LLM è fallito non hanno prodotto una query
     comparable = [t for t in trials if t["identical"] is not None]
     identical = sum(1 for t in comparable if t["identical"])
     with_rows = sum(1 for t in trials if t["outcome"] == "rows")

@@ -1,7 +1,8 @@
 import re
 import threading
 from typing import Any
-
+from neo4j import GraphDatabase
+from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired, TransientError
 from executors.base_executor import BaseExecutor, QueryExecutionError
 from utils.query_text import mask_literals
 
@@ -23,6 +24,11 @@ class CypherExecutor(BaseExecutor):
         "db.schema.visualization", "db.schema.nodetypeproperties", "db.schema.reltypeproperties",
     )
 
+    # un deadlock o un cambio di leader non dicono nulla sulla query: TransientError è un
+    # Neo4jError e SessionExpired un DriverError, quindi senza elencarli qui ricadevano fra
+    # gli errori definitivi e facevano riscrivere una query corretta
+    _TRANSIENT_ERRORS = (ServiceUnavailable, SessionExpired, TransientError)
+
     def __init__(
         self,
         uri: str,
@@ -37,20 +43,13 @@ class CypherExecutor(BaseExecutor):
         self.database = database
         self.timeout = timeout
         self._driver: Any = None
-        # il driver apre un pool di connessioni: crearne due e perderne uno lascerebbe
-        # connessioni Bolt orfane, e gli endpoint sincroni girano nel threadpool di FastAPI
+        # il driver apre un pool di connessioni
         self._driver_lock = threading.Lock()
 
     def _get_driver(self) -> Any:
         """Crea il driver al primo uso, così importare il modulo non richiede un DB attivo."""
         with self._driver_lock:
             if self._driver is None:
-                try:
-                    from neo4j import GraphDatabase
-                except ImportError as err:
-                    raise CypherExecutionError(
-                        "driver neo4j non installato: eseguire 'pip install neo4j'"
-                    ) from err
                 self._driver = GraphDatabase.driver(
                     self.uri,
                     auth=(self.user, self.password),
@@ -83,15 +82,6 @@ class CypherExecutor(BaseExecutor):
 
     def _run_with_params(self, query: str, params: dict[str, Any] | None) -> list[dict[str, Any]]:
         """Esegue la query in una transazione di sola lettura."""
-        try:
-            from neo4j.exceptions import Neo4jError, ServiceUnavailable, SessionExpired, TransientError
-            # un deadlock o un cambio di leader non dicono nulla sulla query: TransientError
-            # è un Neo4jError e SessionExpired un DriverError, quindi senza elencarle qui
-            # ricadevano fra gli errori definitivi e facevano riscrivere una query corretta
-            transient = (ServiceUnavailable, SessionExpired, TransientError)
-        except ImportError:
-            Neo4jError = transient = ()  # type: ignore[assignment, misc]
-
         session_kwargs = {"database": self.database} if self.database else {}
 
         try:
@@ -103,7 +93,7 @@ class CypherExecutor(BaseExecutor):
                     return [record.data() for record in tx.run(query, params or {})]
         except CypherExecutionError:
             raise
-        except transient as err:
+        except self._TRANSIENT_ERRORS as err:
             raise CypherExecutionError(
                 f"neo4j non raggiungibile su {self.uri}: {err}", retryable=True
             ) from err

@@ -1,13 +1,16 @@
 import logging
 import threading
 from typing import Any
+from gliner import GLiNER
 from configs.settings import settings
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
+# variabili globali
 _MODEL_NAME = "urchade/gliner_mediumv2.1"
 
-# Categorie generiche di soggetti su cui si interroga un KG generalista
+# categorie generiche di soggetti su cui si interroga un KG generalista
 _ENTITY_LABELS = [
     "person",
     "organization",
@@ -19,8 +22,6 @@ _ENTITY_LABELS = [
 ]
 
 _MODEL: Any = None
-# vale quanto detto in embeddings.py: due richieste concorrenti al primo avvio
-# caricherebbero due volte i 2 GB di GLiNER
 _MODEL_LOCK = threading.Lock()
 
 def _get_model() -> Any:
@@ -29,8 +30,6 @@ def _get_model() -> Any:
     with _MODEL_LOCK:
         if _MODEL is None:
             logger.info("carico il modello GLiNER per l'estrazione zero-shot delle entità...")
-            from gliner import GLiNER
-
             _MODEL = GLiNER.from_pretrained(_MODEL_NAME)
         return _MODEL
 

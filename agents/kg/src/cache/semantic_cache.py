@@ -1,9 +1,7 @@
 import re
 import threading
 from typing import Any
-
 import numpy as np
-
 from cache.base_cache import BaseCache
 from configs.settings import settings
 from models.embeddings import get_embedding_model
@@ -11,7 +9,6 @@ from models.embeddings import get_embedding_model
 # identificano la forma della risposta attesa
 _AGGREGATION_MARKERS = (
     "how many", "how much", "the number of", "count of", "total number",
-    "quanti", "quante", "numero di",
 )
 
 class SemanticCache(BaseCache):

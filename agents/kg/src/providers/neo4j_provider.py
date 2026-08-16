@@ -1,17 +1,16 @@
 from configs.settings import settings
+from connectors.neo4j_connector import Neo4jConnector
+from correctors.error_conditioned_corrector import ErrorConditionedCorrector
+from executors.cypher_executor import CypherExecutor
+from linkers.entity_linker import EntityLinker
 from providers.base_provider import BaseProvider
+from pruners.neo4j_schema_pruner import Neo4jSchemaPruner
+from translators.cypher_translator import CypherTranslator
 
 class Neo4jProvider(BaseProvider):
     """Componenti per Neo4j."""
 
     def _build_components(self) -> None:
-        from connectors.neo4j_connector import Neo4jConnector
-        from correctors.error_conditioned_corrector import ErrorConditionedCorrector
-        from executors.cypher_executor import CypherExecutor
-        from linkers.entity_linker import EntityLinker
-        from pruners.neo4j_schema_pruner import Neo4jSchemaPruner
-        from translators.cypher_translator import CypherTranslator
-
         self.executor = CypherExecutor(
             uri=settings.neo4j_uri,
             user=settings.neo4j_user,

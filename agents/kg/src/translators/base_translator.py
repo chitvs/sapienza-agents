@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-
 from configs.settings import settings
 from models.llm import build_llm_client
 from shared.ollama_client import OllamaClient

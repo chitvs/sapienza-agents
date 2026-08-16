@@ -17,15 +17,17 @@ if root_dir and str(root_dir) not in sys.path:
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
+import uvicorn
 from fastapi import FastAPI
-
 from api.routes import close_pipelines, router as api_router
 from configs.settings import settings
+from models.embeddings import SIMILARITY_MODEL_NAME, RETRIEVAL_MODEL_NAME, get_embedding_model
+from models.mention_extraction import extract_entity_mentions
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
-# librerie che a livello INFO registrano una riga per ogni richiesta http: a modelli già
-# in cache sono una ventina di righe per avvio, che seppelliscono la traccia della pipeline
+# librerie che a livello INFO registrano una riga per ogni richiesta http, da silenziare
 _NOISY_LIBRARIES = ("httpx", "httpcore", "urllib3", "huggingface_hub", "filelock")
 
 def _configure_logging() -> None:
@@ -41,13 +43,6 @@ _configure_logging()
 
 def _warmup_models() -> None:
     """Carica in anticipo i modelli locali, altrimenti caricati alla prima domanda."""
-    # GLiNER e i due modelli sentence-transformers pesano insieme oltre un gigabyte:
-    # caricarli all'avvio sposta l'attesa dove non si vede. I modelli Ollama non si
-    # toccano: li gestisce Ollama, e sollecitarli qui li caricherebbe solo per farli
-    # sfrattare a vicenda dalla VRAM.
-    from models.embeddings import SIMILARITY_MODEL_NAME, RETRIEVAL_MODEL_NAME, get_embedding_model
-    from models.mention_extraction import extract_entity_mentions
-
     for model_name in (RETRIEVAL_MODEL_NAME, SIMILARITY_MODEL_NAME):
         get_embedding_model(model_name)
     extract_entity_mentions("warm up")
@@ -61,8 +56,6 @@ async def lifespan(app: FastAPI):
             _warmup_models()
             logger.info("modelli pronti.")
         except Exception as err:
-            # il precaricamento è un'ottimizzazione: se fallisce si torna al
-            # caricamento pigro invece di impedire l'avvio del servizio
             logger.warning("precaricamento fallito, si procede con caricamento pigro: %s", err)
     yield
     close_pipelines()
@@ -75,6 +68,4 @@ app = FastAPI(
 app.include_router(api_router)
 
 if __name__ == "__main__":
-    import uvicorn
-
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

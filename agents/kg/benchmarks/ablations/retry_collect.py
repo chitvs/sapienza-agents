@@ -1,9 +1,9 @@
 """
 Misura se la rigenerazione ReAct produce davvero una query diversa, e a quale temperatura.
 
-Per ogni domanda arriva fino alla prima esecuzione; se restituisce 0 righe, rigenera la
-query con il prompt di feedback a piu' configurazioni di campionamento e riporta quante
-volte l'output e' identico all'originale e quante volte recupera righe.
+Per ogni domanda arriva fino alla prima esecuzione. Se restituisce 0 righe, rigenera la
+query con il prompt di feedback a più configurazioni di campionamento e riporta quante
+volte l'output è identico all'originale e quante volte recupera righe.
 """
 
 import argparse
@@ -19,13 +19,15 @@ sys.path.insert(0, str(KG / "src"))
 sys.path.insert(0, str(KG / "benchmarks"))
 sys.path.insert(0, str(REPO))
 
-from evaluate_qald import (  # noqa: E402
+from cache.null_cache import NullCache
+from evaluate_qald import (
     BENCHMARKS,
     english_question,
     load_dataset,
     question_kind,
     stratified_sample,
 )
+from pipeline import KGPipeline
 
 CONFIGS = [("t0.0", 0.0, None), ("t1.0_p0.9", 1.0, 0.9)]
 
@@ -40,9 +42,6 @@ def main() -> None:
     args = parser.parse_args()
 
     EVALUATIONS_DIR.mkdir(parents=True, exist_ok=True)
-
-    from cache.null_cache import NullCache
-    from pipeline import KGPipeline
 
     dataset = [e for e in load_dataset(BENCHMARK) if english_question(e)]
     entries = stratified_sample(dataset, args.sample, args.seed, BENCHMARK.predicates)

@@ -16,10 +16,6 @@ logger = logging.getLogger("kg_pipeline")
 
 def _is_infrastructure_failure(err: Exception) -> bool:
     """Distingue un guasto del knowledge graph da una query che il modello ha sbagliato."""
-    # i tentativi di recupero degradano a zero righe quando è il modello a sbagliare, ma un
-    # endpoint irraggiungibile non è una risposta: restituire una lista vuota lo renderebbe
-    # indistinguibile da "il grafo non contiene questo dato", e nel benchmark il guasto di
-    # rete finirebbe addebitato alla traduzione
     if isinstance(err, KnowledgeGraphUnavailableError):
         return True
     return isinstance(err, QueryExecutionError) and err.retryable
@@ -64,7 +60,6 @@ class KGPipeline:
         # nulla sulla qualità della traduzione e non deve abbassare la confidenza
         corrections_used = 0
 
-        # il ciclo esce sempre da dentro: o restituisce i risultati o rilancia l'errore
         for attempt in range(max_retries + 1):
             try:
                 raw_results = self.executor.execute(current_query)
@@ -112,9 +107,6 @@ class KGPipeline:
                 )
                 if relaxed_results:
                     return relaxed_results, relaxed_query, True
-            # qui si cattura di proposito qualunque eccezione, non le sole
-            # QueryExecutionError: questo è un tentativo di recupero facoltativo, e anche
-            # un guasto del correttore (che passa dall'LLM) deve degradare a zero righe
             except Exception as err:
                 if _is_infrastructure_failure(err):
                     raise
@@ -149,9 +141,9 @@ class KGPipeline:
     @staticmethod
     def _compute_confidence(results: list[dict], corrections_used: int, react_retry_used: bool) -> float:
         """Confidenza euristica dedotta da quanta fatica è servita per ottenere il risultato."""
-        # non è una probabilità calibrata: penalizza le correzioni e le rigenerazioni,
-        # che segnalano una traduzione iniziale imprecisa. I ritentativi per guasto
-        # transitorio dell'endpoint non contano: misurerebbero la rete, non la traduzione.
+        # penalizza le correzioni e le rigenerazioni, che segnalano una traduzione
+        # iniziale imprecisa. I ritentativi per guasto transitorio dell'endpoint
+        # non contano perchè misurerebbero la rete, non la traduzione.
         if not results:
             return 0.0
 

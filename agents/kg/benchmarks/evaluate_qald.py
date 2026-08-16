@@ -25,6 +25,11 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 
+from cache.null_cache import NullCache
+from executors.sparql_executor import SPARQLExecutor
+from pipeline import KGPipeline
+from providers import build_provider
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 REPORT_DIR = DATA_DIR / "evaluations"
 
@@ -302,8 +307,6 @@ def executed_gold(entries: list[dict], benchmark: Benchmark, provider: Any) -> d
     cache_path = path.with_name(f"{path.stem}_executed.json")
     cache: dict[str, Any] = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.exists() else {}
 
-    from executors.sparql_executor import SPARQLExecutor
-
     # le query gold sono più pesanti delle nostre e si eseguono una volta sola: vale la
     # pena concedere più tempo del timeout della pipeline, invece di perdere domande
     executor = SPARQLExecutor(endpoint=provider.executor.endpoint, timeout=60)
@@ -393,10 +396,6 @@ def main() -> None:
         print(f"domande nel campione: {describe(entries)}")
         print("(--dry-run non applica il filtro sul gold utilizzabile, che richiede l'endpoint)")
         return
-
-    from cache.null_cache import NullCache
-    from pipeline import KGPipeline
-    from providers import build_provider
 
     provider = build_provider(benchmark.target_kg)
     executed = args.gold == "executed"

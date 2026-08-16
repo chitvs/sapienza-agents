@@ -1,4 +1,6 @@
-"""Utilità di analisi testuale delle query, condivise fra traduttori ed esecutori."""
+"""
+Utilità di analisi testuale delle query, condivise fra traduttori ed esecutori.
+"""
 
 import re
 from collections.abc import Callable

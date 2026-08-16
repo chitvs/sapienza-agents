@@ -1,8 +1,6 @@
 import re
 from typing import Any
-
 import requests
-
 from executors.base_executor import BaseExecutor, QueryExecutionError
 from utils.query_text import mask_literals
 

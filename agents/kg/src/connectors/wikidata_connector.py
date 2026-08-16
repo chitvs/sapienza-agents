@@ -11,7 +11,10 @@ from connectors.base_connector import (
     KnowledgeGraphUnavailableError,
 )
 
+# configurazione logger
 logger = logging.getLogger(__name__)
+
+# variabili globali
 WIKIDATA_API = "https://www.wikidata.org/w/api.php"
 
 # forma degli uri con cui l'endpoint restituisce i riferimenti a entità
@@ -303,8 +306,7 @@ class WikidataConnector(BaseConnector):
                 if WIKIDATA_ENTITY_NS in val:
                     entity_id = val.split("/")[-1]
                     grounded_row[var_name] = resolved_labels.get(entity_id, val)
-                    # l'uri originale si conserva a parte: permette all'interfaccia di
-                    # rendere il valore un link verificabile alla fonte
+                    # l'uri originale si conserva a parte
                     sources[var_name] = val
                 elif _ISO_DATETIME.match(val):
                     # +1879-03-14T00:00:00Z -> 1879-03-14, tenendo il segno degli anni a.C.

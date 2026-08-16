@@ -1,6 +1,5 @@
 import logging
 from typing import Any
-
 from executors.cypher_executor import CypherExecutionError
 from connectors.base_connector import (
     BaseConnector,
@@ -9,15 +8,17 @@ from connectors.base_connector import (
     KnowledgeGraphUnavailableError,
 )
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
-# Chiavi con cui un umano (e quindi anche l'LLM) identifica un nodo scrivendo Cypher,
+# chiavi con cui un umano (e quindi anche l'LLM) identifica un nodo scrivendo Cypher,
 # in ordine di preferenza: (:Person {name: ...}), (:Movie {title: ...}).
 _NAME_PROPERTIES = ("name", "title", "label")
 
-# Lo schema di un grafo è regolare, quindi un campione piccolo basta a dedurre le
+# lo schema di un grafo è regolare, quindi un campione piccolo basta a dedurre le
 # proprietà di una label senza pesare sui database grandi.
 _SCHEMA_SAMPLE_SIZE = 100
+
 # il meta-grafo delle relazioni tollera un campione molto più ampio delle proprietà,
 # perché deve scoprire anche i tipi rari; resta un limite perché senza è una
 # scansione di tutti gli archi
@@ -141,7 +142,6 @@ class Neo4jConnector(BaseConnector):
         except CypherExecutionError:
             logger.debug("valueType() non disponibile per :%s, deduco il tipo da un campione", label)
 
-        # valueType() esiste solo dalle versioni recenti di Neo4j 5
         try:
             rows = self._run(
                 f"MATCH (n:`{label}`) WITH n LIMIT $sample "
@@ -182,8 +182,7 @@ class Neo4jConnector(BaseConnector):
 
     def get_schema(self) -> dict[str, Any]:
         """Introspeziona label, proprietà e meta-grafo delle relazioni, con cache per istanza."""
-        # lo schema non cambia durante l'esecuzione: rileggerlo a ogni domanda
-        # costerebbe diversi round-trip inutili
+        # lo schema non cambia durante l'esecuzione
         if self._schema_cache is not None:
             return self._schema_cache
 
@@ -194,10 +193,7 @@ class Neo4jConnector(BaseConnector):
                 if label:
                     schema["labels"][label] = self._label_properties(label)
 
-            # il campione basta a scoprire quali relazioni esistono, come già si fa per le
-            # proprietà: senza limite è una scansione di tutti gli archi, che su un grafo
-            # grande supera il timeout e rende il KG inutilizzabile, perché il primo
-            # tentativo non riesce mai e non c'è schema alternativo
+            # il campione basta a scoprire quali relazioni esistono
             rel_rows = self._run(
                 "MATCH (a)-[r]->(b) WITH a, r, b LIMIT $sample "
                 "RETURN DISTINCT labels(a)[0] AS from_label, type(r) AS rel_type, labels(b)[0] AS to_label",

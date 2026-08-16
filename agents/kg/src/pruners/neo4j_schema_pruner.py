@@ -1,6 +1,5 @@
 import logging
 from typing import Any
-
 from connectors.base_connector import KnowledgeGraphUnavailableError
 from pruners.base_pruner import BasePruner, PrunedSchema
 
@@ -10,8 +9,9 @@ class Neo4jSchemaPruner(BasePruner):
     """Espone al modello l'intero schema del grafo, letto per introspezione."""
 
     # A differenza di Wikidata, dove servono migliaia di proprietà e quindi una ricerca
-    # semantica, lo schema di un grafo Neo4j è piccolo e chiuso: passarlo tutto elimina
-    # in partenza il rischio che il modello inventi relazioni inesistenti.
+    # semantica, lo schema di un grafo Neo4j è piccolo e chiuso
+    #
+    # passarlo tutto elimina in partenza il rischio che il modello inventi relazioni inesistenti.
 
     @staticmethod
     def _format_schema(schema: dict[str, Any]) -> list[str]:

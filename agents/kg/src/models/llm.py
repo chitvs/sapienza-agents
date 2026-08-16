@@ -1,5 +1,4 @@
 from pathlib import Path
-
 from configs.settings import settings
 from shared.ollama_client import OllamaClient
 

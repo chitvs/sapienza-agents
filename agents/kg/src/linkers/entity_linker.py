@@ -3,7 +3,6 @@ import logging
 import math
 import re
 from typing import Any
-
 from connectors.base_connector import BaseConnector, EntityCandidate
 from models.embeddings import BGE_QUERY_INSTRUCTION, RETRIEVAL_MODEL_NAME, get_embedding_model
 from linkers.base_linker import BaseLinker, LinkedEntity
@@ -23,8 +22,10 @@ _SKIP_WORDS = {
 }
 
 class EntityLinker(BaseLinker):
-    """Entity linker zero-shot: GLiNER estrae le menzioni, l'LLM le disambigua e, quando
-    non è conclusivo, decide la combinazione di contesto, notorietà e rank di ricerca."""
+    """
+    Entity linker zero-shot: GLiNER estrae le menzioni, l'LLM le disambigua e, quando
+    non è conclusivo, decide la combinazione di contesto, notorietà e rank di ricerca.
+    """
 
     def __init__(self, connector: BaseConnector, llm_client: OllamaClient | None = None) -> None:
         self.connector = connector

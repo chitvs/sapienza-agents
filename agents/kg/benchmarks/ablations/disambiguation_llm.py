@@ -1,8 +1,5 @@
 """
 Misura se la disambiguazione via LLM batte il ranking senza LLM, sugli stessi casi.
-
-Risponde alla domanda di costo: la chiamata all'LLM per ogni menzione e' una quota
-importante del tempo per domanda, e va giustificata da un guadagno di accuratezza.
 """
 
 import json
@@ -16,9 +13,9 @@ EVALUATIONS_DIR = KG / "data" / "evaluations"
 sys.path.insert(0, str(KG / "src"))
 sys.path.insert(0, str(REPO))
 
-from connectors.base_connector import EntityCandidate  # noqa: E402
-from connectors.wikidata_connector import WikidataConnector  # noqa: E402
-from linkers.entity_linker import EntityLinker  # noqa: E402
+from connectors.base_connector import EntityCandidate
+from connectors.wikidata_connector import WikidataConnector
+from linkers.entity_linker import EntityLinker
 
 DATA = Path(str(EVALUATIONS_DIR / "disambiguation_signals.json"))
 

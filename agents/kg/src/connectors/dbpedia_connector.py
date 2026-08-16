@@ -4,9 +4,7 @@ import re
 import time
 from typing import Any
 from urllib.parse import unquote
-
 import requests
-
 from configs.settings import settings
 from connectors.base_connector import (
     BaseConnector,
@@ -15,20 +13,21 @@ from connectors.base_connector import (
     KnowledgeGraphUnavailableError,
 )
 
+# configurazione logger
 logger = logging.getLogger(__name__)
 
+# variabili globali
 DBPEDIA_LOOKUP_API = "https://lookup.dbpedia.org/api/search"
 DBPEDIA_RESOURCE_NS = "http://dbpedia.org/resource/"
 DBPEDIA_ONTOLOGY_NS = "http://dbpedia.org/ontology/"
 
-# Caratteri ammessi in un nome prefissato SPARQL: se il nome locale della risorsa ne
-# esce (es. "Mercury_(planet)") va citato con l'URI completo fra parentesi angolari.
+# caratteri ammessi in un nome prefissato SPARQL.
 _SAFE_LOCAL_NAME = re.compile(r"^[A-Za-z0-9_\-.%]+$")
 
 class DBpediaConnector(BaseConnector):
     """Connettore verso DBpedia."""
 
-    # si usa dbo:, l'ontologia curata e tipizzata, invece di dbp: estratto dalle infobox
+    # si usa dbo: (l'ontologia curata e tipizzata) invece di dbp: (estratto dalle infobox)
     entity_prefix = "dbr:"
     property_prefix = "dbo:"
     class_prefix = "dbo:"
@@ -88,8 +87,6 @@ class DBpediaConnector(BaseConnector):
                     logger.debug("query dbpedia fallita, ritento: %s", err)
                     time.sleep(1.5)
                     continue
-                # esauriti i tentativi l'errore va dichiarato: restituire una lista
-                # vuota lo renderebbe indistinguibile da un'entità priva di fatti
                 raise KnowledgeGraphUnavailableError("dbpedia", str(err)) from err
         raise KnowledgeGraphUnavailableError("dbpedia", "nessuna risposta dall'endpoint")
 
@@ -136,9 +133,7 @@ class DBpediaConnector(BaseConnector):
                 ref_count = float(first(doc, "refCount") or 0.0)
             except ValueError:
                 ref_count = 0.0
-            # il limite è per candidato, non per ricerca: con lo stesso tetto di
-            # _search_cache i refCount si sfratterebbero 15 volte più in fretta dei
-            # candidati a cui appartengono, e candidate_prominence tornerebbe parziale
+            # il limite è per candidato, non per ricerca
             self._set_cache_entry(
                 self._reference_counts, local, ref_count,
                 limit=self.max_cache_size * settings.linker_candidates,
@@ -156,9 +151,7 @@ class DBpediaConnector(BaseConnector):
 
     def candidate_prominence(self, candidates: list[EntityCandidate]) -> dict[str, float]:
         """Numero di risorse che puntano al candidato, letto dalla Lookup API durante la ricerca."""
-        # o si conoscono tutti o nessuno: con un dizionario parziale la guardia neutra del
-        # linker non scatta, e un candidato di cui si è persa la conta verrebbe trattato
-        # come il meno noto in assoluto invece che come ignoto
+        # o si conoscono tutti o nessuno
         counts = {c.id: self._reference_counts.get(c.id) for c in candidates}
         return {} if any(v is None for v in counts.values()) else counts
 
@@ -232,9 +225,7 @@ class DBpediaConnector(BaseConnector):
         if len(raw_results) == 1 and set(raw_results[0]) == {"boolean"}:
             return [dict(raw_results[0])]
 
-        # l'URI contiene già il nome dell'entità, quindi l'etichetta si ricava dal nome
-        # locale: una query per valore renderebbe il grounding la parte più fragile e
-        # lenta della pipeline su un endpoint pubblico con rate limit
+        # l'URI contiene già il nome dell'entità, quindi l'etichetta si ricava dal nome locale
         grounded = []
         for row in raw_results:
             clean_row: dict[str, Any] = {}
@@ -242,8 +233,7 @@ class DBpediaConnector(BaseConnector):
             for key, binding in row.items():
                 value = binding.get("value", "") if isinstance(binding, dict) else binding
                 if isinstance(value, str) and value.startswith(DBPEDIA_RESOURCE_NS):
-                    # l'uri originale si conserva a parte: permette all'interfaccia di
-                    # rendere il valore un link verificabile alla fonte
+                    # l'uri originale si conserva a parte
                     sources[key] = value
                     value = self._readable(self._local_name(value))
                 clean_row[key] = value

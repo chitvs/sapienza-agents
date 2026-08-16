@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-
 from connectors.base_connector import BaseConnector
 
 @dataclass

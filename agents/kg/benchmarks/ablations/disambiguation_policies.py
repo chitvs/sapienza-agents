@@ -1,4 +1,6 @@
-"""Confronta le politiche di ranking sui segnali raccolti, separando i casi facili dagli ambigui."""
+"""
+Confronta le politiche di ranking sui segnali raccolti, separando i casi facili dagli ambigui.
+"""
 
 import json
 import math
@@ -51,8 +53,7 @@ def main() -> None:
                 else:
                     kept += hit
         total = recovered + kept
-        # il netto sottrae i casi facili persi: una politica che ne recupera dieci e ne
-        # rompe dodici peggiora il sistema, pur alzando il conteggio degli ambigui risolti
+        # conteggio del netto
         net = recovered - (len(easy) - kept)
         print(f"{name:26} {total:4}/{len(cases):<4} ({total / len(cases):.3f}) "
               f"{recovered:4}/{len(ambiguous):<4} {kept:5}/{len(easy):<4} {net:+7}")
