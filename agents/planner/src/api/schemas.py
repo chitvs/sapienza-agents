@@ -133,6 +133,15 @@ class QueryResponse(BaseModel):
             "recuperato/fornito alcun contesto."
         )
     )
+    context_errors: list[str] | None = Field(
+        default=None,
+        description=(
+            "errori di rete/timeout registrati durante il recupero del contesto esterno "
+            "(kg-agent/multiapi-agent). Sono anche riportati in contingency_notes per l'utente "
+            "finale; qui restano isolati per introspezione/benchmark. None se non è stato "
+            "tentato alcun recupero di contesto o non ci sono stati errori."
+        )
+    )
     tool_calls: list[dict[str, Any]] | None = Field(
         default=None,
         description="Traccia del loop ReAct: contiene i thought, le azioni scelte e le osservazioni."

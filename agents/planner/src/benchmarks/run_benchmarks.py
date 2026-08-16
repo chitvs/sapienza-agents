@@ -43,7 +43,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # presente in settings.openai_providers (.env, OPENAI_PROVIDERS). Le due
 # varianti OpenRouter qui sotto assumono due chiavi separate nel JSON con lo
 # stesso base_url/api_key e "model" diverso.
-MODELS_TO_TEST: list[str] = ["gemini"]
+MODELS_TO_TEST: list[str] = ["openrouter_gpt_oss"]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
 
@@ -51,7 +51,7 @@ BENCHMARK_DIR: Path = Path(__file__).resolve().parent
 DATASET_PATH: Path = BENCHMARK_DIR / "benchmark_dataset.json"
 RESULTS_PATH: Path = BENCHMARK_DIR / "benchmark_results.json"
 
-RATE_LIMIT_DELAY_SECONDS: float = 3.5
+RATE_LIMIT_DELAY_SECONDS: float = 30
 
 
 # --- UTILITY DI PERSISTENZA ---

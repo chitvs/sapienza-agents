@@ -456,6 +456,7 @@ class PlannerPipeline:
             confidence=confidence,
             execution_time_ms=elapsed_ms,
             gathered_context=context or None,
+            context_errors=context_errors or None,
             tool_calls=trace,
             replanned=replanned,
         )
