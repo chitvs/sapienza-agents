@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # Pipeline: fallback
     max_draft_retries: int = 2
+    enable_local_fallback: bool = True
 
     # Context gathering 
     kg_agent_url: str = "http://localhost:8000"

@@ -86,6 +86,13 @@ class LLMClient:
                 model=provider_config.get("model", ""),
             )
         except Exception as err:
+            if not settings.enable_local_fallback:
+                self._log(
+                    f"  [error] {provider} non disponibile, fallback disattivato. Errore: {err}",
+                    level=logging.ERROR
+                )
+                raise err
+                
             self._log(
                 f"  [warn] {provider} non disponibile ({err.__class__.__name__}: {err}), fallback su ollama",
                 level=logging.WARNING,

@@ -18,17 +18,21 @@ from pathlib import Path
 from typing import Any, Literal
 from datetime import datetime, timezone
 
+
 # Stesso bootstrap di sys.path usato in main.py, per poter lanciare lo
 # script sia da root ("python src/run_benchmarks.py") sia da dentro src/.
 src_dir: Path = Path(__file__).resolve().parent.parent
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
-from api.schemas import QueryRequest  # noqa: E402
-from configs.settings import settings  # noqa: E402
-from http_client import close_http_client  # noqa: E402
-from pipeline import PlannerPipeline  # noqa: E402
-from state import plan_state_store  # noqa: E402
+from api.schemas import QueryRequest  
+from configs.settings import settings  
+from http_client import close_http_client  
+from pipeline import PlannerPipeline  
+from state import plan_state_store  
+
+from unittest.mock import patch
+from validators import validate_draft as original_validate_draft
 
 logger = logging.getLogger("planner_benchmark")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -39,7 +43,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # presente in settings.openai_providers (.env, OPENAI_PROVIDERS). Le due
 # varianti OpenRouter qui sotto assumono due chiavi separate nel JSON con lo
 # stesso base_url/api_key e "model" diverso.
-MODELS_TO_TEST: list[str] = ["ollama"]
+MODELS_TO_TEST: list[str] = ["gemini"]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
 
@@ -110,46 +114,52 @@ def _result_key(test_id: str, model_name: str, context_mode: str) -> str:
     """
     return f"{test_id}::{model_name}::{context_mode}"
 
+def _get_actual_model_name(provider: str) -> str:
+    """
+    Recupera il nome effettivo del modello in base alla configurazione.
+    """
+    if provider == "ollama":
+        return settings.ollama_model
+    elif provider == "gemini":
+        return settings.gemini_model
+    else:
+        # Per i provider custom in openai_providers
+        provider_config = settings.openai_providers.get(provider, {})
+        return provider_config.get("model", provider)
+
 
 # --- ESECUZIONE SINGOLO TEST ---
 
 async def _run_single_test(
-    pipeline: PlannerPipeline, test: dict[str, Any], model_name: str, context_mode: str
+    pipeline: PlannerPipeline, test: dict[str, Any], provider_name: str, context_mode: str
 ) -> dict[str, Any]:
     """
     Esegue un singolo test case contro il modello/modalità di context
     gathering correnti, gestendo l'iniezione dello stato per i test 'replan'.
-
-    Args:
-        pipeline (PlannerPipeline): La pipeline già istanziata per il modello corrente.
-        test (dict[str, Any]): Il test case dal golden dataset.
-        model_name (str): Il provider/modello corrente (già impostato su settings.llm_provider).
-        context_mode (str): La modalità di context gathering corrente (già impostata su settings).
-
-    Returns:
-        dict[str, Any]: Il risultato del test con le metriche richieste.
     """
     test_id: str = test["id"]
     expected_domain: str = test["expected_domain"]
     intent: str = test.get("intent", "new_plan")
-    question: str = test["question"]
+    
+    actual_model_name: str = _get_actual_model_name(provider_name)
+
+    val_errors_history: list[list[str]] = []
+
+    def tracking_validate_draft(draft: Any, domain: str) -> list[str]:
+        errors = original_validate_draft(draft, domain)
+        if errors:
+            val_errors_history.append(list(errors))
+        return errors
 
     result: dict[str, Any] = {
         "test_id": test_id,
-        "question": question,
-        "model_name": model_name,
+        "model_name": actual_model_name,
         "context_gathering_mode": context_mode,
         "expected_intent": intent,
         "expected_domain": expected_domain,
-        "actual_domain": None,
-        "actual_replanned": None,
-        "plan_title": None,
-        "plan_summary": None,
-        "contingency_notes": None,
-        "execution_time_ms": None,
-        "confidence": None,
         "success": False,
         "timestamp": None,
+        "validation_errors_history": [],
         "error": None,
         "traceback": None,
         "plan_output": None,
@@ -161,22 +171,19 @@ async def _run_single_test(
             session_id = "bench_session"
             plan_state_store.save(
                 session_id=session_id,
-                domain=expected_domain,
+                domain=expected_domain, # type: ignore
                 question="mock",
                 draft=test["previous_plan"],
             )
 
-        request = QueryRequest(question=question, session_id=session_id)
-        response = await pipeline.run(request)
+        request = QueryRequest(question=test["question"], session_id=session_id)
+        
+        with patch("pipeline.validate_draft", new=tracking_validate_draft):
+            response = await pipeline.run(request)
 
-        result["actual_domain"] = response.domain
-        result["actual_replanned"] = response.replanned
-        result["plan_title"] = response.title
-        result["plan_summary"] = response.summary
-        result["contingency_notes"] = response.contingency_notes
-        result["execution_time_ms"] = response.execution_time_ms
-        result["confidence"] = response.confidence
         result["timestamp"] = datetime.now(timezone.utc).isoformat()
+        result["validation_errors_history"] = val_errors_history
+        
         result["plan_output"] = response.model_dump(mode="json")
 
         if expected_domain == "unknown":
@@ -188,7 +195,7 @@ async def _run_single_test(
         result["timestamp"] = datetime.now(timezone.utc).isoformat()
         result["error"] = f"{err.__class__.__name__}: {err}"
         result["traceback"] = traceback.format_exc()
-        logger.exception("Errore durante il test %s su modello %s", test_id, model_name)
+        logger.exception("Errore durante il test %s su modello %s", test_id, actual_model_name)
 
     return result
 
@@ -204,6 +211,9 @@ async def main() -> None:
     dataset: list[dict[str, Any]] = _load_dataset()
     results: dict[str, Any] = _load_results()
 
+    settings.enable_local_fallback = False
+    logger.info("Fallback locale disattivato per garantire benchmark puri.")
+
     try:
         for model_name in MODELS_TO_TEST:
             settings.llm_provider = model_name
@@ -215,11 +225,15 @@ async def main() -> None:
                 logger.info("--- Context gathering: %s ---", context_mode)
 
                 for test in dataset:
-                    key: str = _result_key(test["id"], model_name, context_mode)
+                    actual_model = _get_actual_model_name(model_name)
+                    key: str = _result_key(test["id"], actual_model, context_mode)
 
                     if key in results:
-                        logger.info("  [skip] %s già processato", key)
-                        continue
+                        if results[key].get("error") is None:
+                            logger.info("  [skip] %s già processato con successo", key)
+                            continue
+                        else:
+                            logger.info("  [retry] %s riprovo test precedentemente fallito", key)
 
                     logger.info("  [run] %s", key)
                     result: dict[str, Any] = await _run_single_test(pipeline, test, model_name, context_mode)
@@ -229,10 +243,9 @@ async def main() -> None:
 
                     if result["error"] is not None:
                         logger.error(
-                            "  [stop] errore su %s, run interrotta per permettere una ripresa pulita: %s",
+                            "  [error] test fallito su %s, proseguo col prossimo. Errore: %s",
                             key, result["error"],
                         )
-                        sys.exit(0)
 
                     if model_name != "ollama":
                         await asyncio.sleep(RATE_LIMIT_DELAY_SECONDS)
