@@ -43,7 +43,23 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # presente in settings.openai_providers (.env, OPENAI_PROVIDERS). Le due
 # varianti OpenRouter qui sotto assumono due chiavi separate nel JSON con lo
 # stesso base_url/api_key e "model" diverso.
-MODELS_TO_TEST: list[str] = ["openrouter_gpt_oss"]
+
+# MODELS_TO_TEST = [
+#     # Modelli Google
+#     ("gemini", "gemini-3.6-flash"),
+    
+#     # Modelli Locali (Ollama)
+#     ("ollama", "qwen2.5:1.5b"),
+#     ("ollama", "qwen2.5:3b"),
+#     ("ollama", "llama3.2"),
+    
+#     # Modelli Remoti Open-Source (OpenRouter)
+#     ("openrouter_gpt_oss", "openai/gpt-oss-20b:free")
+# ]
+
+MODELS_TO_TEST = [
+    ("ollama", "qwen3:4b")
+]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
 
@@ -150,6 +166,13 @@ async def _run_single_test(
         if errors:
             val_errors_history.append(list(errors))
         return errors
+    
+    original_extract = pipeline._llm_extract_json
+
+    async def delayed_extract(*args, **kwargs):
+        if provider_name != "ollama":
+            await asyncio.sleep(RATE_LIMIT_DELAY_SECONDS)
+        return await original_extract(*args, **kwargs)
 
     result: dict[str, Any] = {
         "test_id": test_id,
@@ -178,7 +201,8 @@ async def _run_single_test(
 
         request = QueryRequest(question=test["question"], session_id=session_id)
         
-        with patch("pipeline.validate_draft", new=tracking_validate_draft):
+        with patch("pipeline.validate_draft", new=tracking_validate_draft), \
+             patch.object(pipeline, "_llm_extract_json", side_effect=delayed_extract):
             response = await pipeline.run(request)
 
         result["timestamp"] = datetime.now(timezone.utc).isoformat()
@@ -212,45 +236,60 @@ async def main() -> None:
     results: dict[str, Any] = _load_results()
 
     settings.enable_local_fallback = False
-    logger.info("Fallback locale disattivato per garantire benchmark puri.")
+    logger.info(">>> Fallback locale disattivato per garantire benchmark puri.")
+
+    total_tests = len(MODELS_TO_TEST) * len(CONTEXT_MODES_TO_TEST) * len(dataset)
+    current_test_idx = 0
 
     try:
-        for model_name in MODELS_TO_TEST:
-            settings.llm_provider = model_name
+        for provider_name, model_name in MODELS_TO_TEST:
+    
+            settings.llm_provider = provider_name
+            
+            if provider_name == "gemini":
+                settings.gemini_model = model_name
+            elif provider_name == "ollama":
+                settings.ollama_model = model_name
+
+
             pipeline: PlannerPipeline = PlannerPipeline(verbose=False)
-            logger.info("=== Provider/modello corrente: %s ===", model_name)
+            logger.info("\n==================================================")
+            logger.info("=== Provider: %s | Modello: %s ===", provider_name, model_name)
+            logger.info("==================================================")
 
             for context_mode in CONTEXT_MODES_TO_TEST:
                 settings.context_gathering_mode = context_mode
-                logger.info("--- Context gathering: %s ---", context_mode)
+                logger.info("  [Context Mode] -> %s", context_mode)
 
                 for test in dataset:
-                    actual_model = _get_actual_model_name(model_name)
+                    current_test_idx += 1
+                    progress_pct = round(100 * current_test_idx / total_tests, 1)
+                    actual_model = _get_actual_model_name(provider_name)
                     key: str = _result_key(test["id"], actual_model, context_mode)
 
                     if key in results:
                         if results[key].get("error") is None:
-                            logger.info("  [skip] %s già processato con successo", key)
+                            logger.info("    [%d/%d - %s%%] [skip] %s già processato", current_test_idx, total_tests, progress_pct, key)
                             continue
                         else:
-                            logger.info("  [retry] %s riprovo test precedentemente fallito", key)
+                            logger.info("    [%d/%d - %s%%] [retry] %s riprovo test fallito in precedenza", current_test_idx, total_tests, progress_pct, key)
 
-                    logger.info("  [run] %s", key)
-                    result: dict[str, Any] = await _run_single_test(pipeline, test, model_name, context_mode)
+                    logger.info("    [%d/%d - %s%%] [run]  Esecuzione %s", current_test_idx, total_tests, progress_pct, key)
+                    result: dict[str, Any] = await _run_single_test(pipeline, test, provider_name, context_mode)
 
                     results[key] = result
                     _save_results(results)
 
                     if result["error"] is not None:
                         logger.error(
-                            "  [error] test fallito su %s, proseguo col prossimo. Errore: %s",
-                            key, result["error"],
+                            "    [%d/%d - %s%%] [error] Test fallito su %s. Errore: %s",
+                            current_test_idx, total_tests, progress_pct, key, result["error"]
                         )
 
-                    if model_name != "ollama":
+                    if provider_name != "ollama":
                         await asyncio.sleep(RATE_LIMIT_DELAY_SECONDS)
 
-        logger.info("Benchmark completato: %d risultati totali in %s", len(results), RESULTS_PATH)
+        logger.info("\n>>> Benchmark completato con successo: %d risultati totali salvati in %s", len(results), RESULTS_PATH)
     finally:
         await close_http_client()
 

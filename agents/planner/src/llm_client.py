@@ -209,7 +209,7 @@ class LLMClient:
         Chiama l'API locale di Ollama tramite HTTPX.
 
         Args:
-            prompt (str): Il testo del prompt da inviare.
+            prompt (str): Il testo del prompt da inviare.   
             temperature (float): La temperatura di campionamento.
             json_mode (bool): Se True, imposta il flag 'format'='json'.
 
@@ -224,6 +224,7 @@ class LLMClient:
             "model": settings.ollama_model,
             "prompt": prompt,
             "stream": False,
+            "think": False,
             "options": {"temperature": temperature},
         }
         if json_mode:
