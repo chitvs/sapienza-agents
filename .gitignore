@@ -20,3 +20,4 @@ test_logs.txt
 agents/kg/data/*
 !agents/kg/data/.gitkeep
 agents/planner/src/benchmarks/benchmark_results.json
+agents/planner/src/benchmarks/semantic_eval_results.json
