@@ -58,7 +58,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # ]
 
 MODELS_TO_TEST = [
-    ("ollama", "qwen3:4b")
+    ("ollama", "ministral-3:3b")
 ]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]

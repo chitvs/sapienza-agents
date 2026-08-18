@@ -38,7 +38,7 @@ EXTRACTOR_MODEL = "llama3.2"  # Inserisci qui il modello locale che preferisci u
 
 
 # --- FILTRI DI ESECUZIONE ---
-TARGET_MODELS: list[str] = ["llama3.2"]          
+TARGET_MODELS: list[str] = ["gemini-3.6-flash", "llama3.2"]          
 TARGET_CONTEXT_MODES: list[str] = []   
 TARGET_TEST_IDS: list[str] = []        
 
@@ -108,12 +108,17 @@ async def _evaluate_single(
     if EXTRACTOR_PROVIDER == "ollama":
         settings.ollama_model = EXTRACTOR_MODEL
 
+    intent_value = test_case.get("intent", "new_plan")
+
     extractor_prompt = f"""
     You are a data extraction assistant. Extract the rationales and scores from the following evaluation text.
     Convert it into a strictly valid JSON object. Do not add any conversational text.
 
     EVALUATION TEXT TO PARSE:
     {raw_evaluation_text}
+
+    CURRENT INTENT:
+    {intent_value}
 
     REQUIRED JSON FORMAT:
     {{
@@ -125,8 +130,8 @@ async def _evaluate_single(
       "human_feasibility_score": integer (1-5),
       "granularity_rationale": "string",
       "granularity_score": integer (1-5),
-      "replanning_consistency_rationale": "string",
-      "replanning_consistency_score": integer (1-5)
+      "replanning_consistency_rationale": "string or null (must be null if CURRENT INTENT is new_plan)",
+      "replanning_consistency_score": integer (1-5) or null (must be null if CURRENT INTENT is new_plan)
     }}
     """
 
