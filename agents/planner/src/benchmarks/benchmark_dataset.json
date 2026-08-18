@@ -3,62 +3,121 @@
     "id": "study_01",
     "intent": "new_plan",
     "question": "Devo prepararmi per l'esame di Basi di Dati tra 4 settimane, posso studiare 2 ore al giorno nei giorni feriali.",
-    "expected_domain": "study"
+    "expected_domain": "study",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
   },
   {
     "id": "study_02",
     "intent": "new_plan",
     "question": "Devo ripassare Analisi Matematica 1 prima dell'esame, non ho un piano preciso di quanto tempo ho a disposizione.",
-    "expected_domain": "study"
+    "expected_domain": "study",
+    "difficulty": "medium",
+    "test_target": "vague_instructions"
   },
   {
     "id": "travel_01",
     "intent": "new_plan",
     "question": "Organizzami un viaggio di 4 giorni a Kyoto dal 10 al 13 settembre 2026, con un ritmo rilassato.",
-    "expected_domain": "travel"
+    "expected_domain": "travel",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
   },
   {
     "id": "travel_02",
     "intent": "new_plan",
     "question": "Vorrei un itinerario di 3 giorni a Roma, mi interessano soprattutto arte e cibo, non ho ancora deciso le date esatte.",
-    "expected_domain": "travel"
+    "expected_domain": "travel",
+    "difficulty": "medium",
+    "test_target": "vague_instructions"
   },
   {
     "id": "routine_01",
     "intent": "new_plan",
     "question": "Ho una routine lavorativa dal lunedì al venerdì con sveglia alle 7 e palestra la sera; nel weekend non ho impegni fissi.",
-    "expected_domain": "routine"
+    "expected_domain": "routine",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
   },
   {
     "id": "routine_02",
     "intent": "new_plan",
     "question": "Voglio strutturare meglio le mie giornate: sveglia alle 6:30 tutti i giorni, lavoro fisso 9-18 nei feriali, weekend dedicato a sport e famiglia.",
-    "expected_domain": "routine"
+    "expected_domain": "routine",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
   },
   {
     "id": "study_replan_01",
     "intent": "replan",
     "question": "Sposta la sessione di ripasso di mercoledì a giovedì, perché mercoledì ho un impegno.",
     "expected_domain": "study",
+    "difficulty": "medium",
+    "test_target": "replan_shift",
     "previous_plan": {
       "title": "Ripasso Analisi Matematica 1",
       "summary": "Piano di ripasso su 5 giorni prima dell'esame.",
       "days": [
-        {"day_index": 1, "label": "Lunedì - Limiti e continuità", "slots": [
-          {"task": "Ripasso teoria limiti", "start_time": "18:00", "duration_minutes": 60, "category": "ripasso"}
-        ]},
-        {"day_index": 2, "label": "Martedì - Derivate", "slots": [
-          {"task": "Esercizi sulle derivate", "start_time": "18:00", "duration_minutes": 60, "category": "esercizi"}
-        ]},
-        {"day_index": 3, "label": "Mercoledì - Integrali", "slots": [
-          {"task": "Ripasso integrali indefiniti", "start_time": "18:00", "duration_minutes": 60, "category": "ripasso"}
-        ]},
-        {"day_index": 4, "label": "Giovedì - Esercizi misti", "slots": [
-          {"task": "Esercizi misti su tutto il programma", "start_time": "18:00", "duration_minutes": 90, "category": "esercizi"}
-        ]},
-        {"day_index": 5, "label": "Venerdì - Autovalutazione", "slots": [
-          {"task": "Simulazione scritto d'esame", "start_time": "17:00", "duration_minutes": 90, "category": "autovalutazione"}
-        ]}
+        {
+          "day_index": 1,
+          "label": "Lunedì - Limiti e continuità",
+          "slots": [
+            {
+              "task": "Ripasso teoria limiti",
+              "start_time": "18:00",
+              "duration_minutes": 60,
+              "category": "ripasso"
+            }
+          ]
+        },
+        {
+          "day_index": 2,
+          "label": "Martedì - Derivate",
+          "slots": [
+            {
+              "task": "Esercizi sulle derivate",
+              "start_time": "18:00",
+              "duration_minutes": 60,
+              "category": "esercizi"
+            }
+          ]
+        },
+        {
+          "day_index": 3,
+          "label": "Mercoledì - Integrali",
+          "slots": [
+            {
+              "task": "Ripasso integrali indefiniti",
+              "start_time": "18:00",
+              "duration_minutes": 60,
+              "category": "ripasso"
+            }
+          ]
+        },
+        {
+          "day_index": 4,
+          "label": "Giovedì - Esercizi misti",
+          "slots": [
+            {
+              "task": "Esercizi misti su tutto il programma",
+              "start_time": "18:00",
+              "duration_minutes": 90,
+              "category": "esercizi"
+            }
+          ]
+        },
+        {
+          "day_index": 5,
+          "label": "Venerdì - Autovalutazione",
+          "slots": [
+            {
+              "task": "Simulazione scritto d'esame",
+              "start_time": "17:00",
+              "duration_minutes": 90,
+              "category": "autovalutazione"
+            }
+          ]
+        }
       ]
     }
   },
@@ -67,29 +126,106 @@
     "intent": "replan",
     "question": "Il secondo giorno mi hanno ridotto il tempo a disposizione, ho solo la mattina libera: aggiorna il piano di conseguenza.",
     "expected_domain": "travel",
+    "difficulty": "hard",
+    "test_target": "replan_deletion",
     "previous_plan": {
       "title": "4 giorni a Kyoto",
       "summary": "Itinerario rilassato di 4 giorni tra templi, giardini e cucina locale.",
       "days": [
-        {"day_index": 1, "date": "2026-09-10", "label": "Arrivo e Gion", "slots": [
-          {"task": "Arrivo e check-in in hotel", "start_time": "14:00", "duration_minutes": 60, "category": "trasporto"},
-          {"task": "Passeggiata nel quartiere di Gion", "start_time": "16:00", "duration_minutes": 120, "category": "visita"},
-          {"task": "Cena in un ristorante locale", "start_time": "19:30", "duration_minutes": 90, "category": "pasto"}
-        ]},
-        {"day_index": 2, "date": "2026-09-11", "label": "Templi del nord", "slots": [
-          {"task": "Visita al Kinkaku-ji", "start_time": "09:00", "duration_minutes": 90, "category": "visita"},
-          {"task": "Pranzo vicino al tempio", "start_time": "12:30", "duration_minutes": 60, "category": "pasto"},
-          {"task": "Visita al Ryoan-ji", "start_time": "14:00", "duration_minutes": 90, "category": "visita"}
-        ]},
-        {"day_index": 3, "date": "2026-09-12", "label": "Arashiyama", "slots": [
-          {"task": "Bosco di bambù di Arashiyama", "start_time": "09:00", "duration_minutes": 90, "category": "visita"},
-          {"task": "Pranzo ad Arashiyama", "start_time": "12:00", "duration_minutes": 60, "category": "pasto"},
-          {"task": "Visita al Tenryu-ji", "start_time": "14:00", "duration_minutes": 60, "category": "visita"}
-        ]},
-        {"day_index": 4, "date": "2026-09-13", "label": "Partenza", "slots": [
-          {"task": "Ultimi acquisti souvenir", "start_time": "09:30", "duration_minutes": 90, "category": "altro"},
-          {"task": "Trasferimento in aeroporto", "start_time": "12:00", "duration_minutes": 60, "category": "trasporto"}
-        ]}
+        {
+          "day_index": 1,
+          "date": "2026-09-10",
+          "label": "Arrivo e Gion",
+          "slots": [
+            {
+              "task": "Arrivo e check-in in hotel",
+              "start_time": "14:00",
+              "duration_minutes": 60,
+              "category": "trasporto"
+            },
+            {
+              "task": "Passeggiata nel quartiere di Gion",
+              "start_time": "16:00",
+              "duration_minutes": 120,
+              "category": "visita"
+            },
+            {
+              "task": "Cena in un ristorante locale",
+              "start_time": "19:30",
+              "duration_minutes": 90,
+              "category": "pasto"
+            }
+          ]
+        },
+        {
+          "day_index": 2,
+          "date": "2026-09-11",
+          "label": "Templi del nord",
+          "slots": [
+            {
+              "task": "Visita al Kinkaku-ji",
+              "start_time": "09:00",
+              "duration_minutes": 90,
+              "category": "visita"
+            },
+            {
+              "task": "Pranzo vicino al tempio",
+              "start_time": "12:30",
+              "duration_minutes": 60,
+              "category": "pasto"
+            },
+            {
+              "task": "Visita al Ryoan-ji",
+              "start_time": "14:00",
+              "duration_minutes": 90,
+              "category": "visita"
+            }
+          ]
+        },
+        {
+          "day_index": 3,
+          "date": "2026-09-12",
+          "label": "Arashiyama",
+          "slots": [
+            {
+              "task": "Bosco di bambù di Arashiyama",
+              "start_time": "09:00",
+              "duration_minutes": 90,
+              "category": "visita"
+            },
+            {
+              "task": "Pranzo ad Arashiyama",
+              "start_time": "12:00",
+              "duration_minutes": 60,
+              "category": "pasto"
+            },
+            {
+              "task": "Visita al Tenryu-ji",
+              "start_time": "14:00",
+              "duration_minutes": 60,
+              "category": "visita"
+            }
+          ]
+        },
+        {
+          "day_index": 4,
+          "date": "2026-09-13",
+          "label": "Partenza",
+          "slots": [
+            {
+              "task": "Ultimi acquisti souvenir",
+              "start_time": "09:30",
+              "duration_minutes": 90,
+              "category": "altro"
+            },
+            {
+              "task": "Trasferimento in aeroporto",
+              "start_time": "12:00",
+              "duration_minutes": 60,
+              "category": "trasporto"
+            }
+          ]
+        }
       ]
     }
   },
@@ -97,12 +233,16 @@
     "id": "unknown_01",
     "intent": "new_plan",
     "question": "Consigliami un buon libro di narrativa da leggere quest'estate.",
-    "expected_domain": "unknown"
+    "expected_domain": "unknown",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
   },
   {
     "id": "unknown_02",
     "intent": "new_plan",
     "question": "Puoi spiegarmi come funziona la fotosintesi clorofilliana?",
-    "expected_domain": "unknown"
+    "expected_domain": "unknown",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
   }
 ]

@@ -132,16 +132,23 @@ def _result_key(test_id: str, model_name: str, context_mode: str) -> str:
 
 def _get_actual_model_name(provider: str) -> str:
     """
-    Recupera il nome effettivo del modello in base alla configurazione.
+    Recupera il nome effettivo del modello in base alla configurazione,
+    ripulendolo da prefissi (es. openai/) e suffissi (es. :free).
     """
     if provider == "ollama":
-        return settings.ollama_model
+        raw_name = settings.ollama_model
     elif provider == "gemini":
-        return settings.gemini_model
+        raw_name = settings.gemini_model
     else:
-        # Per i provider custom in openai_providers
         provider_config = settings.openai_providers.get(provider, {})
-        return provider_config.get("model", provider)
+        raw_name = provider_config.get("model", provider)
+        
+    clean_name = raw_name.split("/")[-1] if "/" in raw_name else raw_name
+    
+    if clean_name.endswith(":free"):
+        clean_name = clean_name[:-5]
+        
+    return clean_name
 
 
 # --- ESECUZIONE SINGOLO TEST ---
@@ -214,6 +221,16 @@ async def _run_single_test(
             result["success"] = response.domain == "unknown"
         else:
             result["success"] = response.domain == expected_domain and len(response.days) > 0
+
+            if intent == "replan" and result["success"]:
+                previous_days = test.get("previous_plan", {}).get("days", [])
+                current_days = result["plan_output"].get("days", [])
+                
+                if current_days == previous_days:
+                    result["success"] = False
+                    result["validation_errors_history"].append(
+                        ["replan_identico: il modello non ha applicato alcuna modifica al piano"]
+                    )
 
     except Exception as err:
         result["timestamp"] = datetime.now(timezone.utc).isoformat()
