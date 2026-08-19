@@ -1,12 +1,26 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Nel repo il file sta in agents/multiapi/src/configs/settings.py, quindi
+# parents[2] = agents/multiapi e parents[4] = root del repo.
+# Nel container invece il Dockerfile copia solo src/ dentro /app, quindi il
+# percorso diventa /app/src/configs/settings.py e quei livelli non esistono:
+# gli indici troppo alti vanno scartati, non dati per scontati.
+_PARENTS = Path(__file__).resolve().parents
+_ENV_FILES = tuple(
+    _PARENTS[i] / ".env"
+    for i in (4, 2)          # prima la root, poi la cartella dell'agente
+    if i < len(_PARENTS)     # l'ultimo file vince sui precedenti
+)
+
 
 class Settings(BaseSettings):
     """Unico posto per tutte le configurazioni dell'agente."""
-    
+
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # percorsi assoluti: così i .env vengono trovati anche lanciando pytest
+        # da una cartella diversa. I file inesistenti vengono ignorati.
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -28,6 +42,13 @@ class Settings(BaseSettings):
 
     # info paesi via countries.dev (senza api key)
     countries_dev_base_url: str = "https://countries.dev"
+
+    # ora locale via world-time-api3 su RapidAPI 
+    # richiede una api key: TIMEAPI_API_KEY nel .env (vedi .env.example)
+    worldtime_base_url: str = "https://world-time-api3.p.rapidapi.com/timezone"
+    worldtime_api_host: str = "world-time-api3.p.rapidapi.com"
+    timeapi_api_key: str = ""
+
 
     # cache
     cache_capacity: int = 100

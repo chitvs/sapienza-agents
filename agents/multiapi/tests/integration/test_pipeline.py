@@ -48,6 +48,16 @@ def test_unknown_intent():
     assert "error" in results[0]
 
 
+@pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
+def test_worldtime_tokyo():
+    pipeline = MultiApiPipeline()
+    results, intent = pipeline.run("Che ore sono a Tokyo?")
+    assert intent == "time_info"
+    assert len(results) > 0
+    assert "error" not in results[0]
+    assert results[0]["timezone"] == "Asia/Tokyo"
+    assert len(results[0]["time"]) == 8  # HH:MM:SS
+
 def test_cache_hit():
     """la pipeline deve restituire risultati dalla cache senza chiamare il LLM."""
     pipeline = MultiApiPipeline()

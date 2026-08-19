@@ -61,6 +61,8 @@ class WeatherProvider:
                 return {
                     "name": r.get("name", city),
                     "country": r.get("country", ""),
+                    # ISO-3166 alpha-2 (es. "IT"): serve alla ui per la bandiera
+                    "country_code": r.get("country_code", ""),
                     "latitude": r["latitude"],
                     "longitude": r["longitude"],
                 }
@@ -113,6 +115,7 @@ class WeatherProvider:
                 "provider": "open-meteo",
                 "city": location["name"],
                 "country": location["country"],
+                "country_code": location["country_code"],
                 "temperature_c": current.get("temperature_2m"),
                 "apparent_temperature_c": current.get("apparent_temperature"),
                 "humidity_percent": current.get("relative_humidity_2m"),

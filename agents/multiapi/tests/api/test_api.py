@@ -49,6 +49,16 @@ def test_query_country():
     assert "capital" in data["results"][0]
 
 
+@pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
+def test_query_worldtime():
+    res = client.post("/query", json={"question": "Che ore sono a Tokyo?"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["intent"] == "time_info"
+    assert data["count"] > 0
+    assert "time" in data["results"][0]
+    assert "timezone" in data["results"][0]
+
 def test_query_missing_question():
     res = client.post("/query", json={})
     assert res.status_code == 422  # validazione pydantic

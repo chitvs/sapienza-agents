@@ -21,16 +21,25 @@ class ExchangeProvider:
         """Chiama l'API di frankfurter per ottenere il tasso di cambio attuale tra 2 valute.
         
         """
-        from_currency = params.get("from_currency", "")
+        # frankfurter usa codici maiuscoli sia nella query sia nelle chiavi di "rates":
+        # il llm può estrarli minuscoli, quindi normalizziamo subito
+        from_currency = params.get("from_currency", "").strip().upper()
         if not from_currency:
             return {"error": "Nessuna valuta iniziale specificata nella domanda."}
 
-        to_currency = params.get("to_currency", "")
+        to_currency = params.get("to_currency", "").strip().upper()
         if not to_currency:
             return {"error": "Nessuna valuta finale specificata nella domanda."}
 
-        if from_currency.upper() == to_currency.upper():
-            return {"provider": "frankfurter", "amount": 1.0, "base": from_currency, "date": "...", "rates": 1.0}
+        if from_currency == to_currency:
+            return {
+                "provider": "frankfurter",
+                "amount": 1.0,
+                "base": from_currency.upper(),
+                "quote": to_currency.upper(),
+                "date": "",
+                "rates": 1.0,
+            }
         
         try:
             res = self.session.get(
@@ -45,7 +54,10 @@ class ExchangeProvider:
                 "provider": "frankfurter",
                 "amount": data["amount"],
                 "base": data["base"],
-                "date":data["date"],
+                # valuta di destinazione: senza questo campo la ui non sa
+                # a cosa si riferisce il valore in "rates"
+                "quote": to_currency.upper(),
+                "date": data["date"],
                 "rates": data["rates"][to_currency]
             }
         except Exception as err:
