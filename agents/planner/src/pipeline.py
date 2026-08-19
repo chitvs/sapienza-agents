@@ -25,6 +25,8 @@ logger = logging.getLogger("planner_pipeline")
 # Estraiamo dinamicamente i domini da PlanDomain per evitare "magic strings"
 SUPPORTED_DOMAINS = get_args(PlanDomain)
 
+REPLAN_FAILURE_NOTE: str = "Non sono riuscito ad applicare le modifiche richieste mantenendo il piano coerente."
+
 
 class PlannerPipeline:
     """
@@ -309,7 +311,7 @@ class PlannerPipeline:
             domain=stored.domain,
             previous_plan=json.dumps(stored.draft, ensure_ascii=False, indent=2),
         )
-        return await self._validate_and_correct(draft, stored.domain, request)
+        return await self._validate_and_correct(draft, stored.domain, request, previous_plan=stored.draft)
     
 
     # ----- fase 3: drafting -----
@@ -336,7 +338,11 @@ class PlannerPipeline:
         return await self._validate_and_correct(draft, domain, request)
 
     async def _validate_and_correct(
-        self, draft: dict[str, Any] | None, domain: PlanDomain, request: QueryRequest
+        self,
+        draft: dict[str, Any] | None,
+        domain: PlanDomain,
+        request: QueryRequest,
+        previous_plan: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], int]:
         """
         Ciclo di validazione e correzione condiviso per bozze generate ex-novo o aggiornate.
@@ -353,7 +359,7 @@ class PlannerPipeline:
             tuple[dict[str, Any], int]: Il piano valido (o vuoto se irrecuperabile) e il 
             numero di correzioni effettuate.
         """
-        errors: list[str] = validate_draft(draft, domain)
+        errors: list[str] = validate_draft(draft, domain, previous_plan)
         attempt: int = 0
 
         # Ciclo di retry semantico: invece di fallire subito, chiediamo al LLM 
@@ -373,6 +379,19 @@ class PlannerPipeline:
             errors = validate_draft(draft, domain)
 
         if errors:
+            if previous_plan is not None:
+                # Fallimento estremo del replan: un piano vuoto azzererebbe la
+                # dashboard dell'utente. Meglio il piano precedente, con la
+                # confidence già abbassata dai tentativi esauriti in _finalize.
+                self._log(
+                    f"  [warn] replanning fallito dopo {attempt} correzioni, mantengo il piano "
+                    f"precedente. Errori residui: {errors}",
+                    level=logging.WARNING
+                )
+                fallback: dict[str, Any] = dict(previous_plan)
+                fallback["contingency_notes"] = list(fallback.get("contingency_notes") or []) + [REPLAN_FAILURE_NOTE]
+                return fallback, attempt
+            
             self._log(
                 f"  [warn] drafting fallito dopo {attempt} correzioni, restituisco struttura vuota. Errori residui: {errors}",
                 level=logging.WARNING

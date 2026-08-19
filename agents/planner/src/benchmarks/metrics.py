@@ -141,17 +141,6 @@ def normalize(
     crashed = record.get("error") is not None
     plan_is_empty = len(days) == 0
 
-    # --- FIX RETROATTIVO PER FALSI POSITIVI ---
-    success_iniziale = bool(record.get("success"))
-    if expected_intent == "replan" and success_iniziale and not plan_is_empty:
-        previous_days = test_info.get("previous_plan", {}).get("days", [])
-        if days == previous_days:
-            success_iniziale = False
-            # Opzionale: aggiungi fittiziamente l'errore per le metriche
-            record.setdefault("validation_errors_history", []).append(
-                ["replan_identico: il modello non ha applicato alcuna modifica al piano"]
-            )
-
     domain_correct = (
         not crashed
         and actual_domain == expected_domain

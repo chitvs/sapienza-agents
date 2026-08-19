@@ -28,7 +28,7 @@ if str(src_dir) not in sys.path:
 from api.schemas import QueryRequest  
 from configs.settings import settings  
 from http_client import close_http_client  
-from pipeline import PlannerPipeline  
+from pipeline import PlannerPipeline, REPLAN_FAILURE_NOTE  
 from state import plan_state_store  
 
 from unittest.mock import patch
@@ -168,8 +168,8 @@ async def _run_single_test(
 
     val_errors_history: list[list[str]] = []
 
-    def tracking_validate_draft(draft: Any, domain: str) -> list[str]:
-        errors = original_validate_draft(draft, domain)
+    def tracking_validate_draft(draft: Any, domain: str, previous_plan: dict[str, Any] | None = None) -> list[str]:
+        errors = original_validate_draft(draft, domain, previous_plan)
         if errors:
             val_errors_history.append(list(errors))
         return errors
@@ -223,14 +223,9 @@ async def _run_single_test(
             result["success"] = response.domain == expected_domain and len(response.days) > 0
 
             if intent == "replan" and result["success"]:
-                previous_days = test.get("previous_plan", {}).get("days", [])
-                current_days = result["plan_output"].get("days", [])
-                
-                if current_days == previous_days:
+                notes = result["plan_output"].get("contingency_notes") or []
+                if REPLAN_FAILURE_NOTE in notes:
                     result["success"] = False
-                    result["validation_errors_history"].append(
-                        ["replan_identico: il modello non ha applicato alcuna modifica al piano"]
-                    )
 
     except Exception as err:
         result["timestamp"] = datetime.now(timezone.utc).isoformat()

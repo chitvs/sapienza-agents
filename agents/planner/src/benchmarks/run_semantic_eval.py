@@ -38,7 +38,7 @@ EXTRACTOR_MODEL = "llama3.2"  # Inserisci qui il modello locale che preferisci u
 
 
 # --- FILTRI DI ESECUZIONE ---
-TARGET_MODELS: list[str] = [""]          
+TARGET_MODELS: list[str] = ["qwen3:1.7b"]          
 TARGET_CONTEXT_MODES: list[str] = []   
 TARGET_TEST_IDS: list[str] = []        
 
@@ -147,6 +147,8 @@ async def main() -> None:
     logger.info(f"=== Giudice (Logica): {JUDGE_PROVIDER} | {JUDGE_MODEL} ===")
     logger.info(f"=== Estrattore (JSON): {EXTRACTOR_PROVIDER} | {EXTRACTOR_MODEL} ===")
     logger.info("==================================================\n")
+    settings.enable_local_fallback = False
+    logger.info(">>> Fallback locale disattivato per garantire benchmark puri.")
 
     if not DATASET_PATH.exists() or not RESULTS_PATH.exists():
         logger.error("File di dataset o risultati mancanti. Esegui prima run_benchmarks.py")

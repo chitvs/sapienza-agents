@@ -46,7 +46,11 @@ def _format_minutes(value: int) -> str:
     return f"{value // 60:02d}:{value % 60:02d}"
 
 
-def validate_draft(draft: dict[str, Any] | None, domain: str) -> list[str]:
+def validate_draft(
+    draft: dict[str, Any] | None,
+    domain: str,
+    previous_plan: dict[str, Any] | None = None,
+) -> list[str]:
     """
     Valida in modo difensivo una bozza di piano in formato dizionario.
 
@@ -56,6 +60,10 @@ def validate_draft(draft: dict[str, Any] | None, domain: str) -> list[str]:
     Args:
         draft (dict[str, Any] | None): Il dizionario del piano o None se il parsing è fallito.
         domain (str): Il dominio di destinazione (es. 'study', 'travel', 'routine').
+        previous_plan (dict[str, Any] | None): Il piano salvato prima della richiesta di
+            modifica, se questa validazione avviene in un replanning. Se fornito, un draft
+            strutturalmente valido ma con 'days' identici al precedente viene trattato come
+            un errore di validazione (fallimento semantico, non strutturale).
 
     Returns:
         list[str]: Una lista di stringhe descrittive degli errori trovati. 
@@ -182,5 +190,12 @@ def validate_draft(draft: dict[str, Any] | None, domain: str) -> list[str]:
             errors.append(f"il dominio 'routine' richiede esattamente i giorni 1-7, trovati: {sorted(seen_indices)}")
     elif seen_indices and seen_indices != set(range(1, len(seen_indices) + 1)):
         errors.append(f"day_index deve formare una sequenza contigua a partire da 1, trovati: {sorted(seen_indices)}")
+
+    # Verifica replan identico
+    if previous_plan is not None and not errors and draft.get("days") == previous_plan.get("days"):
+        errors.append(
+            "replan_identico: il piano generato è identico al precedente, devi applicare "
+            "concretamente le modifiche richieste dall'utente"
+        )
 
     return errors
