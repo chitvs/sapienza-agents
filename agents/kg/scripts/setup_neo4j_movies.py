@@ -13,8 +13,8 @@ import argparse
 import sys
 from pathlib import Path
 from typing import Any
-
 import requests
+from neo4j import GraphDatabase
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -25,11 +25,6 @@ MOVIES_CYPHER_URL = "https://raw.githubusercontent.com/neo4j-graph-examples/movi
 
 def get_driver() -> Any:
     """Apre il driver verso l'istanza configurata in .env."""
-    try:
-        from neo4j import GraphDatabase
-    except ImportError:
-        sys.exit("driver neo4j non installato: esegui 'pip install neo4j'")
-
     return GraphDatabase.driver(
         settings.neo4j_uri,
         auth=(settings.neo4j_user, settings.neo4j_password),

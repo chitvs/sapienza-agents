@@ -19,3 +19,6 @@ test_logs.txt
 # generated build artifacts
 agents/kg/data/*
 !agents/kg/data/.gitkeep
+!agents/kg/data/qald_10_executed.json
+!agents/kg/data/qald_9_plus_test_dbpedia_executed.json
+
