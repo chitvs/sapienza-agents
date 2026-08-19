@@ -345,8 +345,19 @@ form.addEventListener("submit", async event => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(body),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `errore ${response.status}`);
+    // la risposta si legge come testo e poi si parsa: se un agente è giù,
+    // nginx risponde con una pagina di errore HTML e response.json() esploderebbe
+    // nascondendo lo stato reale
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+    }
+    // sui 422 di FastAPI "detail" è un array di oggetti: senza formatDetail
+    // l'utente leggerebbe [object Object]
+    if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
     output.innerHTML = mode === "kg"
       ? renderKg(data)
       : mode === "multiapi"
