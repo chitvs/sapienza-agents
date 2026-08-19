@@ -154,3 +154,50 @@ def test_gather_context_react_success():
     assert trace[0]["observation"] == {"weather": "Sereno"}
     # Il context è una lista, come abbiamo stabilito per il ReAct
     assert context["multiapi_agent"] == [{"weather": "Sereno"}]
+
+
+def test_gather_context_react_dynamic_tool_removal_kg_fails():
+    """Simula un loop ReAct dove il kg_agent fallisce e viene rimosso, poi il multiapi_agent ha successo."""
+    from api.schemas import QueryRequest
+    
+    # 1. Simuliamo le decisioni in sequenza dell'LLM (prima KG, poi MultiAPI)
+    mock_decisions = [
+        {"thought": "Provo KG", "action": "call_tool", "tool": "kg_agent", "tool_input": "Roma"},
+        {"thought": "KG fallito, provo meteo", "action": "call_tool", "tool": "multiapi_agent", "tool_input": "meteo Roma"},
+        {"thought": "Finito", "action": "finish"}
+    ]
+
+    tools_seen_by_llm = []
+
+    async def mock_llm_extract_json(*args, **kwargs):
+        # Salviamo la stringa JSON dei tool che l'LLM "vede" ad ogni iterazione
+        tools_seen_by_llm.append(kwargs.get("tools", ""))
+        return mock_decisions.pop(0)
+
+    # 2. Simuliamo il fallimento del KG e il successo del MultiAPI
+    async def mock_kg(question):
+        return {"error": "Timeout simulato su KG"}
+        
+    async def mock_multiapi(question):
+        return {"weather": "sereno"}
+
+    with patch.object(PlannerPipeline, "_llm_extract_json", new=mock_llm_extract_json), \
+         patch.dict("pipeline.TOOL_REGISTRY", {"multiapi_agent": mock_multiapi, "kg_agent": mock_kg}, clear=True):
+        
+        pipeline = PlannerPipeline(verbose=True)
+        context, errors, trace = asyncio.run(
+            pipeline._gather_context_react("travel", QueryRequest(question="Weekend a Roma"))
+        )
+
+    # 3. Verifiche finali dell'output
+    assert "Timeout simulato su KG" in errors
+    assert "kg_agent" not in context
+    assert context["multiapi_agent"] == [{"weather": "sereno"}]
+    
+    # 4. Verifica della RIMOZIONE DINAMICA
+    # Al passo 1 l'LLM doveva vedere kg_agent nel prompt
+    assert "kg_agent" in tools_seen_by_llm[0]
+    
+    # Al passo 2 (dopo l'errore) kg_agent deve essere sparito, ma multiapi_agent deve esserci
+    assert "kg_agent" not in tools_seen_by_llm[1]
+    assert "multiapi_agent" in tools_seen_by_llm[1]

@@ -24,14 +24,30 @@ class LLMClient:
     fornendo metodi per la generazione di testo e l'estrazione di JSON.
     """
 
-    def __init__(self, verbose: bool = False) -> None:
+    def __init__(self, verbose: bool = False, provider: str | None = None, model: str | None = None) -> None:
         """
         Inizializza la pipeline e il client LLM sottostante.
 
         Args:
             verbose (bool): Se True, abilita la stampa a schermo dei log e dei passaggi.
         """
-        self.verbose: bool = verbose
+        self.verbose = verbose
+
+
+        # 1. Fissa il provider (parametro o fallback globale)
+        self.provider: str = (provider or settings.llm_provider).lower()
+        
+        # 2. Fissa il modello (parametro o fallback specifico in base al provider)
+        if model:
+            self.model: str = model
+        elif self.provider == "gemini":
+            self.model = settings.gemini_model
+        elif self.provider == "ollama":
+            self.model = settings.ollama_model
+        else:
+            # Per openrouter o altri openai-compatible
+            provider_config = settings.openai_providers.get(self.provider, {})
+            self.model = provider_config.get("model", "")
 
     def _log(self, msg: str, level: int = logging.INFO) -> None:
         """
@@ -61,7 +77,7 @@ class LLMClient:
         Returns:
             str: Il testo generato dal modello LLM.
         """
-        provider: str = settings.llm_provider.lower()
+        provider: str = self.provider
 
         if provider == "ollama":
             return await self._generate_ollama(prompt, temperature, json_mode)
@@ -83,7 +99,6 @@ class LLMClient:
                 json_mode,
                 base_url=provider_config.get("base_url", ""),
                 api_key=provider_config.get("api_key", ""),
-                model=provider_config.get("model", ""),
             )
         except Exception as err:
             if not settings.enable_local_fallback:
@@ -118,7 +133,7 @@ class LLMClient:
         if not settings.gemini_api_key:
             raise ValueError("GEMINI_API_KEY non configurata")
 
-        url = f"{settings.gemini_api_base}/models/{settings.gemini_model}:generateContent"
+        url = f"{settings.gemini_api_base}/models/{self.model}:generateContent"
         headers = {"x-goog-api-key": settings.gemini_api_key}
 
         generation_config: dict[str, Any] = {}
@@ -157,7 +172,6 @@ class LLMClient:
         json_mode: bool,
         base_url: str,
         api_key: str,
-        model: str,
     ) -> str:
         """
         Chiama un endpoint compatibile con l'API chat/completions di OpenAI
@@ -178,14 +192,14 @@ class LLMClient:
             ValueError: Se base_url, api_key o model sono mancanti.
             httpx.HTTPError: Se c'è un problema di rete o l'API risponde con un errore.
         """
-        if not base_url or not api_key or not model:
+        if not base_url or not api_key or not self.model:
             raise ValueError("configurazione provider incompleta: servono base_url, api_key e model")
 
         url = f"{base_url.rstrip('/')}/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}"}
 
         payload: dict[str, Any] = {
-            "model": model,
+            "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
         }
@@ -221,7 +235,7 @@ class LLMClient:
         """
         url = f"{settings.ollama_host.rstrip('/')}/api/generate"
         payload: dict[str, Any] = {
-            "model": settings.ollama_model,
+            "model": self.model,
             "prompt": prompt,
             "stream": False,
             "think": False,

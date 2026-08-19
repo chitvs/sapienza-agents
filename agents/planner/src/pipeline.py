@@ -197,13 +197,20 @@ class PlannerPipeline:
         trace: list[dict[str, Any]] = []
         scratchpad: list[str] = []
 
+        available_tools = list(TOOL_DESCRIPTIONS)
+
         for step in range(settings.max_react_steps):
+
+            if not available_tools:
+                self._log("  [react] nessun tool rimanente disponibile, interrompo il loop anticipatamente")
+                break
+
             decision: dict[str, Any] | None = await self._llm_extract_json(
                 "gather_context_react.txt",
                 domain=domain, 
                 question=request.question,
                 scratchpad="\n".join(scratchpad) or "(vuoto)",
-                tools=json.dumps(TOOL_DESCRIPTIONS, ensure_ascii=False, indent=2)
+                tools=json.dumps(available_tools, ensure_ascii=False, indent=2)
             )
             
             if not decision or decision.get("action") not in ("call_tool", "finish"):
@@ -239,6 +246,8 @@ class PlannerPipeline:
             
             if "error" in obs:
                 errors.append(obs["error"])
+                available_tools = [t for t in available_tools if t["name"] != tool_name]
+                self._log(f"  [react] tool '{tool_name}' fallito e rimosso dalla lista per i prossimi step")
             else:
                 context.setdefault(str(tool_name), []).append(obs)
                 

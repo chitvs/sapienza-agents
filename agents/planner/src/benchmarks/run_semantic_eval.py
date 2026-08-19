@@ -68,10 +68,11 @@ def _save_evaluations(evals: dict[str, Any]) -> None:
 # --- ESECUZIONE SINGOLA VALUTAZIONE (CASCATA LLM) ---
 
 async def _evaluate_single(
-    result_key: str, 
-    record: dict[str, Any], 
-    test_case: dict[str, Any], 
-    llm: LLMClient
+    result_key: str,
+    record: dict[str, Any],
+    test_case: dict[str, Any],
+    judge_client: LLMClient,
+    extractor_client: LLMClient,
 ) -> dict[str, Any] | None:
     """
     Esegue la valutazione in due step:
@@ -91,12 +92,8 @@ async def _evaluate_single(
     )
 
     # --- STEP 1: RAGIONAMENTO (Gemma) ---
-    settings.llm_provider = JUDGE_PROVIDER
-    if JUDGE_PROVIDER == "gemini":
-        settings.gemini_model = JUDGE_MODEL
+    raw_evaluation_text = await judge_client.generate(judge_prompt, json_mode=False)
 
-    raw_evaluation_text = await llm.generate(judge_prompt, json_mode=False)
-    
     if not raw_evaluation_text:
         logger.error(f"  [error] Gemma ha restituito un output vuoto.")
         return None
@@ -104,10 +101,6 @@ async def _evaluate_single(
     logger.info("    -> Ragionamento completato da Gemma. Passo l'estrazione a Ollama...")
 
     # --- STEP 2: ESTRAZIONE JSON (Ollama) ---
-    settings.llm_provider = EXTRACTOR_PROVIDER
-    if EXTRACTOR_PROVIDER == "ollama":
-        settings.ollama_model = EXTRACTOR_MODEL
-
     intent_value = test_case.get("intent", "new_plan")
 
     extractor_prompt = f"""
@@ -136,7 +129,7 @@ async def _evaluate_single(
     """
 
     # extract_json chiama Ollama (con json_mode=True) e parsa il risultato
-    return await llm.extract_json(extractor_prompt)
+    return await extractor_client.extract_json(extractor_prompt)
 
 
 # --- MAIN LOOP ---
@@ -183,7 +176,8 @@ async def main() -> None:
         logger.info("Nessun test corrispondente ai filtri specificati (o test già scartati).")
         return
 
-    llm = LLMClient(verbose=False)
+    judge_client = LLMClient(verbose=False, provider=JUDGE_PROVIDER, model=JUDGE_MODEL)
+    extractor_client = LLMClient(verbose=False, provider=EXTRACTOR_PROVIDER, model=EXTRACTOR_MODEL)
     
     current_test_idx = 0
     for key, record in tests_to_run:
@@ -202,7 +196,7 @@ async def main() -> None:
             continue
 
         try:
-            evaluation = await _evaluate_single(key, record, test_case, llm)
+            evaluation = await _evaluate_single(key, record, test_case, judge_client, extractor_client)
             
             if evaluation is None:
                 raise ValueError("Il Giudice o l'Estrattore hanno fallito.")
