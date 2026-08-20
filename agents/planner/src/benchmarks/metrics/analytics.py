@@ -131,33 +131,49 @@ def domain_accuracy(outcomes: list[TestOutcome]) -> float:
         len(outcomes),
     )
 
-
-def valid_plan_rate(outcomes: list[TestOutcome]) -> float:
+def intent_accuracy(outcomes: list[TestOutcome]) -> float:
     """
-    Percentuale di test per i quali il planner ha prodotto un piano non vuoto
-    senza crash.
-
-    La metrica è distinta da domain_accuracy e success_rate:
-    un piano può essere non vuoto ma appartenere al dominio sbagliato.
+    Accuratezza complessiva della classificazione dell'intento (es. new_plan vs replan).
+    Viene calcolata solo sui test appartenenti ai domini supportati.
+    I crash restano nel denominatore e vengono considerati errori.
     """
     relevant = _supported_domain_tests(outcomes)
+    
+    if not relevant:
+        return 0.0
 
+    correct = sum(
+        1
+        for outcome in relevant
+        if not outcome.crashed
+        and outcome.actual_intent == outcome.expected_intent
+    )
+
+    return _pct(correct, len(relevant))
+
+def intent_confusion_matrix(outcomes: list[TestOutcome]) -> dict[str, dict[str, int]]:
+    """
+    Calcola la matrice di confusione degli intenti (expected vs actual) sui test supportati.
+    Restituisce un dizionario nel formato: matrix[expected][actual] = count.
+    """
+    relevant = _supported_domain_tests(outcomes)
+    matrix: defaultdict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    
+    for outcome in relevant:
+        actual = str(outcome.actual_intent) if outcome.actual_intent else "missing"
+        matrix[outcome.expected_intent][actual] += 1
+        
+    return {k: dict(v) for k, v in matrix.items()}
+
+
+def non_empty_plan_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Percentuale di test supportati in cui il planner ha prodotto un piano non vuoto
+    senza crash. Indipendente dalla correttezza del dominio.
+    """
+    relevant = _supported_domain_tests(outcomes)
     valid = sum(1 for outcome in relevant if outcome.valid_plan)
-
     return _pct(valid, len(relevant))
-
-
-def empty_plan_rate(outcomes: list[TestOutcome]) -> float:
-    """
-    Percentuale di test supportati che terminano con un piano vuoto.
-
-    I crash sono conteggiati separatamente come crash e non come piano vuoto.
-    """
-    relevant = _supported_domain_tests(outcomes)
-
-    empty = sum(1 for outcome in relevant if not outcome.crashed and outcome.plan_is_empty)
-
-    return _pct(empty, len(relevant))
 
 
 def first_try_pass_rate(outcomes: list[TestOutcome]) -> float:
@@ -184,19 +200,6 @@ def first_try_pass_rate(outcomes: list[TestOutcome]) -> float:
     )
 
     return _pct(first_try, len(relevant))
-
-
-def final_failure_rate(outcomes: list[TestOutcome]) -> float:
-    """
-    Percentuale di failure finali sui test supportati.
-
-    Include esplicitamente i crash, che rappresentano una failure del sistema.
-    """
-    relevant = _supported_domain_tests(outcomes)
-
-    failed = sum(1 for outcome in relevant if not outcome.success)
-
-    return _pct(failed, len(relevant))
 
 
 def self_correction_recovery_rate(outcomes: list[TestOutcome]) -> float:
@@ -246,6 +249,69 @@ def system_crash_rate(outcomes: list[TestOutcome]) -> float:
         len(outcomes),
     )
 
+
+def correction_failure_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Percentuale di test che hanno richiesto correzione (validation_errors_history > 0)
+    ma che alla fine hanno comunque fallito.
+    """
+    needed_correction = [
+        outcome 
+        for outcome in _supported_domain_tests(outcomes) 
+        if outcome.validation_errors_history
+    ]
+    failed_recovery = sum(1 for outcome in needed_correction if not outcome.success or outcome.plan_is_empty)
+    return _pct(failed_recovery, len(needed_correction))
+
+
+def validation_attempt_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Percentuale di test supportati che hanno innescato almeno un errore di validazione.
+    Indica quanto spesso il modello 'inciampa' al primo colpo.
+    """
+    relevant = _supported_domain_tests(outcomes)
+    needed = sum(1 for outcome in relevant if outcome.validation_errors_history)
+    return _pct(needed, len(relevant))
+
+def mean_attempts_per_corrected_test(outcomes: list[TestOutcome]) -> float:
+    """
+    Numero medio di tentativi di validazione calcolato *esclusivamente* sui test 
+    che hanno richiesto correzione. Indica quanto è profondo il 'loop' di errore.
+    """
+    needed = [outcome for outcome in _supported_domain_tests(outcomes) if outcome.validation_errors_history]
+    if not needed:
+        return 0.0
+    total = sum(len(outcome.validation_errors_history) for outcome in needed)
+    return round(total / len(needed), 2)
+
+
+def average_context_errors(outcomes: list[TestOutcome]) -> float:
+    """Numero medio di errori di contesto esterno gestiti, per i test supportati."""
+    relevant = _supported_domain_tests(outcomes)
+    if not relevant:
+        return 0.0
+    total = sum(len(outcome.context_errors) for outcome in relevant)
+    return round(total / len(relevant), 2)
+
+
+def overconfidence_rate(outcomes: list[TestOutcome], threshold: float = 0.8) -> float:
+    """
+    Percentuale di test falliti in cui l'agente aveva assegnato una confidence 
+    molto alta (>= threshold). Un valore alto indica che il modello "allucina"
+    sicurezza quando in realtà sta sbagliando.
+    """
+    failed_tests = [outcome for outcome in _supported_domain_tests(outcomes) if not outcome.success]
+
+    if not failed_tests:
+        return 0.0
+
+    overconfident = sum(
+        1 
+        for outcome in failed_tests 
+        if math.isfinite(outcome.confidence) and outcome.confidence >= threshold
+    )
+
+    return _pct(overconfident, len(failed_tests))
 
 # ==============================================================================
 # ERRORI VALIDAZIONE

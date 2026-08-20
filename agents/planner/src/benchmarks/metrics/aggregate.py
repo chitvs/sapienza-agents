@@ -21,18 +21,23 @@ from .analytics import (
     avg_confidence,
     avg_confidence_non_crashed,
     domain_accuracy,
-    empty_plan_rate,
+    intent_accuracy,
+    intent_confusion_matrix,
+    non_empty_plan_rate,
     external_failure_metrics,
-    final_failure_rate,
     first_try_pass_rate,
     self_correction_recovery_rate,
+    correction_failure_rate,
     semantic_metrics,
     success_rate,
     supported_success_rate,
     system_crash_rate,
     unknown_domain_accuracy,
-    valid_plan_rate,
     validation_error_metrics,
+    validation_attempt_rate,
+    mean_attempts_per_corrected_test,
+    average_context_errors,
+    overconfidence_rate,
 )
 from .model import TestOutcome, normalize
 
@@ -45,15 +50,20 @@ def _aggregate_outcomes(outcomes: list[TestOutcome]) -> dict[str, Any]:
         "success_rate": success_rate(outcomes),
         "supported_success_rate": supported_success_rate(outcomes),
         "domain_accuracy": domain_accuracy(outcomes),
+        "intent_accuracy": intent_accuracy(outcomes),
+        "intent_confusion_matrix": intent_confusion_matrix(outcomes),
         "unknown_domain_accuracy": unknown_domain_accuracy(outcomes),
-        "valid_plan_rate": valid_plan_rate(outcomes),
-        "empty_plan_rate": empty_plan_rate(outcomes),
+        "non_empty_plan_rate": non_empty_plan_rate(outcomes),
 
         # Pipeline / correzione
         "zero_shot_rate": first_try_pass_rate(outcomes),
         "self_correction_recovery_rate": self_correction_recovery_rate(outcomes),
-        "final_failure_rate": final_failure_rate(outcomes),
+        "correction_failure_rate": correction_failure_rate(outcomes),
         "system_crash_rate": system_crash_rate(outcomes),
+        "validation_attempt_rate": validation_attempt_rate(outcomes),
+        "mean_attempts_per_corrected_test": mean_attempts_per_corrected_test(outcomes),
+        "average_context_errors": average_context_errors(outcomes),
+        "overconfidence_rate": overconfidence_rate(outcomes),
 
         # Confidence
         "confidence_mean_successes": avg_confidence(outcomes),
@@ -90,6 +100,7 @@ def _aggregate_groups(outcomes: list[TestOutcome], attribute: str) -> dict[str, 
 def _test_detail(outcome: TestOutcome) -> dict[str, Any]:
     semantic_scores = _semantic_scores(outcome.semantic_evaluation)
     validation_attempts = len(outcome.validation_errors_history)
+    context_errors = len(outcome.context_errors)
 
     return {
         "test_id": outcome.test_id,
@@ -99,6 +110,7 @@ def _test_detail(outcome: TestOutcome) -> dict[str, Any]:
         "context_mode": outcome.context_mode,
         "intent": outcome.expected_intent,
         "expected_intent": outcome.expected_intent,
+        "actual_intent": outcome.actual_intent,
         "expected_domain": outcome.expected_domain,
         "actual_domain": outcome.actual_domain,
         "success": outcome.success,
@@ -108,11 +120,66 @@ def _test_detail(outcome: TestOutcome) -> dict[str, Any]:
         "valid_plan": outcome.valid_plan,
         "confidence": outcome.confidence,
         "validation_attempts": validation_attempts,
-        "context_error_count": len(outcome.context_errors),
+        "context_error_count": context_errors,
         "semantic": {
             **semantic_scores,
             "overall": _semantic_overall(outcome.semantic_evaluation),
         },
+    }
+
+
+def _generate_insights(
+    global_metrics: dict[str, Any],
+    by_model: dict[str, Any],
+) -> dict[str, Any]:
+    if not by_model:
+        return {}
+
+    # 1. Modello con il miglior Supported Success Rate (a parità, vince chi ha più Zero-shot)
+    best_success_model, best_success_data = max(
+        by_model.items(),
+        key=lambda item: (item[1]["supported_success_rate"], item[1]["zero_shot_rate"]),
+    )
+
+    # 2. Modello con il punteggio Semantico più alto
+    semantic_models = [
+        (model, data) for model, data in by_model.items() if data["semantic"]["overall_score"] is not None
+    ]
+    best_semantic_model, best_semantic_score = (
+        max(semantic_models, key=lambda item: item[1]["semantic"]["overall_score"])
+        if semantic_models else (None, None)
+    )
+
+    # 3. Modello più fluido (Massimo zero-shot, a parità minima % di test che richiedono validazione)
+    smoothest_model, smoothest_data = max(
+        by_model.items(),
+        key=lambda item: (item[1]["zero_shot_rate"], -item[1]["validation_attempt_rate"]),
+    )
+
+    # 4. Errore di validazione più frequente
+    val_categories = global_metrics.get("validation_errors", {}).get("categories", [])
+    top_error_category = val_categories[0]["category"] if val_categories else None
+    top_error_occurrences = val_categories[0]["occurrences"] if val_categories else 0
+
+    return {
+        "best_performer": {
+            "model": best_success_model,
+            "supported_success_rate": best_success_data["supported_success_rate"],
+        },
+        "best_semantic": {
+            "model": best_semantic_model,
+            "overall_score": best_semantic_score["semantic"]["overall_score"] if best_semantic_score else None,
+        },
+        "smoothest_model": {
+            "model": smoothest_model,
+            "zero_shot_rate": smoothest_data["zero_shot_rate"],
+            "validation_attempt_rate": smoothest_data["validation_attempt_rate"],
+        },
+        "top_bottleneck_error": {
+            "category": top_error_category,
+            "occurrences": top_error_occurrences,
+        },
+        "correction_failure_rate_global": global_metrics.get("correction_failure_rate", 0.0),
     }
 
 
@@ -130,6 +197,9 @@ def build_report(
         for record in records
     ]
 
+    global_metrics = _aggregate_outcomes(outcomes)
+    by_model_metrics = _aggregate_groups(outcomes, "model_name")
+
     report = {
         "metadata": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -140,8 +210,9 @@ def build_report(
             "intents": sorted({outcome.expected_intent for outcome in outcomes}),
             "domains": sorted({outcome.expected_domain for outcome in outcomes}),
         },
-        "global": _aggregate_outcomes(outcomes),
-        "by_model": _aggregate_groups(outcomes, "model_name"),
+        "insights": _generate_insights(global_metrics, by_model_metrics), 
+        "global": global_metrics,
+        "by_model": by_model_metrics,
         "by_context_mode": _aggregate_groups(outcomes, "context_mode"),
         "by_domain": _aggregate_groups(outcomes, "expected_domain"),
         "by_intent": _aggregate_groups(outcomes, "expected_intent"),

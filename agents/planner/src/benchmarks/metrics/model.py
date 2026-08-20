@@ -24,6 +24,7 @@ class TestOutcome:
     expected_intent: str
     expected_domain: str
     actual_domain: str | None
+    actual_intent: str | None
 
     success: bool
     crashed: bool
@@ -109,6 +110,13 @@ def normalize(
     expected_intent = record.get("expected_intent", "new_plan")
     expected_domain = record["expected_domain"]
     actual_domain = plan_output.get("domain")
+    is_replanned = plan_output.get("replanned")
+    if is_replanned is True:
+        actual_intent = "replan"
+    elif is_replanned is False:
+        actual_intent = "new_plan"
+    else:
+        actual_intent = "missing"
 
     crashed = record.get("error") is not None
     plan_is_empty = len(days) == 0
@@ -139,6 +147,7 @@ def normalize(
         expected_intent=expected_intent,
         expected_domain=expected_domain,
         actual_domain=actual_domain,
+        actual_intent=actual_intent,
 
         success=bool(record.get("success")),
         crashed=crashed,
