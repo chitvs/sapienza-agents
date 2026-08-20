@@ -38,7 +38,7 @@ EXTRACTOR_MODEL = "llama3.2"  # Inserisci qui il modello locale che preferisci u
 
 
 # --- FILTRI DI ESECUZIONE ---
-TARGET_MODELS: list[str] = ["qwen3:1.7b"]          
+TARGET_MODELS: list[str] = ["gpt-oss-20b"]          
 TARGET_CONTEXT_MODES: list[str] = []   
 TARGET_TEST_IDS: list[str] = []        
 
@@ -49,7 +49,7 @@ RESULTS_PATH: Path = BENCHMARK_DIR / "benchmark_results.json"
 EVAL_RESULTS_PATH: Path = BENCHMARK_DIR / "semantic_eval_results.json"
 PROMPT_PATH: Path = settings.prompts_dir / "semantic_eval.txt"
 
-RATE_LIMIT_DELAY_SECONDS: float = 2.0
+RATE_LIMIT_DELAY_SECONDS: float = 5.0
 
 
 # --- UTILITY DI PERSISTENZA ---
@@ -141,7 +141,7 @@ async def main() -> None:
     logger.info(f"=== Estrattore (JSON): {EXTRACTOR_PROVIDER} | {EXTRACTOR_MODEL} ===")
     logger.info("==================================================\n")
     settings.enable_local_fallback = False
-    logger.info(">>> Fallback locale disattivato per garantire benchmark puri.")
+    logger.info(">>> Fallback locale disattivato per garantire benchmark puri.\n")
 
     if not DATASET_PATH.exists() or not RESULTS_PATH.exists():
         logger.error("File di dataset o risultati mancanti. Esegui prima run_benchmarks.py")

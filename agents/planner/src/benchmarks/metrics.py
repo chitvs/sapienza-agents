@@ -14,6 +14,7 @@ Produce:
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -86,6 +87,21 @@ def _load_json(path: Path, default: Any) -> Any:
     return json.loads(content)
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """
+    Converte un valore in float in modo difensivo.
+
+    Valori non numerici, NaN e inf vengono considerati non validi e
+    sostituiti dal default.
+    """
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+
+    return result if math.isfinite(result) else default
+
+
 # ==============================================================================
 # ERRORI DI CONTESTO
 # ==============================================================================
@@ -124,13 +140,13 @@ def normalize(
     semantic_evaluations: dict[str, Any],
     dataset_map: dict[str, Any],
 ) -> TestOutcome:
-
+    
     plan_output = record.get("plan_output") or {}
     days = plan_output.get("days") or []
 
     test_id = record["test_id"]
     test_info = dataset_map.get(test_id, {})
-    
+
     model_name = record["model_name"]
     context_mode = record.get("context_gathering_mode", "unknown")
 
@@ -146,12 +162,15 @@ def normalize(
         and actual_domain == expected_domain
     )
 
+    # "valid_plan" rappresenta un piano finale strutturalmente utilizzabile:
+    # - nessun crash
+    # - almeno un giorno presente
+    #
+    # La correttezza rispetto al dominio viene mantenuta separata in
+    # "domain_correct" e quella rispetto all'intero test in "success".
     valid_plan = (
         not crashed
-        and (
-            expected_domain == "unknown"
-            or not plan_is_empty
-        )
+        and not plan_is_empty
     )
 
     result_key = f"{test_id}::{model_name}::{context_mode}"
@@ -172,7 +191,7 @@ def normalize(
         domain_correct=domain_correct,
         valid_plan=valid_plan,
 
-        confidence=float(plan_output.get("confidence", 0.0) or 0.0),
+        confidence=_safe_float(plan_output.get("confidence", 0.0)),
 
         validation_errors_history=record.get("validation_errors_history") or [],
         context_errors=_extract_context_errors(record),
@@ -188,18 +207,46 @@ def normalize(
 # ==============================================================================
 
 def _supported_domain_tests(outcomes: list[TestOutcome]) -> list[TestOutcome]:
+    """
+    Restituisce tutti i test relativi ai domini supportati.
+
+    I crash NON vengono esclusi: un crash è una failure del sistema e deve
+    rimanere nel denominatore delle metriche di performance.
+    """
     return [
         outcome
         for outcome in outcomes
-        if not outcome.crashed and outcome.expected_domain != "unknown"
+        if outcome.expected_domain != "unknown"
+    ]
+
+
+def _unknown_domain_tests(outcomes: list[TestOutcome]) -> list[TestOutcome]:
+    """
+    Restituisce esclusivamente i test out-of-scope, ossia con expected_domain
+    uguale a "unknown".
+    """
+    return [
+        outcome
+        for outcome in outcomes
+        if outcome.expected_domain == "unknown"
     ]
 
 
 def _semantic_eligible(outcomes: list[TestOutcome]) -> list[TestOutcome]:
+    """
+    Test eleggibili per la valutazione semantica.
+
+    Sono esclusi:
+    - crash;
+    - richieste out-of-scope;
+    - piani vuoti.
+    """
     return [
         outcome
         for outcome in outcomes
-        if not outcome.crashed and outcome.expected_domain != "unknown" and not outcome.plan_is_empty
+        if not outcome.crashed
+        and outcome.expected_domain != "unknown"
+        and not outcome.plan_is_empty
     ]
 
 
@@ -208,65 +255,176 @@ def _semantic_eligible(outcomes: list[TestOutcome]) -> list[TestOutcome]:
 # ==============================================================================
 
 def success_rate(outcomes: list[TestOutcome]) -> float:
-    return _pct(sum(outcome.success for outcome in outcomes), len(outcomes))
+    """
+    Percentuale complessiva di test superati.
+
+    Include tutti i test, compresi gli out-of-scope e i crash.
+    """
+    return _pct(
+        sum(outcome.success for outcome in outcomes),
+        len(outcomes),
+    )
+
+
+def supported_success_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Success rate limitato ai domini supportati dal planner.
+
+    È una metrica più specifica della success_rate globale quando il dataset
+    contiene anche casi out-of-scope.
+    """
+    relevant = _supported_domain_tests(outcomes)
+
+    return _pct(
+        sum(outcome.success for outcome in relevant),
+        len(relevant),
+    )
+
+
+def unknown_domain_accuracy(outcomes: list[TestOutcome]) -> float:
+    """
+    Accuratezza specifica nel riconoscimento delle richieste out-of-scope.
+
+    Un test unknown è corretto quando il dominio prodotto è esattamente
+    "unknown" e non c'è stato un crash.
+    """
+    relevant = _unknown_domain_tests(outcomes)
+
+    correct = sum(
+        1
+        for outcome in relevant
+        if not outcome.crashed
+        and outcome.actual_domain == "unknown"
+    )
+
+    return _pct(correct, len(relevant))
 
 
 def domain_accuracy(outcomes: list[TestOutcome]) -> float:
-    return _pct(sum(outcome.domain_correct for outcome in outcomes), len(outcomes))
+    """
+    Accuratezza complessiva della classificazione del dominio.
+
+    I crash restano nel denominatore e quindi vengono considerati errori.
+    """
+    return _pct(
+        sum(outcome.domain_correct for outcome in outcomes),
+        len(outcomes),
+)
 
 
 def valid_plan_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Percentuale di test per i quali il planner ha prodotto un piano non vuoto
+    senza crash.
+
+    La metrica è distinta da domain_accuracy e success_rate:
+    un piano può essere non vuoto ma appartenere al dominio sbagliato.
+    """
     relevant = _supported_domain_tests(outcomes)
-    valid = sum(1 for outcome in relevant if not outcome.plan_is_empty)
+
+    valid = sum(1 for outcome in relevant if outcome.valid_plan)
+
     return _pct(valid, len(relevant))
 
 
 def empty_plan_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Percentuale di test supportati che terminano con un piano vuoto.
+
+    I crash sono conteggiati separatamente come crash e non come piano vuoto.
+    """
     relevant = _supported_domain_tests(outcomes)
-    empty = sum(1 for outcome in relevant if outcome.plan_is_empty)
+
+    empty = sum(1 for outcome in relevant if not outcome.crashed and outcome.plan_is_empty)
+
     return _pct(empty, len(relevant))
 
 
 def first_try_pass_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Percentuale di test supportati superati al primo tentativo.
+
+    Un test è first-try quando:
+    - non è crashato;
+    - non ha generato errori di validazione;
+    - ha prodotto un piano non vuoto;
+    - il dominio è corretto;
+    - il test complessivo è riuscito.
+    """
     relevant = _supported_domain_tests(outcomes)
+
     first_try = sum(
-        1 for outcome in relevant
-        if not outcome.validation_errors_history
+        1
+        for outcome in relevant
+        if not outcome.crashed
+        and not outcome.validation_errors_history
         and not outcome.plan_is_empty
         and outcome.domain_correct
+        and outcome.success
     )
+
     return _pct(first_try, len(relevant))
 
 
 def final_failure_rate(outcomes: list[TestOutcome]) -> float:
+    """
+    Percentuale di failure finali sui test supportati.
+
+    Include esplicitamente i crash, che rappresentano una failure del sistema.
+    """
     relevant = _supported_domain_tests(outcomes)
+
     failed = sum(1 for outcome in relevant if not outcome.success)
+
     return _pct(failed, len(relevant))
 
 
 def self_correction_recovery_rate(outcomes: list[TestOutcome]) -> float:
-    needed_correction = [
-        outcome for outcome in _supported_domain_tests(outcomes)
-        if outcome.validation_errors_history
-    ]
-    recovered = sum(
-        1 for outcome in needed_correction
-        if outcome.success and not outcome.plan_is_empty
-    )
+    """
+    Percentuale di test che hanno richiesto almeno una correzione tramite
+    validazione e sono infine riusciti.
+
+    Il denominatore contiene esclusivamente i test per i quali è stata
+    effettivamente necessaria una correzione.
+    """
+    needed_correction = [outcome for outcome in _supported_domain_tests(outcomes) if outcome.validation_errors_history]
+
+    recovered = sum(1 for outcome in needed_correction if outcome.success and not outcome.plan_is_empty)
+
     return _pct(recovered, len(needed_correction))
 
 
 def avg_confidence(outcomes: list[TestOutcome]) -> float:
-    pool = [
-        outcome for outcome in outcomes
-        if outcome.success and not outcome.plan_is_empty
-    ]
-    values = [outcome.confidence for outcome in pool if outcome.confidence is not None]
+    """
+    Confidence media sui risultati riusciti e non vuoti.
+    """
+    pool = [outcome for outcome in outcomes if outcome.success and not outcome.plan_is_empty]
+
+    values = [outcome.confidence for outcome in pool if math.isfinite(outcome.confidence)]
+
+    return round(mean(values), 3) if values else 0.0
+
+
+def avg_confidence_non_crashed(outcomes: list[TestOutcome]) -> float:
+    """
+    Confidence media su tutti i risultati valutabili senza crash e con piano
+    non vuoto, indipendentemente dall'esito del test.
+    """
+    pool = [outcome for outcome in outcomes if not outcome.crashed and not outcome.plan_is_empty]
+
+    values = [outcome.confidence for outcome in pool if math.isfinite(outcome.confidence)]
+
     return round(mean(values), 3) if values else 0.0
 
 
 def system_crash_rate(outcomes: list[TestOutcome]) -> float:
-    return _pct(sum(outcome.crashed for outcome in outcomes), len(outcomes))
+    """
+    Percentuale di test terminati con eccezione/crash.
+    """
+    return _pct(
+        sum(outcome.crashed for outcome in outcomes),
+        len(outcomes),
+    )
 
 
 # ==============================================================================
@@ -302,6 +460,7 @@ def _categorize(error_msg: str) -> str:
     for pattern, category in _ERROR_CATEGORY_PATTERNS:
         if pattern.search(error_msg):
             return category
+
     return "altro"
 
 
@@ -312,9 +471,11 @@ def validation_error_metrics(outcomes: list[TestOutcome]) -> dict[str, Any]:
 
     for outcome in outcomes:
         categories_in_test: set[str] = set()
+
         for attempt_errors in outcome.validation_errors_history:
             for raw_error in attempt_errors:
                 category = _categorize(raw_error)
+
                 occurrences[category] += 1
                 tests_affected[category].add(outcome.test_id)
                 categories_in_test.add(category)
@@ -331,6 +492,11 @@ def validation_error_metrics(outcomes: list[TestOutcome]) -> dict[str, Any]:
 
     return {
         "total_occurrences": sum(occurrences.values()),
+        "tests_with_validation_errors": len({
+            outcome.test_id
+            for outcome in outcomes
+            if outcome.validation_errors_history
+        }),
         "categories": [
             {
                 "category": category,
@@ -348,14 +514,28 @@ def validation_error_metrics(outcomes: list[TestOutcome]) -> dict[str, Any]:
 # ==============================================================================
 
 def external_failure_metrics(outcomes: list[TestOutcome]) -> dict[str, Any]:
+    """
+    Analizza la resilienza del planner quando il context gathering incontra
+    errori esterni.
+
+    Un test è considerato resiliente se:
+    - ha avuto almeno un errore di contesto;
+    - non è crashato;
+    - il test complessivo è comunque riuscito.
+    """
     affected = [outcome for outcome in outcomes if outcome.context_errors]
-    resilient = sum(
-        1 for outcome in affected
-        if not outcome.crashed and not outcome.plan_is_empty
-    )
+
+    resilient = sum(1 for outcome in affected if not outcome.crashed and outcome.success)
+
+    crashed = sum(1 for outcome in affected if outcome.crashed)
+
+    failed = sum(1 for outcome in affected if not outcome.success)
+
     return {
         "tests_with_context_errors": len(affected),
         "resilient_tests": resilient,
+        "failed_tests": failed,
+        "crashed_tests": crashed,
         "resilience_rate": _pct(resilient, len(affected)),
         "error_occurrences": sum(len(outcome.context_errors) for outcome in affected),
     }
@@ -375,47 +555,98 @@ SEMANTIC_SCORE_FIELDS = {
 
 
 def _semantic_scores(evaluation: dict[str, Any] | None) -> dict[str, float]:
-    if not evaluation:
+    if not isinstance(evaluation, dict):
         return {}
 
     scores: dict[str, float] = {}
+
     for label, field in SEMANTIC_SCORE_FIELDS.items():
         value = evaluation.get(field)
+
         if value is None:
             continue
+
         try:
-            scores[label] = float(value)
+            numeric_value = float(value)
         except (TypeError, ValueError):
             continue
+
+        if not math.isfinite(numeric_value):
+            continue
+
+        if not 1.0 <= numeric_value <= 5.0:
+            continue
+
+        scores[label] = numeric_value
+
     return scores
 
 
 def _semantic_overall(evaluation: dict[str, Any] | None) -> float | None:
     scores = _semantic_scores(evaluation)
+
     if not scores:
         return None
+
     return round(mean(scores.values()), 3)
 
 
 def semantic_metrics(outcomes: list[TestOutcome]) -> dict[str, Any]:
     eligible = _semantic_eligible(outcomes)
+
     evaluated = [outcome for outcome in eligible if outcome.semantic_evaluation]
 
     dimension_values: defaultdict[str, list[float]] = defaultdict(list)
     overall_values: list[float] = []
 
+    invalid_score_values = 0
+    partial_evaluations = 0
+
     for outcome in evaluated:
-        scores = _semantic_scores(outcome.semantic_evaluation)
+        raw_evaluation = outcome.semantic_evaluation or {}
+        scores = _semantic_scores(raw_evaluation)
+
+        # Conta come parziale una valutazione valida ma priva di almeno
+        # una dimensione disponibile. Questo è normale nei new_plan,
+        # dove la metrica di replanning può essere None.
+        expected_dimensions = len(SEMANTIC_SCORE_FIELDS)
+        if len(scores) < expected_dimensions:
+            partial_evaluations += 1
+
+        for field in SEMANTIC_SCORE_FIELDS.values():
+            if field not in raw_evaluation:
+                continue
+
+            raw_value = raw_evaluation.get(field)
+
+            if raw_value is None:
+                continue
+
+            try:
+                numeric_value = float(raw_value)
+            except (TypeError, ValueError):
+                invalid_score_values += 1
+                continue
+
+            if (
+                not math.isfinite(numeric_value)
+                or not 1.0 <= numeric_value <= 5.0
+            ):
+                invalid_score_values += 1
+
         for dimension, value in scores.items():
             dimension_values[dimension].append(value)
 
-        overall = _semantic_overall(outcome.semantic_evaluation)
+        overall = _semantic_overall(raw_evaluation)
+
         if overall is not None:
             overall_values.append(overall)
 
-    dimensions = {}
+    dimensions: dict[str, dict[str, Any]] = {}
+
     for dimension in SEMANTIC_SCORE_FIELDS:
         values = dimension_values[dimension]
+
         dimensions[dimension] = {
             "n": len(values),
             "mean": round(mean(values), 3) if values else None,
@@ -426,6 +657,8 @@ def semantic_metrics(outcomes: list[TestOutcome]) -> dict[str, Any]:
         "evaluated_tests": len(evaluated),
         "coverage_rate": _pct(len(evaluated), len(eligible)),
         "overall_score": round(mean(overall_values), 3) if overall_values else None,
+        "partial_evaluations": partial_evaluations,
+        "invalid_score_values": invalid_score_values,
         "dimensions": dimensions,
     }
 
@@ -437,33 +670,49 @@ def semantic_metrics(outcomes: list[TestOutcome]) -> dict[str, Any]:
 def _aggregate_outcomes(outcomes: list[TestOutcome]) -> dict[str, Any]:
     return {
         "n_test": len(outcomes),
+
+        # Metriche principali
         "success_rate": success_rate(outcomes),
+        "supported_success_rate": supported_success_rate(outcomes),
         "domain_accuracy": domain_accuracy(outcomes),
+        "unknown_domain_accuracy": unknown_domain_accuracy(outcomes),
         "valid_plan_rate": valid_plan_rate(outcomes),
         "empty_plan_rate": empty_plan_rate(outcomes),
+
+        # Pipeline / correzione
         "zero_shot_rate": first_try_pass_rate(outcomes),
         "self_correction_recovery_rate": self_correction_recovery_rate(outcomes),
         "final_failure_rate": final_failure_rate(outcomes),
         "system_crash_rate": system_crash_rate(outcomes),
+
+        # Confidence
         "confidence_mean_successes": avg_confidence(outcomes),
+        "confidence_mean_non_crashed": avg_confidence_non_crashed(outcomes),
+
+        # Diagnostica
         "validation_errors": validation_error_metrics(outcomes),
         "external_failures": external_failure_metrics(outcomes),
+
+        # Qualità semantica
         "semantic": semantic_metrics(outcomes),
     }
 
 
 def _group_by(outcomes: list[TestOutcome], attribute: str) -> dict[str, list[TestOutcome]]:
     groups: defaultdict[str, list[TestOutcome]] = defaultdict(list)
+
     for outcome in outcomes:
         value = getattr(outcome, attribute, "unknown")
         groups[str(value)].append(outcome)
+
     return dict(groups)
 
 
 def _aggregate_groups(outcomes: list[TestOutcome], attribute: str) -> dict[str, Any]:
     groups = _group_by(outcomes, attribute)
+
     return {
-        key: _aggregate_outcomes(sorted(group, key=lambda outcome: outcome.test_id))
+        key: _aggregate_outcomes(sorted(group, key=lambda outcome: outcome.test_id))    
         for key, group in sorted(groups.items())
     }
 
@@ -482,6 +731,7 @@ def _test_detail(outcome: TestOutcome) -> dict[str, Any]:
         "test_target": outcome.test_target,
         "model": outcome.model_name,
         "context_mode": outcome.context_mode,
+        "intent": outcome.expected_intent,
         "expected_intent": outcome.expected_intent,
         "expected_domain": outcome.expected_domain,
         "actual_domain": outcome.actual_domain,
@@ -552,6 +802,7 @@ def build_report(
     # --------------------------------------------------------------------------
     # MODEL + CONTEXT
     # --------------------------------------------------------------------------
+
     model_context_groups: defaultdict[tuple[str, str], list[TestOutcome]] = defaultdict(list)
 
     for outcome in outcomes:
@@ -560,6 +811,7 @@ def build_report(
     for (model_name, context_mode), grouped in sorted(model_context_groups.items()):
         if model_name not in report["by_model_and_context"]:
             report["by_model_and_context"][model_name] = {}
+
         report["by_model_and_context"][model_name][context_mode] = _aggregate_outcomes(grouped)
 
     return report
@@ -572,40 +824,49 @@ def build_report(
 def _fmt(value: Any) -> str:
     if value is None:
         return "-"
+
     if isinstance(value, float):
         return f"{value:.2f}"
+
     return str(value)
 
 
 def _markdown_model_table(report: dict[str, Any]) -> str:
     rows = [
-        "| Modello | Test | Successo | Domain Acc. | Zero-shot | Recovery | Semantic | Crash |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Modello | Test | Successo | Supported Success | Domain Acc. | Unknown Acc. | Valid Plan | Zero-shot | Recovery | Semantic | Crash |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
+
     for model_name, metrics in report["by_model"].items():
         rows.append(
             "| " + " | ".join([
                 model_name,
                 _fmt(metrics["n_test"]),
                 f"{metrics['success_rate']:.2f}%",
+                f"{metrics['supported_success_rate']:.2f}%",
                 f"{metrics['domain_accuracy']:.2f}%",
+                f"{metrics['unknown_domain_accuracy']:.2f}%",
+                f"{metrics['valid_plan_rate']:.2f}%",
                 f"{metrics['zero_shot_rate']:.2f}%",
                 f"{metrics['self_correction_recovery_rate']:.2f}%",
                 _fmt(metrics["semantic"]["overall_score"]),
                 f"{metrics['system_crash_rate']:.2f}%",
             ]) + " |"
         )
+
     return "\n".join(rows)
 
 
 def _markdown_semantic_table(report: dict[str, Any]) -> str:
     rows = [
-        "| Modello | Groundedness | Adherence | Feasibility | Granularity | Replanning | Overall | Coverage |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Modello | Groundedness | Adherence | Feasibility | Granularity | Replanning | Overall | Coverage | Partial | Invalid scores |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
+
     for model_name, metrics in report["by_model"].items():
         semantic = metrics["semantic"]
         dimensions = semantic["dimensions"]
+
         rows.append(
             "| " + " | ".join([
                 model_name,
@@ -616,26 +877,34 @@ def _markdown_semantic_table(report: dict[str, Any]) -> str:
                 _fmt(dimensions["replanning_consistency"]["mean"]),
                 _fmt(semantic["overall_score"]),
                 f"{semantic['coverage_rate']:.2f}%",
+                str(semantic["partial_evaluations"]),
+                str(semantic["invalid_score_values"]),
             ]) + " |"
         )
+
     return "\n".join(rows)
 
 
 def _markdown_simple_table(groups: dict[str, Any]) -> str:
     rows = [
-        "| Gruppo | Test | Successo | Domain Accuracy | Semantic |",
-        "|---|---:|---:|---:|---:|",
+        "| Gruppo | Test | Successo | Supported Success | Domain Accuracy | Valid Plan | Semantic | Crash |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
+
     for key, metrics in groups.items():
         rows.append(
             "| " + " | ".join([
                 key,
                 str(metrics["n_test"]),
                 f"{metrics['success_rate']:.2f}%",
+                f"{metrics['supported_success_rate']:.2f}%",
                 f"{metrics['domain_accuracy']:.2f}%",
+                f"{metrics['valid_plan_rate']:.2f}%",
                 _fmt(metrics["semantic"]["overall_score"]),
+                f"{metrics['system_crash_rate']:.2f}%",
             ]) + " |"
         )
+
     return "\n".join(rows)
 
 
@@ -651,13 +920,17 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Test eseguiti: **{global_metrics['n_test']}**",
         f"- Success rate: **{global_metrics['success_rate']:.2f}%**",
+        f"- Supported-domain success rate: **{global_metrics['supported_success_rate']:.2f}%**",
         f"- Domain accuracy: **{global_metrics['domain_accuracy']:.2f}%**",
+        f"- Unknown-domain accuracy: **{global_metrics['unknown_domain_accuracy']:.2f}%**",
         f"- Valid plan rate: **{global_metrics['valid_plan_rate']:.2f}%**",
+        f"- Empty plan rate: **{global_metrics['empty_plan_rate']:.2f}%**",
         f"- Zero-shot rate: **{global_metrics['zero_shot_rate']:.2f}%**",
         f"- Self-correction recovery: **{global_metrics['self_correction_recovery_rate']:.2f}%**",
         f"- Final failure rate: **{global_metrics['final_failure_rate']:.2f}%**",
         f"- Crash rate: **{global_metrics['system_crash_rate']:.2f}%**",
         f"- Confidence media (sui successi): **{global_metrics['confidence_mean_successes']:.3f}**",
+        f"- Confidence media (risultati non-crashati): **{global_metrics['confidence_mean_non_crashed']:.3f}**",
         f"- Semantic score: **{_fmt(global_metrics['semantic']['overall_score'])} / 5**",
         f"- Semantic coverage: **{global_metrics['semantic']['coverage_rate']:.2f}%**",
         "",
@@ -691,9 +964,12 @@ def generate_markdown(report: dict[str, Any]) -> str:
             "",
             f"- Test: **{metrics['n_test']}**",
             f"- Success rate: **{metrics['success_rate']:.2f}%**",
+            f"- Supported-domain success rate: **{metrics['supported_success_rate']:.2f}%**",
             f"- Domain accuracy: **{metrics['domain_accuracy']:.2f}%**",
+            f"- Valid plan rate: **{metrics['valid_plan_rate']:.2f}%**",
             f"- Semantic score: **{_fmt(metrics['semantic']['overall_score'])} / 5**",
             f"- Semantic coverage: **{metrics['semantic']['coverage_rate']:.2f}%**",
+            f"- Crash rate: **{metrics['system_crash_rate']:.2f}%**",
             "",
         ])
 
@@ -708,20 +984,28 @@ def generate_markdown(report: dict[str, Any]) -> str:
             "",
             f"- Test: **{metrics['n_test']}**",
             f"- Success rate: **{metrics['success_rate']:.2f}%**",
+            f"- Supported-domain success rate: **{metrics['supported_success_rate']:.2f}%**",
             f"- Domain accuracy: **{metrics['domain_accuracy']:.2f}%**",
+            f"- Valid plan rate: **{metrics['valid_plan_rate']:.2f}%**",
             f"- Semantic score: **{_fmt(metrics['semantic']['overall_score'])} / 5**",
             f"- External resilience: **{metrics['external_failures']['resilience_rate']:.2f}%**",
+            f"- Crash rate: **{metrics['system_crash_rate']:.2f}%**",
             "",
         ])
 
     validation = global_metrics["validation_errors"]
+
     if validation["categories"]:
         lines.extend([
             "## 9. Validation errors",
             "",
+            f"- Test con almeno un errore di validazione: **{validation['tests_with_validation_errors']}**",
+            f"- Occorrenze complessive: **{validation['total_occurrences']}**",
+            "",
             "| Categoria | Occorrenze | Test coinvolti | Recuperati |",
             "|---|---:|---:|---:|",
         ])
+
         for item in validation["categories"]:
             lines.append(
                 "| " + " | ".join([
@@ -731,6 +1015,7 @@ def generate_markdown(report: dict[str, Any]) -> str:
                     str(item["recovered_tests"]),
                 ]) + " |"
             )
+
         lines.append("")
 
     lines.extend([
@@ -738,13 +1023,15 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "",
         f"- Test con errori di contesto: **{global_metrics['external_failures']['tests_with_context_errors']}**",
         f"- Test resilienti: **{global_metrics['external_failures']['resilient_tests']}**",
+        f"- Test falliti: **{global_metrics['external_failures']['failed_tests']}**",
+        f"- Test crashati: **{global_metrics['external_failures']['crashed_tests']}**",
         f"- Resilience rate: **{global_metrics['external_failures']['resilience_rate']:.2f}%**",
         f"- Occorrenze complessive: **{global_metrics['external_failures']['error_occurrences']}**",
         "",
         "## 11. Per-test details",
         "",
-        "| Test | Difficoltà | Target | Modello | Context | Intent | Expected | Actual | Success | Semantic |",
-        "|---|---|---|---|---|---|---|---|---|---:|",
+        "| Test | Difficoltà | Target | Modello | Context | Intent | Expected | Actual | Success | Valid Plan | Confidence | Attempts | Context Errors | Semantic |",
+        "|---|---|---|---|---|---|---|---|---|---|---:|---:|---:|---:|",
     ])
 
     for test in report["tests"]:
@@ -759,9 +1046,14 @@ def generate_markdown(report: dict[str, Any]) -> str:
                 test["expected_domain"],
                 str(test["actual_domain"]),
                 "✓" if test["success"] else "✗",
+                "✓" if test["valid_plan"] else "✗",
+                _fmt(test["confidence"]),
+                str(test["validation_attempts"]),
+                str(test["context_error_count"]),
                 _fmt(test["semantic"]["overall"]),
             ]) + " |"
         )
+
     lines.append("")
 
     return "\n".join(lines)
@@ -805,9 +1097,13 @@ def main() -> None:
     print()
     print(f"Test: {report['global']['n_test']}")
     print(f"Success rate: {report['global']['success_rate']:.2f}%")
+    print(f"Supported-domain success rate: {report['global']['supported_success_rate']:.2f}%")
     print(f"Domain accuracy: {report['global']['domain_accuracy']:.2f}%")
+    print(f"Valid plan rate: {report['global']['valid_plan_rate']:.2f}%")
+    print(f"Crash rate: {report['global']['system_crash_rate']:.2f}%")
     print(f"Semantic score: {report['global']['semantic']['overall_score']}")
     print(f"Semantic coverage: {report['global']['semantic']['coverage_rate']:.2f}%")
+    print()
     print()
 
 
