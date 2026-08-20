@@ -23,7 +23,7 @@ logger = logging.getLogger("planner_tools")
 async def _call_agent(base_url: str, agent_name: str, question: str) -> dict[str, Any]:
     """
     Invia una richiesta POST all'endpoint /query di un agente esterno.
-    Gestisce internamente tutte le eccezioni di rete in modo graceful.
+    Gestisce internamente i soli fallimenti della chiamata esterna (rete/HTTP/parsing); eccezioni impreviste risalgono fino a routes.py.
 
     Args:
         base_url (str): L'URL di base dell'agente (es. http://localhost:8000).
@@ -56,11 +56,12 @@ async def _call_agent(base_url: str, agent_name: str, question: str) -> dict[str
         msg: str = f"{agent_name}: errore di connessione ({err.__class__.__name__})"
         logger.warning(f"Errore di connessione a {agent_name} su {url}: {err}")
         return {"error": msg}
-        
-    except Exception as err:
-        # Rete di sicurezza: mai far propagare un'eccezione imprevista alla pipeline
-        msg: str = f"{agent_name}: errore imprevisto ({err.__class__.__name__})"
-        logger.error(f"Errore imprevisto chiamando {agent_name}: {err}", exc_info=True)
+
+    except ValueError as err:
+        # resp.json() su body 2xx ma non JSON valido: malfunzionamento dell'agente
+        # esterno, non un bug interno — resta un fallimento "gestito".
+        msg: str = f"{agent_name}: risposta non JSON valida ({err.__class__.__name__})"
+        logger.warning(f"Risposta non valida da {agent_name} su {url}: {err}")
         return {"error": msg}
 
 

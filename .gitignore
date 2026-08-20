@@ -19,5 +19,8 @@ test_logs.txt
 # generated build artifacts
 agents/kg/data/*
 !agents/kg/data/.gitkeep
-agents/planner/src/benchmarks/benchmark_results.json
-agents/planner/src/benchmarks/semantic_eval_results.json
+agents/planner/src/benchmarks/data/benchmark_results.json
+agents/planner/src/benchmarks/data/semantic_eval_results.json
+agents/planner/src/benchmarks/data/benchmark_report.json
+agents/planner/src/benchmarks/data/benchmark_report.md
+repomix-output.md

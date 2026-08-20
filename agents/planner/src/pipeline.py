@@ -224,17 +224,24 @@ class PlannerPipeline:
                 break
 
             tool_name: str | None = decision.get("tool")
-            
+
             # Usiamo 'or' (e non il default di .get()) perché se l'LLM 
             # restituisce esplicitamente "tool_input": null, dobbiamo bypassarlo.
             tool_input: str = decision.get("tool_input") or request.question
-            tool_fn = TOOL_REGISTRY.get(str(tool_name))
-            
-            obs: dict[str, Any] = (
-                {"error": f"tool sconosciuto: {tool_name!r}"} 
-                if tool_fn is None 
-                else await tool_fn(tool_input)
-            )
+
+            # Il dispatch deve rispettare available_tools, non solo TOOL_REGISTRY:
+            # altrimenti un tool già rimosso per un fallimento precedente resta
+            # comunque richiamabile se l'LLM insiste a richiederlo.
+            if str(tool_name) not in {t["name"] for t in available_tools}:
+                obs: dict[str, Any] = {
+                    "error": (
+                        f"tool non più disponibile in questo step: {tool_name!r}"
+                        if tool_name in TOOL_REGISTRY
+                        else f"tool sconosciuto: {tool_name!r}"
+                    )
+                }
+            else:
+                obs = await TOOL_REGISTRY[str(tool_name)](tool_input)
 
             trace.append({
                 "step": step + 1, 

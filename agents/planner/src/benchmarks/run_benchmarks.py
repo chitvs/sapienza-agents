@@ -64,8 +64,8 @@ MODELS_TO_TEST = [
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
 
 BENCHMARK_DIR: Path = Path(__file__).resolve().parent
-DATASET_PATH: Path = BENCHMARK_DIR / "benchmark_dataset.json"
-RESULTS_PATH: Path = BENCHMARK_DIR / "benchmark_results.json"
+DATASET_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_dataset.json"
+RESULTS_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_results.json"
 
 RATE_LIMIT_DELAY_SECONDS: float = 30
 

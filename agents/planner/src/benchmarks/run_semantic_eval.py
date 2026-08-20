@@ -44,9 +44,9 @@ TARGET_TEST_IDS: list[str] = []
 
 
 BENCHMARK_DIR: Path = Path(__file__).resolve().parent
-DATASET_PATH: Path = BENCHMARK_DIR / "benchmark_dataset.json"
-RESULTS_PATH: Path = BENCHMARK_DIR / "benchmark_results.json"
-EVAL_RESULTS_PATH: Path = BENCHMARK_DIR / "semantic_eval_results.json"
+DATASET_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_dataset.json"
+RESULTS_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_results.json"
+EVAL_RESULTS_PATH: Path = BENCHMARK_DIR / "data" / "semantic_eval_results.json"
 PROMPT_PATH: Path = settings.prompts_dir / "semantic_eval.txt"
 
 RATE_LIMIT_DELAY_SECONDS: float = 5.0
