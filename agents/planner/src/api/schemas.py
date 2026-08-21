@@ -1,9 +1,5 @@
 """
 Schema Pydantic per l'agente Planner    .
-Percorso di destinazione previsto: agents/planner/src/api/schemas.py
-
-Segue le convenzioni già in uso in kg-agent e multiapi-agent:
-QueryRequest / QueryResponse, Field con description, sintassi `str | None`.
 """
 
 from datetime import date as date_

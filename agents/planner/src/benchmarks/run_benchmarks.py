@@ -19,8 +19,6 @@ from typing import Any, Literal
 from datetime import datetime, timezone
 
 
-# Stesso bootstrap di sys.path usato in main.py, per poter lanciare lo
-# script sia da root ("python src/run_benchmarks.py") sia da dentro src/.
 src_dir: Path = Path(__file__).resolve().parent.parent
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
@@ -58,7 +56,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # ]
 
 MODELS_TO_TEST = [
-    ("ollama", "ministral-3:3b")
+    ("gemini", "gemini-3.5-flash-lite")
 ]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
@@ -80,11 +78,11 @@ def _load_dataset() -> list[dict[str, Any]]:
         list[dict[str, Any]]: I test case (id, intent, question, expected_domain, ...).
 
     Raises:
-        FileNotFoundError: Se il dataset (Fase 2) non è ancora stato creato.
+        FileNotFoundError: Se il dataset non è ancora stato creato.
     """
     if not DATASET_PATH.exists():
         raise FileNotFoundError(
-            f"Golden dataset non trovato in {DATASET_PATH} (va creato nella Fase 2)."
+            f"Golden dataset non trovato in {DATASET_PATH}."
         )
     return json.loads(DATASET_PATH.read_text(encoding="utf-8"))
 

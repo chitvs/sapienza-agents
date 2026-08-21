@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # Pipeline: fallback
     max_draft_retries: int = 2
+    max_json_retries: int = 1
     enable_local_fallback: bool = True
 
     # Context gathering 

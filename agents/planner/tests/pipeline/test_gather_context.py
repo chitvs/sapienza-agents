@@ -1,5 +1,5 @@
 """
-Test per _gather_context (Step 5 della roadmap planner): dispatch deterministico per
+Test per _gather_context: dispatch deterministico per
 dominio, degrado parziale/totale su 'travel', nessuna chiamata di rete per study/routine
 - stesso principio già verificato per il dominio 'unknown' in test_domain_classification.py.
 

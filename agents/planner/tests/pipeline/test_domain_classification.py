@@ -1,8 +1,4 @@
 """
-Test del fix "fallback pericoloso del dominio unknown": verificano che una richiesta
-fuori scope (o una classificazione fallita) non venga mai forzata in un dominio a caso,
-e che in quel caso il drafting non venga proprio invocato.
-
 httpx.AsyncClient.post è mockato: questi test sono deterministici e non richiedono Ollama.
 """
 

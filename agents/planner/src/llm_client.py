@@ -216,7 +216,8 @@ class LLMClient:
             self._log("  [warn] openai-compatible: nessuna choice nella risposta", level=logging.WARNING)
             return ""
 
-        return choices[0].get("message", {}).get("content", "").strip()
+        content = choices[0].get("message", {}).get("content")
+        return (content or "").strip()
 
     async def _generate_ollama(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
         """
@@ -281,24 +282,35 @@ class LLMClient:
     async def extract_json(self, prompt: str) -> dict[str, Any] | None:
         """
         Invia un prompt all'LLM e tenta di effettuare il parsing della risposta come JSON.
-
-        Args:
-            prompt (str): Il testo del prompt da inviare.
-
-        Returns:
-            dict[str, Any] | None: Il dizionario parsato se il JSON è valido, 
-            altrimenti None. Non solleva eccezioni di parsing.
+        Se fallisce, richiede automaticamente al modello di correggere la sintassi.
         """
-        raw: str = await self.generate(prompt, json_mode=True)
-        cleaned: str = self.clean_json(raw)
+        current_prompt = prompt
+        max_retries = settings.max_json_retries  # <-- Legge dal file di configurazione
         
-        self._log(f"  -> risposta llm grezza: {raw}")
-        
-        try:
-            return json.loads(cleaned)
-        except (json.JSONDecodeError, AttributeError):
-            self._log(
-                f"  [warn] impossibile parsare json: {cleaned}", 
-                level=logging.WARNING
-            )
-            return None
+        for attempt in range(max_retries + 1):
+            raw: str = await self.generate(current_prompt, json_mode=True)
+            cleaned: str = self.clean_json(raw)
+            self._log(f"  -> risposta llm grezza (tent {attempt + 1}): {raw}")
+            
+            try:
+                return json.loads(cleaned)
+            except (json.JSONDecodeError, AttributeError) as err:
+                if attempt < max_retries:
+                    self._log(
+                        f"  [warn] JSON malformato, richiedo correzione sintattica all'LLM. Errore: {err}", 
+                        level=logging.WARNING
+                    )
+                    # Aggiunta del feedback per il modello
+                    current_prompt = (
+                        f"{prompt}\n\n"
+                        f"ATTENZIONE: La tua risposta precedente non era un JSON valido.\n"
+                        f"Il tuo output errato: {cleaned}\n"
+                        f"Errore del parser Python: {err}\n"
+                        f"Correggi la sintassi e restituisci SOLO un oggetto JSON valido, senza testo aggiuntivo o nidificazioni errate."
+                    )
+                else:
+                    self._log(
+                        f"  [warn] impossibile parsare json dopo {max_retries + 1} tentativi: {cleaned}", 
+                        level=logging.WARNING
+                    )
+                    return None

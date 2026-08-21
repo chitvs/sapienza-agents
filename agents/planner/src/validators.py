@@ -1,5 +1,5 @@
 """
-Validazione logica delle bozze di piano generate dalla pipeline (punto 4.1 della roadmap).
+Validazione logica delle bozze di piano generate dalla pipeline.
 
 Volutamente disaccoppiato da Pydantic: opera sul dizionario grezzo restituito dal LLM, 
 PRIMA della costruzione dei modelli (QueryResponse/PlanDay/TimeSlot). 
@@ -74,7 +74,7 @@ def validate_draft(
 
     errors: list[str] = []
     
-    # 1. Controlli top-level (allineati con QueryResponse)
+    # 1. Controlli top-level
     title: Any = draft.get("title")
     if not isinstance(title, str) or not title.strip():
         errors.append("il campo 'title' è mancante o non è una stringa valida")
@@ -109,7 +109,7 @@ def validate_draft(
             errors.append(f"day_index {day_index} duplicato")
         seen_indices.add(day_index)
 
-        # Controlli di tipo sul giorno (allineati con lo schema Pydantic PlanDay)
+        # Controlli di tipo sul giorno 
         label: Any = day.get("label")
         if label is not None and not isinstance(label, str):
             errors.append(f"giorno {day_index}: il campo 'label' deve essere una stringa")
@@ -130,7 +130,7 @@ def validate_draft(
         timed_slots: list[tuple[int, int, str]] = []  # (inizio_min, fine_min, task)
 
         for slot in slots:
-            # Controlli di tipo su slot (allineati con TimeSlot).
+            # Controlli di tipo su slot
             # Usiamo Any perché il JSON dell'LLM potrebbe non rispettare lo schema.
             task: Any = slot.get("task")
             if not isinstance(task, str) or not task.strip():

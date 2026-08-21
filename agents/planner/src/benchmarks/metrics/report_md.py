@@ -3,8 +3,7 @@ Rendering del report in Markdown.
 
 Prende in input il dizionario prodotto da aggregate.build_report() e
 produce il testo del report leggibile da uomo. Nessun calcolo qui
-dentro: solo formattazione. Logica invariata rispetto al vecchio
-metrics.py, solo spostata in un modulo dedicato.
+dentro: solo formattazione.
 """
 
 from __future__ import annotations

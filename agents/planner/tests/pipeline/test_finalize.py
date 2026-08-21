@@ -1,8 +1,7 @@
 """
-Test per _finalize (Step 5 della roadmap planner): formula di confidence additiva con
+Test per _finalize: formula di confidence additiva con
 floor, su tutte le combinazioni draft_attempts x lista errori vuota/non vuota - incluso
-il caso limite in cui il floor assorbe già la penalità di rete (nota accettata nella
-roadmap, non un bug) - e il salvataggio di gathered_context/contingency_notes.
+il caso limite in cui il floor assorbe già la penalità di rete - e il salvataggio di gathered_context/contingency_notes.
 """
 
 from api.schemas import QueryRequest
@@ -46,8 +45,6 @@ def test_one_retry_with_errors():
 
 
 def test_two_retries_floor_absorbs_network_penalty():
-    """al floor (draft_attempts == max_draft_retries, oggi 2) la penalità di rete non è
-    più visibile: nota accettata nella roadmap, non un bug."""
     response_no_errors = _finalize(2, [])
     response_with_errors = _finalize(2, ["kg-agent: timeout dopo 60.0s"])
     assert response_no_errors.confidence == 0.5

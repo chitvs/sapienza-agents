@@ -1,17 +1,13 @@
 """
 Package di metriche e reporting per il benchmark del Planner Agent.
 
-Split del vecchio metrics.py (unico file) in moduli per responsabilità:
+Split in moduli per responsabilità:
     model.py      - TestOutcome + normalize() (pura)
     analytics.py  - tutte le metriche calcolate su list[TestOutcome] (pura)
     aggregate.py  - build_report(), i breakdown per gruppo (pura)
     report_md.py  - rendering Markdown del report (pura)
     io.py         - percorsi e lettura/scrittura su disco (unico I/O)
     run.py        - orchestrazione (main())
-
-Questo __init__ ri-esporta l'API pubblica usata in precedenza, in modo
-che import come `from benchmarks.metrics import build_report` continuino
-a funzionare invariati dopo lo split.
 """
 
 from .aggregate import build_report

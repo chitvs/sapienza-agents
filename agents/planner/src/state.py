@@ -33,10 +33,6 @@ class PlanStateStore:
     """
     Store in-memory (chiave-valore) per i piani attivi.
     Associa ogni session_id all'ultimo StoredPlan generato.
-    
-    Nota sulla roadmap: attualmente non implementa meccanismi di scadenza (TTL).
-    Un intento 'new_plan' sulla stessa sessione sovrascrive semplicemente 
-    lo stato precedente.
     """
 
     def __init__(self) -> None:
@@ -86,5 +82,4 @@ class PlanStateStore:
 
 
 # Istanza singola condivisa dal processo (Singleton pattern rudimentale).
-# Segue lo stesso pattern di `settings = Settings()` in configs/settings.py.
 plan_state_store: PlanStateStore = PlanStateStore()

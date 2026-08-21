@@ -1,8 +1,7 @@
 """
 Orchestrazione della generazione del report: carica gli input da disco
 (io.py), costruisce il report (aggregate.py), lo renderizza in Markdown
-(report_md.py) e scrive entrambi gli output. Sostituisce il vecchio
-main() di metrics.py.
+(report_md.py) e scrive entrambi gli output. 
 """
 
 from __future__ import annotations
