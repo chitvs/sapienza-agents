@@ -1,4 +1,5 @@
 import json
+from datetime import date
 import re
 import logging
 from typing import Any
@@ -80,13 +81,13 @@ class MultiApiPipeline:
             self._prompts_cache[filename] = path.read_text(encoding="utf-8")
         return self._prompts_cache[filename]
 
-    def _llm_extract_json(self, prompt_file: str, question: str) -> dict | None:
+    def _llm_extract_json(self, prompt_file: str, question: str, **extra) -> dict | None:
         """helper generico: carica un prompt, lo invia al llm, parsa il json di risposta.
 
         Se il parse fallisce, attiva il corrector per riprovare con feedback.
         """
         template = self._load_prompt(prompt_file)
-        prompt = template.format(question=question)
+        prompt = template.format(question=question, **extra)
         raw = self._llm_generate(prompt)
         cleaned = self._clean_json(raw)
         self._log(f"  -> risposta llm grezza: {raw}")
@@ -132,19 +133,30 @@ class MultiApiPipeline:
         self._log("  [warn] estrazione città fallita")
         return None
 
-    def _extract_exchange_params(self, question: str) -> dict[str, str | None]:
-        """usa il llm per estrarre le valute dalla domanda."""
+    def _extract_exchange_params(self, question: str) -> dict[str, Any]:
+        """usa il llm per estrarre valute, importo ed eventuale data dalla domanda."""
         self._log("\n[info] [step] estrazione valute via llm")
-        data = self._llm_extract_json("extract_exchange.txt", question)
+        # la data di oggi serve al modello per sciogliere le espressioni relative
+        # ("l'anno scorso"), che da solo non saprebbe ancorare
+        data = self._llm_extract_json(
+            "extract_exchange.txt", question, today=date.today().isoformat()
+        )
 
         if data:
             from_c = data.get("from_currency")
             to_c = data.get("to_currency")
-            self._log(f"  -> valute estratte: {from_c} -> {to_c}")
-            return {"from_currency": from_c, "to_currency": to_c}
+            amount = data.get("amount")
+            when = data.get("date")
+            self._log(f"  -> estratti: {amount or 1} {from_c} -> {to_c} (data: {when or 'oggi'})")
+            return {
+                "from_currency": from_c,
+                "to_currency": to_c,
+                "amount": amount,
+                "date": when,
+            }
 
         self._log("  [warn] estrazione valute fallita")
-        return {"from_currency": None, "to_currency": None}
+        return {"from_currency": None, "to_currency": None, "amount": None, "date": None}
 
     def _extract_country(self, question: str) -> str | None:
         """usa il llm per estrarre il nome del paese dalla domanda."""
@@ -199,7 +211,7 @@ class MultiApiPipeline:
         if "error" in result:
             self._log(f"  [warn] errore provider: {result['error']}")
         else:
-            self._log(f"  -> tasso recuperato: {params['from_currency']}/{params['to_currency']} = {result.get('rates')}")
+            self._log(f"  -> {result.get('amount')} {result.get('base')} = {result.get('converted')} {result.get('quote')} (tasso {result.get('rates')}, {result.get('date')})")
         return [result]
 
     def _run_country(self, question: str) -> list[dict[str, Any]]:

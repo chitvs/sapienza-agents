@@ -213,13 +213,30 @@ function cardExchange(r) {
     `<div class="card-name">${escape(base)}${quote ? " &rarr; " + escape(quote) : ""}</div>` +
     `<div class="card-sub">tasso di cambio</div></div>` +
     flagImg(currencyFlag(quote), quote) + `</div>`;
+  // quando la domanda contiene un importo, il dato che risponde è la conversione;
+  // il tasso unitario scende fra i dettagli
+  const amount = typeof r.amount === "number" ? r.amount : 1;
+  const isConversion = amount !== 1 && typeof r.converted === "number";
+  const heroValue = isConversion ? r.converted : (r.rates ?? "?");
+  const heroLabel = isConversion
+    ? `${NUM.format(amount)} ${base}`
+    : `per 1 ${base}`;
+
   const hero = `<div class="hero">` +
     `<div class="hero-text">` +
-    `<div class="hero-value">${escape(String(r.rates ?? "?"))}` +
+    `<div class="hero-value">${escape(String(heroValue))}` +
     (quote ? `<span class="hero-unit">${escape(quote)}</span>` : "") + `</div>` +
-    `<div class="hero-label">per 1 ${escape(base)}</div>` +
+    `<div class="hero-label">${escape(heroLabel)}</div>` +
     `</div></div>`;
-  return `<div class="card">${head}${hero}${statList([["aggiornato al", formatDate(r.date)]])}</div>`;
+
+  const stats = statList([
+    ...(isConversion ? [["tasso", `1 ${base} = ${r.rates} ${quote}`]] : []),
+    // se il fixing richiesto cadeva in un giorno non lavorativo, la data usata
+    // è un'altra: dirlo evita che sembri un errore
+    ...(r.requested_date ? [["richiesto per", formatDate(r.requested_date)]] : []),
+    ["aggiornato al", formatDate(r.date)],
+  ]);
+  return `<div class="card">${head}${hero}${stats}</div>`;
 }
 
 function cardCountry(r) {
