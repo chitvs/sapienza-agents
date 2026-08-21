@@ -1,6 +1,7 @@
 const ENDPOINTS = {
   orchestrator: "/api/orchestrator/query",
   kg: "/api/kg/query",
+  multiapi: "/api/multiapi/query",
 };
 
 const META_KEYS = ["_provenance", "_sources"];
@@ -17,13 +18,38 @@ function escape(text) {
   return div.innerHTML;
 }
 
+function escapeAttr(text) {
+  // textContent non tocca gli apici: dentro un attributo servono anche quelli,
+  // altrimenti un valore che ne contiene uno chiude l'attributo e ne apre altri
+  return escape(text).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function formatDetail(detail) {
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || JSON.stringify(item)).join("; ");
+  }
+  return typeof detail === "string" ? detail : detail && JSON.stringify(detail);
+}
+
+function safeUrl(uri) {
+  // gli uri arrivano dal knowledge graph, non da noi: uno schema "javascript:"
+  // eseguirebbe codice al clic, quindi si ammettono solo http e https assoluti
+  try {
+    const parsed = new URL(String(uri));
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
 function renderMeta(entries) {
   const cells = entries.map(([label, value]) => `<span>${escape(label)}: ${escape(value)}</span>`);
   return `<div class="meta">${cells.join("")}</div>`;
 }
 
 function formatSeconds(ms) {
-  return ms ? `${(ms / 1000).toFixed(1)}s` : "?";
+  // 0 è un tempo misurato, non un dato mancante: solo null/undefined valgono "?"
+  return typeof ms === "number" ? `${(ms / 1000).toFixed(1)}s` : "?";
 }
 
 function columnsOf(rows) {
@@ -40,9 +66,9 @@ function renderCell(row, column) {
   const value = row[column];
   if (value === null || value === undefined) return "";
   const text = escape(String(value));
-  const uri = row._sources ? row._sources[column] : null;
+  const uri = row._sources ? safeUrl(row._sources[column]) : null;
   return uri
-    ? `${text}<a class="src" href="${escape(uri)}" target="_blank" rel="noopener">fonte</a>`
+    ? `${text}<a class="src" href="${escapeAttr(uri)}" target="_blank" rel="noopener">fonte</a>`
     : text;
 }
 
@@ -81,6 +107,208 @@ function renderKg(data) {
   return meta + table + query;
 }
 
+// ---- helper di presentazione per i risultati multiapi ----
+
+const NUM = new Intl.NumberFormat("it-IT");
+const DATE_FMT = new Intl.DateTimeFormat("it-IT", {
+  weekday: "long", day: "numeric", month: "long", year: "numeric",
+});
+
+// le date arrivano come "AAAA-MM-GG". Costruiamo la data dai singoli pezzi:
+// passando la stringa intera a new Date() verrebbe letta come UTC e, a fusi
+// negativi, mostrerebbe il giorno precedente.
+function formatDate(iso) {
+  if (typeof iso !== "string") return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  return DATE_FMT.format(new Date(+m[1], +m[2] - 1, +m[3]));
+}
+
+// codici WMO -> icona (stessa tabella che il provider usa per il testo)
+function weatherIcon(code) {
+  if (code === 0) return "☀️";
+  if (code === 1) return "🌤️";
+  if (code === 2) return "⛅";
+  if (code === 3) return "☁️";
+  if (code === 45 || code === 48) return "🌫️";
+  if (code >= 51 && code <= 57) return "🌦️";
+  if (code >= 61 && code <= 67) return "🌧️";
+  if (code >= 71 && code <= 77) return "❄️";
+  if (code >= 80 && code <= 82) return "🌧️";
+  if (code === 85 || code === 86) return "🌨️";
+  if (code >= 95) return "⛈️";
+  return "🌡️";
+}
+
+// flagcdn indicizza le bandiere per codice ISO-3166 alpha-2 minuscolo.
+function flagUrl(code, size) {
+  if (typeof code !== "string" || !/^[A-Za-z]{2}$/.test(code)) return "";
+  return `https://flagcdn.com/${size || "w40"}/${code.toLowerCase()}.png`;
+}
+
+// quasi tutti i codici valuta ISO-4217 iniziano col codice paese
+// (USD -> US, JPY -> JP...): l'euro è l'eccezione che vale la pena gestire.
+function currencyFlag(currency) {
+  if (typeof currency !== "string" || currency.length < 3) return "";
+  if (currency.toUpperCase() === "EUR") return flagUrl("eu");
+  return flagUrl(currency.slice(0, 2));
+}
+
+
+// onerror: se flagcdn non ha quella bandiera l'immagine si rimuove da sola,
+// invece di lasciare l'icona di risorsa rotta.
+function flagImg(url, alt, cls) {
+  if (!url) return "";
+  return `<img class="${cls || "flag"}" src="${escape(url)}" alt="${escape(alt)}" onerror="this.remove()">`;
+}
+
+function cardHead(title, subtitle, flag) {
+  return `<div class="card-head">${flag || ""}<div class="card-head-text">` +
+    `<div class="card-name">${escape(title)}</div>` +
+    (subtitle ? `<div class="card-sub">${escape(subtitle)}</div>` : "") +
+    `</div></div>`;
+}
+
+function statList(stats) {
+  const cells = stats
+    .filter(([, value]) => value !== "" && value !== null && value !== undefined)
+    .map(([label, value]) =>
+      `<div class="stat"><span class="stat-label">${escape(label)}</span>` +
+      `<span class="stat-value">${escape(String(value))}</span></div>`);
+  return cells.length ? `<div class="stats">${cells.join("")}</div>` : "";
+}
+
+function tagGroup(label, values) {
+  const list = (values || []).filter(v => v !== null && v !== undefined && v !== "");
+  if (!list.length) return "";
+  const tags = list.map(v => `<span class="tag">${escape(String(v))}</span>`).join("");
+  return `<div class="tag-row"><span class="stat-label">${escape(label)}</span><div>${tags}</div></div>`;
+}
+
+// ---- una card dedicata per ogni tipo di risposta ----
+
+function cardWeather(r) {
+  const head = cardHead(r.city || "località", r.country || "", flagImg(flagUrl(r.country_code), r.country || ""));
+  const temp = r.temperature_c;
+  const hero = `<div class="hero">` +
+    `<span class="hero-icon">${weatherIcon(r.weather_code)}</span>` +
+    `<div class="hero-text">` +
+    `<div class="hero-value">${temp === null || temp === undefined ? "?" : escape(String(temp))}<span class="hero-unit">&deg;C</span></div>` +
+    `<div class="hero-label">${escape(r.condition || "")}</div>` +
+    `</div></div>`;
+  const stats = statList([
+    ["percepita", r.apparent_temperature_c != null ? `${r.apparent_temperature_c} °C` : ""],
+    ["umidità", r.humidity_percent != null ? `${r.humidity_percent} %` : ""],
+    ["vento", r.wind_speed_kmh != null ? `${r.wind_speed_kmh} km/h` : ""],
+  ]);
+  return `<div class="card">${head}${hero}${stats}</div>`;
+}
+
+function cardExchange(r) {
+  const base = r.base || "?";
+  const quote = r.quote || "";
+  const head = `<div class="card-head">` +
+    flagImg(currencyFlag(base), base) +
+    `<div class="card-head-text">` +
+    `<div class="card-name">${escape(base)}${quote ? " &rarr; " + escape(quote) : ""}</div>` +
+    `<div class="card-sub">tasso di cambio</div></div>` +
+    flagImg(currencyFlag(quote), quote) + `</div>`;
+  const hero = `<div class="hero">` +
+    `<div class="hero-text">` +
+    `<div class="hero-value">${escape(String(r.rates ?? "?"))}` +
+    (quote ? `<span class="hero-unit">${escape(quote)}</span>` : "") + `</div>` +
+    `<div class="hero-label">per 1 ${escape(base)}</div>` +
+    `</div></div>`;
+  return `<div class="card">${head}${hero}${statList([["aggiornato al", formatDate(r.date)]])}</div>`;
+}
+
+function cardCountry(r) {
+  const flag = flagImg(r.flag_png, `bandiera ${r.name || ""}`, "flag flag-lg");
+  const native = r.native_name && r.native_name !== r.name ? r.native_name : "";
+  const area = [r.subregion, r.region].filter(Boolean)[0] || "";
+  const head = `<div class="card-head">${flag}<div class="card-head-text">` +
+    `<div class="card-name card-name-lg">${escape(r.name || "paese")}</div>` +
+    (native ? `<div class="card-sub">${escape(native)}</div>` : "") +
+    (area ? `<div class="card-sub">${escape(area)}</div>` : "") +
+    `</div></div>`;
+  const capital = Array.isArray(r.capital) ? r.capital.join(", ") : (r.capital || "");
+  const stats = statList([
+    ["capitale", capital],
+    ["popolazione", r.population ? NUM.format(r.population) : ""],
+    ["superficie", r.area_km2 ? `${NUM.format(r.area_km2)} km²` : ""],
+  ]);
+  const currencies = (r.currencies || []).map(c =>
+    typeof c === "string" ? c : [c.code, c.symbol ? `(${c.symbol})` : ""].filter(Boolean).join(" "));
+  const tags = tagGroup("lingue", r.languages) +
+    tagGroup("valute", currencies) +
+    tagGroup("fusi orari", r.timezones) +
+    tagGroup("confini", r.borders);
+  return `<div class="card">${head}${stats}${tags}</div>`;
+}
+
+function cardTime(r) {
+  // niente sottotitolo: il fuso orario è già fra le stat qui sotto
+  const head = cardHead(r.city || "località", "", flagImg(flagUrl(r.country_code), r.city || ""));
+  const hero = `<div class="hero">` +
+    `<span class="hero-icon">🕒</span>` +
+    `<div class="hero-text">` +
+    `<div class="hero-value hero-clock">${escape(r.time || "--:--:--")}</div>` +
+    `<div class="hero-label">${escape(formatDate(r.date))}</div>` +
+    `</div></div>`;
+  const stats = statList([
+    ["fuso orario", r.timezone || ""],
+    ["offset UTC", r.utc_offset || ""],
+    ["sigla", r.abbreviation || ""],
+    ["ora legale", r.dst ? "sì" : "no"],
+  ]);
+  return `<div class="card">${head}${hero}${stats}</div>`;
+}
+
+const CARD_BY_INTENT = {
+  weather: cardWeather,
+  exchange_rate: cardExchange,
+  country_info: cardCountry,
+  time_info: cardTime,
+};
+
+function renderMultiapi(data) {
+  if (!data) return "";
+  if (data.error) return `<p class="err">agente multiapi non raggiungibile: ${escape(data.error)}</p>`;
+
+  const intentLabels = {
+    weather: "🌤 Meteo",
+    exchange_rate: "💱 Cambio valute",
+    country_info: "🌍 Info paese",
+    time_info: "🕒 Ora locale",
+    unknown: "❓ Intent non riconosciuto",
+  };
+
+  const intentLabel = intentLabels[data.intent] || data.intent || "risultato";
+  const meta = renderMeta([
+    ["tipo", intentLabel],
+    ["risultati", data.count ?? 0],
+    ["confidenza", (data.confidence ?? 0).toFixed(2)],
+    ["tempo", formatSeconds(data.execution_time_ms)],
+  ]);
+
+  const results = data.results || [];
+  if (!results.length) return meta + "<p class='msg'>nessun risultato trovato.</p>";
+
+  // gli errori dei provider arrivano come risultato con chiave "error"
+  const failed = results.filter(r => r && r.error);
+  if (failed.length === results.length) {
+    return meta + failed.map(r => `<p class="err">${escape(r.error)}</p>`).join("");
+  }
+
+  const card = CARD_BY_INTENT[data.intent];
+  const content = card
+    ? results.map(r => (r && r.error) ? `<p class="err">${escape(r.error)}</p>` : card(r)).join("")
+    : renderTable(results);
+
+  // i campi non mostrati nelle card restano comunque consultabili
+  return meta + content + renderRaw("dati grezzi", results);
+}
+
 function renderOrchestrator(data) {
   const agents = (data.selected_agents || []).length
     ? data.selected_agents.map(a => `<span class="tag">${escape(a)}</span>`).join("")
@@ -94,7 +322,9 @@ function renderOrchestrator(data) {
     html += "<h2>agente kg</h2>" + renderKg(details.kg_results);
   }
   html += renderRaw("agente planner", details.planner_results);
-  html += renderRaw("agente multiapi", details.multiapi_results);
+  if (details.multiapi_results) {
+    html += "<h2>agente multiapi</h2>" + renderMultiapi(details.multiapi_results);
+  }
   return html;
 }
 
@@ -115,9 +345,24 @@ form.addEventListener("submit", async event => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(body),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.detail || `errore ${response.status}`);
-    output.innerHTML = mode === "kg" ? renderKg(data) : renderOrchestrator(data);
+    // la risposta si legge come testo e poi si parsa: se un agente è giù,
+    // nginx risponde con una pagina di errore HTML e response.json() esploderebbe
+    // nascondendo lo stato reale
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+    }
+    // sui 422 di FastAPI "detail" è un array di oggetti: senza formatDetail
+    // l'utente leggerebbe [object Object]
+    if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
+    output.innerHTML = mode === "kg"
+      ? renderKg(data)
+      : mode === "multiapi"
+        ? renderMultiapi(data)
+        : renderOrchestrator(data);
   } catch (err) {
     output.innerHTML = `<p class="err">${escape(err.message)}</p>`;
   } finally {

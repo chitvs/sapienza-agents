@@ -5,6 +5,7 @@ SUPPORTED INTENTS:
 - "weather": questions about weather, temperature, forecasts, rain, wind, climate in a city or location.
 - "exchange_rate": questions about currency exchange rates, conversions, how much a currency is worth in another.
 - "country_info": questions about countries, capitals, population, area, languages spoken, currencies used, borders, flags, timezones.
+- "time_info": questions about the current local time or date in a city, country, or timezone.
 - "unknown": anything that does not fit the above categories.
 
 RULES:
@@ -12,6 +13,7 @@ RULES:
 - Example: {{"intent": "weather"}}
 - Example: {{"intent": "exchange_rate"}}
 - Example: {{"intent": "country_info"}}
+- Example: {{"intent": "time_info"}}
 - Example: {{"intent": "unknown"}}
 - Do not output explanations, markdown, or anything other than the JSON object.
 
@@ -27,6 +29,11 @@ EXAMPLES:
 - "Che lingua si parla in Brasile?" -> {{"intent": "country_info"}}
 - "Quali paesi confinano con la Germania?" -> {{"intent": "country_info"}}
 - "Qual è la bandiera dell'Italia?" -> {{"intent": "country_info"}}
+- "Che ore sono a Tokyo?" -> {{"intent": "time_info"}}
+- "Che ora è adesso a New York?" -> {{"intent": "time_info"}}
+- "Dimmi l'orario attuale a Sydney" -> {{"intent": "time_info"}}
+- "Sono le 3 in Giappone adesso?" -> {{"intent": "time_info"}}
+- "Orario corrente a Londra" -> {{"intent": "time_info"}}
 - "Chi ha inventato la pizza?" -> {{"intent": "unknown"}}
 
 User question: "{question}"

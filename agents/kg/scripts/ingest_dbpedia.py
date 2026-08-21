@@ -4,22 +4,21 @@ Costruisce gli indici FAISS dell'ontologia DBpedia (vocabolario dbo:) per il Vec
 Uso: python scripts/ingest_dbpedia.py
 """
 
-import json
 import logging
 import sys
 import time
 from pathlib import Path
-
-import faiss
-import numpy as np
 import requests
-from sentence_transformers import SentenceTransformer
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from ontology_index import build_and_save
+
+# configurazione logger
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+# variabili globali
 DBPEDIA_SPARQL = "https://dbpedia.org/sparql"
 DBPEDIA_ONTOLOGY_NS = "http://dbpedia.org/ontology/"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "dbpedia_ontology"
@@ -31,7 +30,7 @@ SESSION.headers.update({
 })
 
 def run_sparql(query: str, retries: int = 3) -> list[dict]:
-    """Esegue una query sull'endpoint pubblico."""
+    """Esegue una query sull'endpoint pubblico e ne restituisce le righe dei risultati JSON."""
     for attempt in range(retries):
         try:
             response = SESSION.get(
@@ -39,6 +38,8 @@ def run_sparql(query: str, retries: int = 3) -> list[dict]:
                 params={"query": query, "format": "application/sparql-results+json"},
                 timeout=120,
             )
+            # 429 e 503 sono codici di endpoint occupato
+            # aspettiamo e ritentiamo
             if response.status_code in (429, 503):
                 wait = 3.0 * (attempt + 1)
                 logger.warning("endpoint occupato (%s), attendo %.0fs...", response.status_code, wait)
@@ -54,6 +55,7 @@ def run_sparql(query: str, retries: int = 3) -> list[dict]:
     return []
 
 def local_name(uri: str) -> str:
+    """Trasforma un URI nel suo nome locale."""
     return uri[len(DBPEDIA_ONTOLOGY_NS):] if uri.startswith(DBPEDIA_ONTOLOGY_NS) else uri.rsplit("/", 1)[-1]
 
 def fetch_ontology_terms(term_type: str) -> list[dict]:
@@ -94,47 +96,10 @@ def fetch_ontology_terms(term_type: str) -> list[dict]:
     logger.info("trovate %d %s", len(terms), "proprietà" if term_type == "property" else "classi")
     return list(terms.values())
 
-def build_embedding_text(item: dict) -> str:
-    text = item.get("label", "") or item.get("id", "")
-    description = item.get("description", "")
-    return f"{text} - {description}" if description else text
-
-def create_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatIP:
-    faiss.normalize_L2(embeddings)
-    index = faiss.IndexFlatIP(embeddings.shape[1])
-    index.add(embeddings)
-    return index
-
 def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    from embeddings import RETRIEVAL_MODEL_NAME
-
-    logger.info("carico il modello di embedding (%s)...", RETRIEVAL_MODEL_NAME)
-    model = SentenceTransformer(RETRIEVAL_MODEL_NAME)
-
     properties = fetch_ontology_terms("property")
     classes = fetch_ontology_terms("class")
-
-    if not properties:
-        sys.exit("nessuna proprietà scaricata: l'endpoint DBpedia potrebbe essere non disponibile, riprova più tardi.")
-
-    logger.info("genero gli embedding per %d proprietà...", len(properties))
-    prop_emb = model.encode([build_embedding_text(p) for p in properties], show_progress_bar=True, convert_to_numpy=True)
-
-    logger.info("genero gli embedding per %d classi...", len(classes))
-    class_emb = model.encode([build_embedding_text(c) for c in classes], show_progress_bar=True, convert_to_numpy=True)
-
-    faiss.write_index(create_faiss_index(prop_emb.astype(np.float32)), str(OUTPUT_DIR / "properties.faiss"))
-    faiss.write_index(create_faiss_index(class_emb.astype(np.float32)), str(OUTPUT_DIR / "classes.faiss"))
-
-    for filename, items in (("properties_meta.json", properties), ("classes_meta.json", classes)):
-        meta = [{"index": i, **item} for i, item in enumerate(items)]
-        (OUTPUT_DIR / filename).write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    logger.info("fatto. file salvati in %s", OUTPUT_DIR)
-    logger.info("  properties.faiss: %d voci", len(properties))
-    logger.info("  classes.faiss: %d voci", len(classes))
+    build_and_save(properties, classes, OUTPUT_DIR)
 
 if __name__ == "__main__":
     main()

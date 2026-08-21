@@ -4,11 +4,11 @@
 
 ```text
 sapienza-agents/
-├── shared/                         # moduli python condivisi (ollama_client.py)
-├── ui/                             # interfaccia web comune agli agenti (porta 3000)
-├── orchestrator/                   # orchestratore centrale langgraph (porta 8080)
+├── shared/                         # moduli python condivisi
+├── ui/                             # interfaccia web comune agli agenti
+├── orchestrator/                   # orchestratore centrale langgraph
 └── agents/
-    ├── kg/                         # agente knowledge graph (wikidata, dbpedia, neo4j)
+    ├── kg/                         # agente knowledge graph
     ├── planner/                    # agente planner
     └── multiapi/                   # agente multiapi
 ```
@@ -17,7 +17,7 @@ sapienza-agents/
 
 ### Ollama
 
-il sistema usa due modelli locali, da scaricare una volta sola:
+Il sistema usa due modelli locali, da scaricare una volta sola:
 
 ```bash
 ollama pull qwen2.5-coder:7b
@@ -34,10 +34,19 @@ OLLAMA_HOST=0.0.0.0:11434 ollama serve
 
 ### Preparazione
 
-gli indici ontologici di wikidata e dbpedia sono artefatti di build e vanno generati:
+Le dipendenze python dell'agente kg si installano una volta sola:
 
 ```bash
 cd agents/kg
+uv venv
+uv pip install -r requirements.txt
+```
+
+il passaggio non è facoltativo: `uv venv` crea `agents/kg/.venv`, che tutti i comandi `uv run` successivi useranno da soli. senza, `uv run` esegue con l'ambiente che trova e i comandi qui sotto si fermano su `ModuleNotFoundError`.
+
+gli indici ontologici di wikidata e dbpedia sono artefatti di build e vanno generati:
+
+```bash
 uv run python scripts/ingest_wikidata.py     # ~3300 proprietà, ~500 classi
 uv run python scripts/ingest_dbpedia.py      # ~3000 proprietà, ~800 classi
 ```
@@ -46,7 +55,7 @@ poi si avvia neo4j e si carica il dataset del dominio cinema:
 
 ```bash
 cd ../..
-sudo docker compose up -d neo4j
+docker compose up -d neo4j
 cd agents/kg
 uv run python scripts/setup_neo4j_movies.py
 ```
@@ -58,18 +67,21 @@ il dataset è il movie graph ufficiale di neo4j. Resta nel volume `neo4j-data`, 
 dalla root del repository:
 
 ```bash
-sudo docker compose up -d ui
+docker compose up -d
 ```
 
-avvia l'intera catena in ordine: neo4j, poi kg-agent, poi orchestratore, infine l'interfaccia.
+avvia l'intera catena in ordine: neo4j, poi i tre agenti (kg, planner, multiapi), poi l'orchestratore, infine l'interfaccia. per lavorare sul solo agente kg basta `docker compose up -d kg-agent orchestrator ui`.
 
-il primo avvio è lento. il kg-agent precarica i modelli locali e al primo giro li scarica da huggingface: circa 2.7 gb, di cui 2 gb per il solo gliner, con le richieste non autenticate limitate in banda. finché non ha finito il servizio non risponde all'healthcheck e i servizi che dipendono da lui restano in attesa. per seguirlo:
+il primo avvio è lento. il kg-agent precarica i modelli locali e al primo giro li scarica da huggingface: circa 2.2 gb, di cui 2 gb per il solo gliner, con le richieste non autenticate limitate in banda. finché non ha finito il servizio non risponde all'healthcheck e i servizi che dipendono da lui restano in attesa. per seguirlo:
 
 ```bash
-sudo docker compose logs -f kg-agent
+docker compose logs -f kg-agent
 ```
 
 quando compare `modelli pronti.` il sistema è utilizzabile. dagli avvii successivi i modelli sono nel volume `hf-cache` e il precaricamento richiede una ventina di secondi.
+
+> [!NOTE]
+> Per quanto riguarda i comandi `docker`, potrebbe essere necessario lanciarli con `sudo`, qualora l'utente non appartenga al gruppo docker.
 
 ### Verifica
 
@@ -97,8 +109,8 @@ L'agente kg traduce domande in linguaggio naturale in query eseguite su un knowl
 
 ### Knowledge graph supportati
 
-| target_kg  | linguaggio | dati                                | prerequisiti                         |
-|------------|------------|-------------------------------------|--------------------------------------|
+| target_kg  | linguaggio | dati                                 | prerequisiti                         |
+|------------|------------|--------------------------------------|--------------------------------------|
 | `wikidata` | sparql     | endpoint pubblico query.wikidata.org | indice ontologico (vedi setup)       |
 | `dbpedia`  | sparql     | endpoint pubblico dbpedia.org        | indice ontologico (vedi setup)       |
 | `neo4j`    | cypher     | istanza locale, dominio cinema       | istanza avviata e dataset caricato   |
@@ -118,8 +130,9 @@ agents/kg/
 ├── Dockerfile
 ├── pytest.ini
 ├── requirements.txt
-├── scripts/                        # costruzione indici e caricamento dataset
-├── data/                           # indici faiss generati
+├── scripts/                        # costruzione indici faiss e caricamento dataset
+├── benchmarks/                     # benchmark e esperimenti di ablazione
+├── data/                           # indici faiss generati e report di valutazione
 ├── src/
 │   ├── api/                        # endpoint fastapi
 │   ├── cache/                      # cache semantica delle domande
@@ -128,12 +141,14 @@ agents/kg/
 │   ├── correctors/                 # correzione delle query fallite
 │   ├── executors/                  # esecuzione delle query
 │   ├── linkers/                    # entity linking (gliner + llm)
+│   ├── models/                     # accesso ai modelli locali e al client ollama
 │   ├── providers/                  # factory dei componenti per kg
 │   ├── pruners/                    # selezione dello schema da passare all'llm
 │   ├── translators/                # traduzione da linguaggio naturale a query
-│   ├── pipeline.py
-│   └── main.py
-└── tests/
+│   ├── utils/                      # utilità di analisi testuale delle query
+│   ├── pipeline.py                 # orchestratore della pipeline
+│   └── main.py                     # entrypoint fastapi
+└── tests/                          # pytest
 ```
 
 Ogni knowledge graph è un provider che compone i propri connector, translator, executor, pruner e corrector.
@@ -163,7 +178,7 @@ crea il file `.vscode/settings.json` nella root del repository:
 
 ### Esecuzione in locale (senza docker)
 
-avvia il microservizio fastapi del kg agent:
+Avvia il microservizio fastapi del kg agent:
 
 ```bash
 cd agents/kg
@@ -190,7 +205,7 @@ curl -X POST "http://localhost:8000/query" \
 
 ### Esecuzione tramite docker compose
 
-il container non ha accesso alla gpu, quindi installa la variante cpu-only di torch. gli indici faiss vengono montati come volume da `agents/kg/data`, che deve quindi essere già stato generato.
+Il container non ha accesso alla gpu, quindi installa la variante cpu-only di torch. gli indici faiss vengono montati come volume da `agents/kg/data`, che deve quindi essere già stato generato.
 
 dopo una modifica al codice serve ricostruire l'immagine:
 
@@ -198,15 +213,25 @@ dopo una modifica al codice serve ricostruire l'immagine:
 sudo docker compose build kg-agent && sudo docker compose up -d kg-agent
 ```
 
-### Esecuzione della suite di test
+### Test
+
+Per lanciare:
 
 ```bash
 cd agents/kg
-uv run pytest -v
+uv run pytest -q
 ```
 
-i test che richiedono ollama, neo4j o un endpoint pubblico vengono saltati se il servizio non è raggiungibile, invece di fallire. la suite completa richiede molto tempo, quasi del tutto speso nei test di integrazione su wikidata: per un giro veloce si può escludere quella directory.
+Ulteriori dettagli [qui](agents/kg/tests/README.md).
+
+### Benchmark
+
+La valutazione dell'agente kg si fa su due benchmark pubblici della famiglia QALD, con la macro-F1 e le convenzioni del benchmark: [QALD-10](https://github.com/KGQA/QALD-10) per wikidata e lo split di test di [QALD-9-plus](https://github.com/KGQA/QALD_9_plus) per dbpedia.
 
 ```bash
-uv run pytest -q --ignore=tests/integration
+cd agents/kg
+uv run python benchmarks/evaluate_qald.py --sample 30 --gold executed
+uv run python benchmarks/evaluate_qald.py --benchmark qald9plus --sample 30 --gold executed
 ```
+
+accanto al benchmark vero e proprio, `benchmarks/ablations/` contiene gli esperimenti che giustificano le singole scelte di progetto: quale segnale usare nella disambiguazione delle entità, se la chiamata all'llm per il linking ripaghi il suo costo, se la rigenerazione di una query che non ha prodotto righe produca davvero una query diversa. `benchmarks/baselines/` pone invece le stesse domande al modello senza knowledge graph, per distinguere quanto del punteggio venga dal grafo e quanto dalla conoscenza già nei pesi. Ulteriori dettagli, e i risultati delle due run complete, [qui](agents/kg/benchmarks/README.md).

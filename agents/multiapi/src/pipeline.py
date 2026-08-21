@@ -9,6 +9,7 @@ from configs.settings import settings
 from providers.weather_provider import WeatherProvider
 from providers.exchange_provider import ExchangeProvider
 from providers.country_provider import CountryProvider
+from providers.worldtime_provider import WorldTimeProvider
 from cache.response_cache import ResponseCache
 from correctors.llm_response_corrector import LlmResponseCorrector
 
@@ -27,6 +28,7 @@ class MultiApiPipeline:
         self.weather = WeatherProvider()
         self.exchange = ExchangeProvider()
         self.country = CountryProvider()
+        self.worldtime = WorldTimeProvider()
         self.cache = ResponseCache(capacity=settings.cache_capacity)
         self.corrector = LlmResponseCorrector(max_retries=settings.max_llm_retries)
         self.verbose = verbose
@@ -153,6 +155,18 @@ class MultiApiPipeline:
         self._log("  [warn] estrazione paese fallita")
         return None
 
+    def _extract_timezone_city(self, question: str) -> str | None:
+        """usa il llm per estrarre il nome della città/regione da una domanda sull'ora."""
+        self._log("\n[info] [step] estrazione città (timezone) via llm")
+        data = self._llm_extract_json("extract_timezone.txt", question)
+
+        if data and data.get("city"):
+            self._log(f"  -> città estratta: {data['city']}")
+            return data["city"]
+
+        self._log("  [warn] estrazione città (timezone) fallita")
+        return None
+
     # ----- rami della pipeline -----
 
     def _run_weather(self, question: str) -> list[dict[str, Any]]:
@@ -200,6 +214,21 @@ class MultiApiPipeline:
             self._log(f"  -> info recuperate: {result.get('name')} (capitale: {result.get('capital')})")
         return [result]
 
+    def _run_worldtime(self, question: str) -> list[dict[str, Any]]:
+        """esegue il ramo time_info della pipeline."""
+        city = self._extract_timezone_city(question)
+        if not city:
+            return [{"error": "Non sono riuscito a identificare una città nella domanda."}]
+
+        self._log(f"\n[info] [step] chiamata worldtime provider per '{city}'")
+        result = self.worldtime.fetch({"city": city})
+
+        if "error" in result:
+            self._log(f"  [warn] errore provider: {result['error']}")
+        else:
+            self._log(f"  -> ora recuperata: {result.get('city')} {result.get('time')} ({result.get('timezone')})")
+        return [result]
+
     # ----- pipeline principale -----
 
     def run(self, question: str) -> tuple[list[dict[str, Any]], str]:
@@ -224,8 +253,10 @@ class MultiApiPipeline:
             results = self._run_exchange(question)
         elif intent == "country_info":
             results = self._run_country(question)
+        elif intent == "time_info":
+            results = self._run_worldtime(question)
         else:
-            results = [{"error": f"Intent '{intent}' non supportato. Prova con domande su meteo, tassi di cambio o informazioni sui paesi."}]
+            results = [{"error": f"Intent '{intent}' non supportato. Prova con domande su meteo, tassi di cambio, informazioni sui paesi o orario locale."}]
 
         # step 3: salva in cache (solo se non c'è errore)
         if results and "error" not in results[0]:

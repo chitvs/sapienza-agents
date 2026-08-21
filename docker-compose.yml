@@ -90,6 +90,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - TIMEAPI_API_KEY=${TIMEAPI_API_KEY}
     networks:
       - agents-net
 
@@ -106,6 +107,7 @@ services:
       - PLANNER_AGENT_URL=http://planner-agent:8001
       - MULTIAPI_AGENT_URL=http://multiapi-agent:8002
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=llama3.2
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

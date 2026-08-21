@@ -24,3 +24,6 @@ agents/planner/src/benchmarks/data/semantic_eval_results.json
 agents/planner/src/benchmarks/data/benchmark_report.json
 agents/planner/src/benchmarks/data/benchmark_report.md
 repomix-output.md
+!agents/kg/data/qald_10_executed.json
+!agents/kg/data/qald_9_plus_test_dbpedia_executed.json
+

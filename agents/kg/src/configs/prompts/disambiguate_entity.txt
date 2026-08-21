@@ -10,9 +10,17 @@ RULES:
 - Analyze what the question is asking about. If it asks about a person (birth, death, nationality), prefer human/person candidates over artworks, categories, or journals.
 - If the question asks about a place, prefer geographic entities over abstract concepts.
 - If the question asks about an organization, prefer the organization over people or places with the same name.
-- If the question uses a verb or role tied to a specific medium (e.g. "directed"/"starred in" implies a film, "wrote"/"authored" implies a book or written work, "painted" implies a painting, "composed" implies music), prefer the candidate whose description matches that medium over unrelated candidates that merely share the same name (abstract concepts, software, generic date/administrative entries, etc.).
+- If the question uses a verb or role tied to a specific medium (e.g. "directed"/"starred in" implies a film, "wrote"/"authored" implies a book or written work, "painted" implies a painting, "composed" implies music), use it ONLY to decide which reading of the mention is meant (mention "Inception" with "directed" means the film, not the song). Never use it to prefer a candidate that describes the answer rather than the mention.
 - Prefer concrete, well-known entities (people, places, organizations, creative works) over obscure or abstract ones (academic journals, disambiguation pages, category entries, generic administrative/date concepts) UNLESS the question's own wording specifically points to that obscure/abstract meaning.
-- Consider the description of each candidate to determine which one fits the question's context.
+- Reject candidates that are derived pages rather than the entity itself: filmographies, discographies, "list of ..." pages, awards lists, disambiguation pages. They describe the mention, they are not the mention.
+- Consider the description of each candidate to determine which one is the best reading of the mention. The description must describe the mention itself, not the thing the question is looking for.
+
+DECISIVE TEST — apply it last, it overrides every rule above:
+Ask yourself "is this candidate the same thing as {mention}?", NOT "is this candidate related to
+the question?". The answer to the question is NEVER among the candidates: you are resolving the
+mention, not answering. A question about a person's works still refers to the person; a question
+about a team's venue, trophies or players still refers to the team, never to the venue.
+
 - Return ONLY a valid JSON object wrapped in a ```json block with the key "selected_id", copying the id EXACTLY as it appears in the candidate list, for example:
 ```json
 { "selected_id": "Q8682" }
