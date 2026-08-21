@@ -19,7 +19,7 @@ def health_check():
 def query_multiapi(request: QueryRequest):
     try:
         start_time = time.time()
-        results, intent = pipeline.run(request.question)
+        results, intent, cached = pipeline.run(request.question)
         elapsed_ms = round((time.time() - start_time) * 1000, 2)
         confidence = 1.0 if results and "error" not in results[0] else 0.0
 
@@ -30,6 +30,7 @@ def query_multiapi(request: QueryRequest):
             count=len(results),
             confidence=confidence,
             execution_time_ms=elapsed_ms,
+            cached=cached,
         )
     except Exception as err:
         raise HTTPException(status_code=500, detail=str(err))

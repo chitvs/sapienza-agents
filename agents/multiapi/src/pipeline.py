@@ -29,7 +29,10 @@ class MultiApiPipeline:
         self.exchange = ExchangeProvider()
         self.country = CountryProvider()
         self.worldtime = WorldTimeProvider()
-        self.cache = ResponseCache(capacity=settings.cache_capacity)
+        self.cache = ResponseCache(
+            capacity=settings.cache_capacity,
+            default_ttl=settings.cache_ttl_default,
+        )
         self.corrector = LlmResponseCorrector(max_retries=settings.max_llm_retries)
         self.verbose = verbose
         self._prompts_cache: dict[str, str] = {}
@@ -231,17 +234,17 @@ class MultiApiPipeline:
 
     # ----- pipeline principale -----
 
-    def run(self, question: str) -> tuple[list[dict[str, Any]], str]:
+    def run(self, question: str) -> tuple[list[dict[str, Any]], str, bool]:
         """esegue la pipeline: cache check -> classifica intent -> estrai parametri -> chiama provider.
 
         Returns:
-            tupla (lista risultati, intent string).
+            tupla (lista risultati, intent string, risposta servita dalla cache).
         """
         # step 0: controlla la cache
         cached = self.cache.get(question)
         if cached:
             self._log("\n[info] [step] cache hit! risultati trovati in cache")
-            return cached["results"], cached["intent"]
+            return cached["results"], cached["intent"], True
 
         # step 1: classifica intent
         intent = self._classify_intent(question)
@@ -258,8 +261,10 @@ class MultiApiPipeline:
         else:
             results = [{"error": f"Intent '{intent}' non supportato. Prova con domande su meteo, tassi di cambio, informazioni sui paesi o orario locale."}]
 
-        # step 3: salva in cache (solo se non c'è errore)
+        # step 3: salva in cache (solo se non c'è errore), con la durata
+        # prevista per questo intent; un ttl di 0 significa non memorizzare
         if results and "error" not in results[0]:
-            self.cache.set(question, intent, results)
+            ttl = settings.cache_ttl_by_intent.get(intent, settings.cache_ttl_default)
+            self.cache.set(question, intent, results, ttl=ttl)
 
-        return results, intent
+        return results, intent, False

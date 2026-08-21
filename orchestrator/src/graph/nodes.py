@@ -54,8 +54,11 @@ async def supervisor_node(state: AgentState) -> dict:
         "Sei il supervisor di un sistema multi-agente. Analizza la domanda e decidi quali agenti attivare.\n"
         "Agenti disponibili:\n"
         "- 'kg_agent': per domande su entità, relazioni strutturate, fatti e conoscenze.\n"
+        
         "- 'planner_agent': per attività di pianificazione, scomposizione o piani complessi, quali creare un piano, un itinerario, una routine, un programma di studio.\n"
-        "- 'multiapi_agent': per chiamate e integrazioni multi-API esterne.\n"
+        "- 'multiapi_agent': per dati in tempo reale che richiedono un'api esterna: "
+        "meteo e temperatura attuali di una città, tasso di cambio fra due valute, "
+        "ora locale corrente in una città o fuso orario e le informazioni su un paese: capitale, popolazione, superficie, lingue, valuta, confini.\n"
         "REGOLA IMPORTANTE: Se decidi di attivare il 'planner_agent', NON attivare 'kg_agent' o 'multiapi_agent', poiché il planner è autonomo nel recuperare il contesto di cui ha bisogno.\n"
         "Rispondi esclusivamente con un JSON in formato oggetto (es. {\"selected_agents\": [\"planner_agent\"]}) oppure un array (es. [\"planner_agent\"])."
     )

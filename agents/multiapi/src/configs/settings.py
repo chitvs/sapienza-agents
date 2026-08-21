@@ -52,6 +52,16 @@ class Settings(BaseSettings):
 
     # cache
     cache_capacity: int = 100
+    # durata di validità di una risposta in cache, per intent. I dati hanno
+    # volatilità molto diversa: l'ora cambia di continuo, i dati di un paese
+    # quasi mai. 0 = non mettere in cache (riusare il valore sarebbe sbagliato).
+    cache_ttl_default: float = 300.0
+    cache_ttl_by_intent: dict[str, float] = {
+        "time_info": 0.0,        # è un orologio: una risposta riusata è per definizione sbagliata
+        "weather": 600.0,        # open-meteo aggiorna il dato corrente ogni ~15 min
+        "exchange_rate": 3600.0, # frankfurter pubblica un fixing al giorno
+        "country_info": 86400.0, # capitale, superficie e lingue non cambiano
+    }
 
     # corrector (retry llm per json non valido)
     max_llm_retries: int = 2

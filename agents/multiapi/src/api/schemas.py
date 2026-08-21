@@ -17,3 +17,4 @@ class QueryResponse(BaseModel):
     count: int #numero di risultati
     confidence: float = 1.0 
     execution_time_ms: float | None = None
+    cached: bool = False #risposta servita dalla cache invece che dalle api
