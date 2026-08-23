@@ -11,6 +11,10 @@ EXISTING PLAN (JSON):
 
 MODIFICATION REQUEST: "{question}"
 
+ADDITIONAL USER CONSTRAINTS (optional, provided by the user for this specific request):
+{constraints}
+If this says "nessuno", ignore it. Otherwise apply it while making the requested modification, with the same priority as the modification request itself.
+
 RULES:
 - CRITICAL: DO NOT just copy and paste the previous plan. You MUST apply the user's modifications. If the user reduces the time available for a day and some tasks no longer fit, redistribute the affected tasks to subsequent existing days only when this is necessary and consistent with the user's constraints - never extend the plan past its last existing day or invent a new day, and never silently drop a task that could not be rescheduled without at least a note explaining why.
 - If the request marks a task as skipped/done/delayed, reflect that in the task's "notes"

@@ -38,7 +38,7 @@ EXTRACTOR_MODEL = "llama3.2"  # Inserisci qui il modello locale che preferisci u
 
 
 # --- FILTRI DI ESECUZIONE ---
-TARGET_MODELS: list[str] = ["gemini-3.5-flash-lite"]          
+TARGET_MODELS: list[str] = ["laguna-s-2.1", "nemotron-3.5-lightning"]          
 TARGET_CONTEXT_MODES: list[str] = []   
 TARGET_TEST_IDS: list[str] = []        
 

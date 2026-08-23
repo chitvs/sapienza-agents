@@ -202,3 +202,202 @@ pre {
 .msg { margin-top: 1.5rem; color: var(--muted); }
 .err { margin-top: 1.5rem; color: var(--err); }
 .src { margin-left: 0.4rem; font-size: 0.8rem; }
+
+
+/* ---- layout a tre colonne, sempre presenti: cambia solo il contenuto della destra ---- */
+
+body { max-width: none; padding: 0; }
+
+.layout { display: flex; min-height: 100vh; }
+
+.sidebar {
+  flex: none;
+  width: 15rem;
+  padding: 1.25rem 0.9rem;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+
+.main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.settings-panel {
+  flex: none;
+  width: 17rem;
+  padding: 1.25rem 1rem;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.settings-title { margin: 0 0 1rem; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.settings-placeholder { display: none; color: var(--muted); font-size: 0.85rem; }
+.settings-planner { display: none; }
+body.mode-planner .settings-placeholder { display: none; }
+body.mode-planner .settings-planner { display: block; }
+body:not(.mode-planner) .settings-placeholder { display: block; }
+
+.new-chat {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+.new-chat:hover { border-color: var(--accent); }
+
+.chat-list { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.chat-item {
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-item:hover { background: var(--bg); }
+.chat-item.active { background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
+
+.planner-banner {
+  margin-bottom: 1rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.adv-field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 1rem; font-size: 0.85rem; color: var(--muted); }
+.adv-field select, .adv-field textarea { font: inherit; padding: 0.4rem 0.5rem; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: var(--radius); }
+.adv-tools { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.2rem; }
+.adv-tools label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--fg); font-weight: normal; }
+
+@media (max-width: 60rem) {
+  .layout { flex-direction: column; }
+  .sidebar, .settings-panel { width: auto; border: none; border-bottom: 1px solid var(--line); }
+  .main { max-width: none; margin: 0; }
+}
+
+.timeline { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.75rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.85rem; }
+.timeline-item { color: var(--muted); }
+.timeline-item:last-child { color: var(--fg); }
+
+.plan-days { display: flex; flex-direction: column; gap: 0.9rem; margin: 0.9rem 0; }
+.plan-day { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem 0.9rem; }
+.plan-day h3 { margin: 0 0 0.6rem; font-size: 0.95rem; }
+.plan-slots { display: flex; flex-direction: column; gap: 0.5rem; }
+.slot { display: flex; gap: 0.75rem; padding: 0.4rem 0; border-top: 1px solid var(--line); }
+.slot:first-child { border-top: none; }
+.slot-time-col { flex: none; width: 4.5rem; display: flex; flex-direction: column; font-size: 0.8rem; color: var(--muted); }
+.slot-time { font-weight: 600; color: var(--fg); }
+.slot-time-empty { font-weight: 400; }
+.slot-duration { margin-top: 0.1rem; }
+.slot-body { flex: 1 1 auto; min-width: 0; }
+.slot-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.slot-category { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0.05rem 0.5rem; }
+.slot-subtasks { margin: 0.3rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: var(--muted); }
+.slot-notes { margin: 0.3rem 0 0; font-size: 0.85rem; color: var(--muted); }
+.plan-notes { margin-top: 0.9rem; padding: 0.75rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--err); border-radius: var(--radius); }
+.plan-notes h3 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+.plan-notes ul { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; }
+
+/* ---- Fase 6: Stile Chat UI ---- */
+#output {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-top: 1.5rem;
+}
+
+.chat-msg {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.user-msg {
+  align-items: flex-end;
+}
+
+.user-msg .msg-content {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 0.75rem 1.15rem;
+  border-radius: 1.5rem 1.5rem 0 1.5rem;
+  max-width: 85%;
+  font-weight: 500;
+}
+
+.assistant-msg {
+  align-items: flex-start;
+}
+
+.assistant-msg > * {
+  width: 100%;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Fase 7: Trasparenza ReAct (Ispettore Tool) ---- */
+.react-inspector {
+  margin-top: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius);
+}
+.react-inspector summary {
+  font-weight: 600;
+  color: var(--accent);
+}
+.react-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.react-step {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+  font-size: 0.85rem;
+}
+.react-step-header {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+.react-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.react-step-body code {
+  background: var(--surface);
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-family: monospace;
+}

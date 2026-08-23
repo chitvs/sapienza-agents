@@ -12,6 +12,10 @@ EXTERNAL CONTEXT (optional, provided by upstream agents):
 {context}
 If the context above is empty (e.g. "{{}}"), ignore it and proceed using only the user request below. If it contains data, treat it as verified fact and use it to ground the plan, without inventing further details beyond what is provided.
 
+ADDITIONAL USER CONSTRAINTS (optional, provided by the user for this specific request):
+{constraints}
+If this says "nessuno", ignore it. Otherwise treat it as a hard constraint with the same priority as constraints already stated in the user request below.
+
 Return ONLY a valid JSON object with this exact structure (no explanations, no markdown):
 {{
   "title": "<short title>",

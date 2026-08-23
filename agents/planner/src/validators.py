@@ -3,10 +3,14 @@ Validazione logica delle bozze di piano generate dalla pipeline.
 
 Volutamente disaccoppiato da Pydantic: opera sul dizionario grezzo restituito dal LLM, 
 PRIMA della costruzione dei modelli (QueryResponse/PlanDay/TimeSlot). 
-Questo permette di:
-- validare bozze ancora malformate senza sollevare eccezioni bloccanti;
-- produrre messaggi di errore discorsivi e leggibili, riutilizzabili sia per decidere 
-  se innescare un retry, sia come feedback diretto da fornire al modello nel prompt di correzione.
+
+Nota sul Type Hinting: L'uso estensivo di `Any` per estrarre valori tramite `.get()` 
+è intenzionale e segue un approccio di "duck typing difensivo". Assumiamo che il JSON 
+prodotto dal LLM possa contenere qualsiasi tipo di dato errato per ogni chiave (es. 
+un booleano al posto di una stringa). Utilizzare `Any` in questa fase ci permette 
+di intercettare l'errore logicamente e di evitare eccezioni Python di runtime bloccanti 
+(come KeyError o AttributeError). In questo modo generiamo messaggi di errore discorsivi, 
+successivamente iniettati nel prompt per l'auto-correzione dell'LLM.
 """
 
 import re

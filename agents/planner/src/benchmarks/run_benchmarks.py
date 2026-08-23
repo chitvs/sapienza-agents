@@ -56,7 +56,8 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # ]
 
 MODELS_TO_TEST = [
-    ("gemini", "gemini-3.5-flash-lite")
+    #("openrouter_dots", "dots-studio/dots-3-note-preview:free"),
+    ("openrouter_glm", "z-ai/glm-5.2:free"),
 ]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
@@ -65,7 +66,7 @@ BENCHMARK_DIR: Path = Path(__file__).resolve().parent
 DATASET_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_dataset.json"
 RESULTS_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_results.json"
 
-RATE_LIMIT_DELAY_SECONDS: float = 30
+RATE_LIMIT_DELAY_SECONDS: float = 15
 
 
 # --- UTILITY DI PERSISTENZA ---

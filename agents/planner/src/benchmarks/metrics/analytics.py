@@ -300,7 +300,7 @@ def overconfidence_rate(outcomes: list[TestOutcome], threshold: float = 0.8) -> 
     molto alta (>= threshold). Un valore alto indica che il modello "allucina"
     sicurezza quando in realtà sta sbagliando.
     """
-    failed_tests = [outcome for outcome in _supported_domain_tests(outcomes) if not outcome.success]
+    failed_tests = [outcome for outcome in outcomes if not outcome.success]
 
     if not failed_tests:
         return 0.0

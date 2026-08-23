@@ -8,25 +8,76 @@
 </head>
 <body>
 
-<h1>sapienza agents</h1>
-<p class="subtitle">interroga il sistema multi-agente in linguaggio naturale. in modalità orchestratore la domanda può essere in qualsiasi lingua, interrogando il solo agente kg va scritta in inglese.</p>
+<div class="layout">
+  <aside id="sidebar" class="sidebar">
+    <button type="button" id="newChat" class="new-chat">+ nuova chat</button>
+    <div id="chatList" class="chat-list"></div>
+  </aside>
 
-<form id="form">
-  <input type="text" id="question" placeholder="Who directed The Matrix?" autocomplete="off" required>
-  <select id="mode">
-    <option value="orchestrator">orchestratore</option>
-    <option value="kg">solo agente kg</option>
-    <option value="multiapi">solo agente multiapi</option>
-  </select>
-  <select id="kg">
-    <option value="wikidata">wikidata</option>
-    <option value="dbpedia">dbpedia</option>
-    <option value="neo4j">neo4j (cinema)</option>
-  </select>
-  <button type="submit" id="submit">chiedi</button>
-</form>
+  <main class="main">
+    <h1>sapienza agents</h1>
+    <p class="subtitle">interroga il sistema multi-agente in linguaggio naturale. in modalità orchestratore la domanda può essere in qualsiasi lingua, interrogando il solo agente kg va scritta in inglese.</p>
 
-<div id="output"></div>
+    <div id="plannerBanner" class="planner-banner" hidden></div>
+
+    <form id="form">
+      <input type="text" id="question" placeholder="Who directed The Matrix?" autocomplete="off" required>
+      <select id="mode">
+        <option value="orchestrator">orchestratore</option>
+        <option value="kg">solo agente kg</option>
+        <option value="multiapi">solo agente multiapi</option>
+        <option value="planner">agente planner</option>
+      </select>
+      <select id="kg">
+        <option value="wikidata">wikidata</option>
+        <option value="dbpedia">dbpedia</option>
+        <option value="neo4j">neo4j (cinema)</option>
+      </select>
+      <button type="submit" id="submit">chiedi</button>
+    </form>
+
+    <div id="output"></div>
+  </main>
+
+  <aside id="settingsPanel" class="settings-panel">
+    <h2 class="settings-title">impostazioni</h2>
+
+    <p id="settingsPlaceholder" class="settings-placeholder">le opzioni avanzate sono disponibili in modalità "solo agente planner".</p>
+
+    <div id="settingsPlanner" class="settings-planner">
+      <label class="adv-field">Modello
+        <select id="advModel"><option value="">Auto</option></select>
+      </label>
+
+      <label class="adv-field">Strategia context
+        <select id="advContext">
+          <option value="">Auto</option>
+          <option value="none">None</option>
+          <option value="deterministic">Deterministic</option>
+          <option value="react">ReAct</option>
+        </select>
+      </label>
+
+      <label class="adv-field">Dominio
+        <select id="advDomain">
+          <option value="">Auto</option>
+          <option value="study">Studio</option>
+          <option value="travel">Viaggio</option>
+          <option value="routine">Routine</option>
+        </select>
+      </label>
+
+      <div id="advToolsWrap" class="adv-field" hidden>
+        <span>Fonti consentite</span>
+        <div id="advTools" class="adv-tools"></div>
+      </div>
+
+      <label class="adv-field">Vincoli aggiuntivi
+        <textarea id="advConstraints" rows="2" placeholder="es. budget massimo 300 euro"></textarea>
+      </label>
+    </div>
+  </aside>
+</div>
 
 <script src="app.js"></script>
 

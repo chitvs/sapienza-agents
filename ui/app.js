@@ -2,6 +2,8 @@ const ENDPOINTS = {
   orchestrator: "/api/orchestrator/query",
   kg: "/api/kg/query",
   multiapi: "/api/multiapi/query",
+  planner: "/api/planner/query",
+  plannerStream: "/api/planner/query/stream",
 };
 
 const META_KEYS = ["_provenance", "_sources"];
@@ -11,6 +13,269 @@ const output = document.getElementById("output");
 const submit = document.getElementById("submit");
 const modeSelect = document.getElementById("mode");
 const kgSelect = document.getElementById("kg");
+const newChatBtn = document.getElementById("newChat");
+const chatListEl = document.getElementById("chatList");
+const plannerBanner = document.getElementById("plannerBanner");
+const advModel = document.getElementById("advModel");
+const advContext = document.getElementById("advContext");
+const advDomain = document.getElementById("advDomain");
+const advConstraints = document.getElementById("advConstraints");
+const advToolsWrap = document.getElementById("advToolsWrap");
+const advTools = document.getElementById("advTools");
+
+
+let advPanelLoaded = false;
+
+async function loadAdvPanelData() {
+  if (advPanelLoaded) return;
+  advPanelLoaded = true;
+
+  try {
+    const res = await fetch("/api/planner/models");
+    const data = await res.json();
+    advModel.innerHTML = '<option value="">Auto</option>';
+    for (const m of data.models) {
+      const opt = document.createElement("option");
+      opt.value = m.id;
+      opt.textContent = m.id === data.default ? `${m.id} (default)` : m.id;
+      advModel.appendChild(opt);
+    }
+  } catch (err) {
+    console.error("errore nel caricamento dei modelli:", err);
+  }
+
+  try {
+    const res = await fetch("/api/planner/tools");
+    const tools = await res.json();
+    advTools.innerHTML = tools.map(t =>
+      `<label><input type="checkbox" value="${escapeAttr(t.name)}" checked> ${escape(t.name)}</label>`
+    ).join("");
+  } catch (err) {
+    console.error("errore nel caricamento dei tool:", err);
+  }
+}
+
+advContext.addEventListener("change", () => {
+  advToolsWrap.hidden = advContext.value !== "deterministic" && advContext.value !== "react";
+});
+
+function renderSidebar() {
+  if (!sessionState.sessions.length) {
+    chatListEl.innerHTML = "<p class='msg' style='margin-top:0'>nessuna chat ancora.</p>";
+    return;
+  }
+  chatListEl.innerHTML = sessionState.sessions.map(s => {
+    const active = s.id === sessionState.activeId ? " active" : "";
+    const label = s.title || "nuova conversazione";
+    return `<div class="chat-item${active}" data-id="${escapeAttr(s.id)}">${escape(label)}</div>`;
+  }).join("");
+}
+
+function renderPlannerBanner() {
+  const session = activeSession();
+  if (session && session.hasPlan) {
+    plannerBanner.textContent = "Questa conversazione ha già un piano: le richieste verranno trattate come modifiche. Per un piano completamente diverso, apri una nuova chat.";
+    plannerBanner.hidden = false;
+  } else {
+    plannerBanner.hidden = true;
+  }
+}
+
+// ---- gestione sessioni planner (Fase 1) ----
+// solo metadati lato client (id, titolo, presenza di un piano): la
+// conversazione e il piano vero restano lato Planner, indicizzati da session_id.
+
+const SESSIONS_KEY = "minerva_planner_sessions";
+
+function loadSessionState() {
+  try {
+    const raw = localStorage.getItem(SESSIONS_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && Array.isArray(parsed.sessions) ? parsed : { activeId: null, sessions: [] };
+  } catch {
+    return { activeId: null, sessions: [] };
+  }
+}
+
+let sessionState = loadSessionState();
+
+function saveSessionState() {
+  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessionState));
+}
+
+function activeSession() {
+  return sessionState.sessions.find(s => s.id === sessionState.activeId) || null;
+}
+
+function createSession() {
+  const session = { id: crypto.randomUUID(), title: null, hasPlan: false };
+  sessionState.sessions.unshift(session);
+  sessionState.activeId = session.id;
+  saveSessionState();
+  output.innerHTML = "";
+  document.getElementById("question").value = "";
+  renderSidebar();
+  renderPlannerBanner();
+}
+
+function setActiveSession(id) {
+  sessionState.activeId = id;
+  saveSessionState();
+  output.innerHTML = "";
+  document.getElementById("question").value = "";
+  renderSidebar();
+  renderPlannerBanner();
+}
+
+function updateSessionAfterPlannerResponse(question, data) {
+  const session = activeSession();
+  if (!session) return;
+  if (!session.title) session.title = question.length > 42 ? question.slice(0, 42) + "…" : question;
+  if (data && data.days && data.days.length) session.hasPlan = true;
+  saveSessionState();
+  renderSidebar();
+  renderPlannerBanner();
+}
+
+function renderToolCalls(trace) {
+  if (!trace || !trace.length) return "";
+  
+  const steps = trace.map(t => {
+    const thought = t.thought ? `<div><strong>Ragionamento:</strong> ${escape(t.thought)}</div>` : "";
+    const action = t.tool ? `<div><strong>Azione:</strong> <code>${escape(t.tool)}(${escape(t.tool_input)})</code></div>` : "";
+    const obsObj = t.observation || {};
+    const obsTitle = obsObj.error ? "Errore" : "Osservazione (Dati Ricevuti)";
+    
+    // Riutilizziamo renderRaw per avere il JSON formattato ed espandibile per l'osservazione
+    const obsBody = renderRaw(obsTitle, obsObj);
+    
+    return `<div class="react-step">
+      <div class="react-step-header">Step ${t.step}</div>
+      <div class="react-step-body">
+        ${thought}
+        ${action}
+        ${obsBody}
+      </div>
+    </div>`;
+  }).join("");
+
+  return `<details class="react-inspector">
+    <summary> Ispettore di Ragionamento (ReAct Trace)</summary>
+    <div class="react-trace">${steps}</div>
+  </details>`;
+}
+
+function renderPlanner(data) {
+  if (!data) return "";
+  if (data.error) return `<p class="err">agente planner non raggiungibile: ${escape(data.error)}</p>`;
+  const meta = renderMeta([
+    ["dominio", data.domain || "?"],
+    ["giorni", (data.days || []).length],
+    ["confidenza", (data.confidence ?? 0).toFixed(2)],
+    ["tempo", formatSeconds(data.execution_time_ms)],
+    ...(data.replanned ? [["stato", "piano aggiornato"]] : []),
+  ]);
+  if (!data.days || !data.days.length) {
+    return meta + `<p class='msg'>${escape(data.summary || "nessun piano generato.")}</p>`;
+  }
+  const head = `<div class="panel"><strong>${escape(data.title)}</strong>` +
+    (data.summary ? `<p>${escape(data.summary)}</p>` : "") + `</div>`;
+  const days = data.days.map(renderPlanDay).join("");
+  
+  // Aggiunta: Rendering della traccia ReAct se presente
+  const reactTraceHtml = renderToolCalls(data.tool_calls);
+  
+  return meta + head + `<div class="plan-days">${days}</div>` + renderContingencyNotes(data.contingency_notes) + reactTraceHtml + renderRaw("dati grezzi", data);
+}
+
+function timelineIcon(data) {
+  if (data.status === "tool_completed") return data.tool_status === "error" ? "✗" : "✓";
+  if (data.status === "correcting") return "⟳";
+  if (data.status === "domain_classified" || data.status === "completed") return "✓";
+  return "▸";
+}
+
+async function runPlannerStream(body, container) {
+  const timeline = document.createElement("div");
+  timeline.className = "timeline";
+  
+  container.appendChild(timeline);
+
+  const response = await fetch(ENDPOINTS.plannerStream, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok || !(response.headers.get("content-type") || "").includes("text/event-stream")) {
+    const raw = await response.text();
+    let data;
+    try { data = JSON.parse(raw); } catch {
+      throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+    }
+    throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result = null;
+  let streamError = null;
+
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, {stream: true});
+    let sep;
+    while ((sep = buffer.indexOf("\n\n")) !== -1) {
+      const block = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      const eventLine = block.split("\n").find(l => l.startsWith("event:"));
+      const dataLine = block.split("\n").find(l => l.startsWith("data:"));
+      if (!eventLine || !dataLine) continue;
+      const eventName = eventLine.slice(6).trim();
+      const data = JSON.parse(dataLine.slice(5).trim());
+
+      if (eventName === "progress") {
+        const line = document.createElement("div");
+        line.className = "timeline-item";
+        line.textContent = `${timelineIcon(data)} ${data.message}`;
+        timeline.appendChild(line);
+      } else if (eventName === "result") {
+        result = data;
+      } else if (eventName === "error") {
+        streamError = data.message || "errore sconosciuto";
+      }
+    }
+  }
+
+  if (streamError) throw new Error(streamError);
+  return result;
+}
+
+chatListEl.addEventListener("click", event => {
+  const item = event.target.closest(".chat-item");
+  if (item) setActiveSession(item.dataset.id);
+});
+
+newChatBtn.addEventListener("click", createSession);
+
+function syncModeUI() {
+  const isPlanner = modeSelect.value === "planner";
+  document.body.classList.toggle("mode-planner", isPlanner);
+  if (isPlanner) {
+    loadAdvPanelData();
+    renderPlannerBanner();
+  } else {
+    plannerBanner.hidden = true;
+  }
+}
+
+modeSelect.addEventListener("change", syncModeUI);
+
+if (!activeSession()) createSession();
+else renderSidebar();
+syncModeUI();
 
 function escape(text) {
   const div = document.createElement("div");
@@ -309,6 +574,46 @@ function renderMultiapi(data) {
   return meta + content + renderRaw("dati grezzi", results);
 }
 
+function formatMinutes(min) {
+  if (typeof min !== "number") return "";
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60), m = min % 60;
+  return m ? `${h}h ${m}min` : `${h}h`;
+}
+
+function renderSlot(slot) {
+  const time = slot.start_time
+    ? `<span class="slot-time">${escape(slot.start_time)}</span>`
+    : `<span class="slot-time slot-time-empty">—</span>`;
+  const duration = `<span class="slot-duration">${formatMinutes(slot.duration_minutes)}</span>`;
+  const category = slot.category ? `<span class="slot-category">${escape(slot.category)}</span>` : "";
+  const subtasks = (slot.subtasks || []).length
+    ? `<ul class="slot-subtasks">${slot.subtasks.map(s => `<li>${escape(s)}</li>`).join("")}</ul>`
+    : "";
+  const notes = slot.notes ? `<p class="slot-notes">${escape(slot.notes)}</p>` : "";
+  return `<div class="slot">
+    <div class="slot-time-col">${time}${duration}</div>
+    <div class="slot-body">
+      <div class="slot-head"><span>${escape(slot.task)}</span>${category}</div>
+      ${subtasks}${notes}
+    </div>
+  </div>`;
+}
+
+function renderPlanDay(day) {
+  const dateLabel = day.date ? formatDate(day.date) : `Giorno ${day.day_index}`;
+  const heading = day.label ? `${escape(dateLabel)} — ${escape(day.label)}` : escape(dateLabel);
+  const slots = (day.slots || []).length
+    ? day.slots.map(renderSlot).join("")
+    : "<p class='msg'>nessuna attività per questo giorno.</p>";
+  return `<div class="plan-day"><h3>${heading}</h3><div class="plan-slots">${slots}</div></div>`;
+}
+
+function renderContingencyNotes(notes) {
+  if (!notes || !notes.length) return "";
+  return `<div class="plan-notes"><h3>⚠ Note e Piani B</h3><ul>${notes.map(n => `<li>${escape(n)}</li>`).join("")}</ul></div>`;
+}
+
 function renderOrchestrator(data) {
   const agents = (data.selected_agents || []).length
     ? data.selected_agents.map(a => `<span class="tag">${escape(a)}</span>`).join("")
@@ -335,37 +640,74 @@ form.addEventListener("submit", async event => {
 
   const mode = modeSelect.value;
   const body = {question, target_kg: kgSelect.value};
+  if (mode === "planner") {
+    if (!activeSession()) createSession();
+    body.session_id = activeSession().id;
+    if (advModel.value) body.llm_model = advModel.value;
+    if (advContext.value) body.context_mode = advContext.value;
+    if (advDomain.value) body.domain_hint = advDomain.value;
+    const constraints = advConstraints.value.trim();
+    if (constraints) body.constraints = constraints;
+    if (!advToolsWrap.hidden) {
+      const boxes = [...advTools.querySelectorAll("input[type=checkbox]")];
+      const checked = boxes.filter(b => b.checked).map(b => b.value);
+      if (checked.length < boxes.length) body.allowed_tools = checked;
+    }
+  }
 
+  // Svuota l'input dell'utente subito dopo l'invio
+  document.getElementById("question").value = "";
   submit.disabled = true;
-  output.innerHTML = "<p class='msg'>interrogazione in corso, può richiedere qualche decina di secondi.</p>";
+
+  // 1. Crea e aggiungi il messaggio dell'utente all'output
+  const userMsg = document.createElement("div");
+  userMsg.className = "chat-msg user-msg";
+  userMsg.innerHTML = `<div class="msg-content">${escape(question)}</div>`;
+  output.appendChild(userMsg);
+
+  // 2. Crea e aggiungi il contenitore per la risposta dell'assistente
+  const assistantMsg = document.createElement("div");
+  assistantMsg.className = "chat-msg assistant-msg";
+  output.appendChild(assistantMsg);
+
+  // Scrolla la pagina per mostrare il nuovo blocco
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+
+  if (mode !== "planner") {
+    assistantMsg.innerHTML = "<p class='msg'>interrogazione in corso, può richiedere qualche decina di secondi.</p>";
+  }
 
   try {
-    const response = await fetch(ENDPOINTS[mode], {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify(body),
-    });
-    // la risposta si legge come testo e poi si parsa: se un agente è giù,
-    // nginx risponde con una pagina di errore HTML e response.json() esploderebbe
-    // nascondendo lo stato reale
-    const raw = await response.text();
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+    if (mode === "planner") {
+      // Passa il contenitore 'assistantMsg' alla funzione stream
+      const data = await runPlannerStream(body, assistantMsg);
+      updateSessionAfterPlannerResponse(question, data);
+      
+      // Aggiungi il piano generato sotto la timeline all'interno dello stesso blocco
+      assistantMsg.innerHTML += renderPlanner(data);
+    } else {
+      const response = await fetch(ENDPOINTS[mode], {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(body),
+      });
+      const raw = await response.text();
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch {
+        throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+      }
+      if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
+      
+      // Inietta il risultato direttamente nel blocco dell'assistente
+      assistantMsg.innerHTML = mode === "kg" ? renderKg(data) : mode === "multiapi" ? renderMultiapi(data) : renderOrchestrator(data);
     }
-    // sui 422 di FastAPI "detail" è un array di oggetti: senza formatDetail
-    // l'utente leggerebbe [object Object]
-    if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
-    output.innerHTML = mode === "kg"
-      ? renderKg(data)
-      : mode === "multiapi"
-        ? renderMultiapi(data)
-        : renderOrchestrator(data);
   } catch (err) {
-    output.innerHTML = `<p class="err">${escape(err.message)}</p>`;
+    assistantMsg.innerHTML = `<p class="err">${escape(err.message)}</p>`;
   } finally {
     submit.disabled = false;
+    // Auto-scroll finale per assicurarsi che l'esito della generazione sia visibile
+    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   }
 });

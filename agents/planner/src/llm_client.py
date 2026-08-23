@@ -18,6 +18,16 @@ logger = logging.getLogger("planner_llm_client")
 
 _OPENAI_COMPATIBLE_TIMEOUT: float = 30.0
 
+_JSON_RETRY_PROMPT_TEMPLATE: str = (
+    "{prompt}\n\n"
+    "ATTENZIONE: La tua risposta precedente non era un JSON valido.\n"
+    "Il tuo output errato: {cleaned}\n"
+    "Errore del parser Python: {err}\n"
+    "Correggi la sintassi e restituisci SOLO un oggetto JSON valido, "
+    "senza testo aggiuntivo o nidificazioni errate."
+)
+
+
 class LLMClient:
     """
     Gestisce la comunicazione con i provider LLM (Gemini e Ollama), 
@@ -32,7 +42,6 @@ class LLMClient:
             verbose (bool): Se True, abilita la stampa a schermo dei log e dei passaggi.
         """
         self.verbose = verbose
-
 
         # 1. Fissa il provider (parametro o fallback globale)
         self.provider: str = (provider or settings.llm_provider).lower()
@@ -153,7 +162,6 @@ class LLMClient:
 
         candidates = data.get("candidates", [])
         if not candidates:
-            # Gestiamo il caso in cui Gemini censuri la risposta o la blocchi per policy
             block_reason = data.get("promptFeedback", {}).get("blockReason")
             self._log(
                 f"  [warn] gemini: nessuna candidate, blockReason={block_reason!r}",
@@ -164,7 +172,6 @@ class LLMClient:
         parts = candidates[0].get("content", {}).get("parts", [])
         return parts[0].get("text", "").strip() if parts else ""
     
-
     async def _generate_openai_compatible(
         self,
         prompt: str,
@@ -174,23 +181,17 @@ class LLMClient:
         api_key: str,
     ) -> str:
         """
-        Chiama un endpoint compatibile con l'API chat/completions di OpenAI
-        (es. OpenRouter) tramite HTTPX.
+        Chiama un endpoint compatibile con l'API chat/completions di OpenAI.
 
         Args:
             prompt (str): Il testo del prompt da inviare.
             temperature (float): La temperatura di campionamento.
             json_mode (bool): Se True, richiede output JSON via response_format.
-            base_url (str): URL base dell'endpoint (es. https://openrouter.ai/api/v1).
+            base_url (str): URL base dell'endpoint.
             api_key (str): Chiave API per l'autenticazione Bearer.
-            model (str): Nome del modello da invocare presso questo provider.
 
         Returns:
             str: La risposta testuale del modello.
-
-        Raises:
-            ValueError: Se base_url, api_key o model sono mancanti.
-            httpx.HTTPError: Se c'è un problema di rete o l'API risponde con un errore.
         """
         if not base_url or not api_key or not self.model:
             raise ValueError("configurazione provider incompleta: servono base_url, api_key e model")
@@ -230,9 +231,6 @@ class LLMClient:
 
         Returns:
             str: La risposta testuale di Ollama.
-
-        Raises:
-            httpx.HTTPError: Se il servizio Ollama non è raggiungibile o risponde con errore.
         """
         url = f"{settings.ollama_host.rstrip('/')}/api/generate"
         payload: dict[str, Any] = {
@@ -253,22 +251,19 @@ class LLMClient:
     @staticmethod
     def clean_json(raw: str) -> str:
         """
-        Pulisce la stringa restituita dal modello, rimuovendo eventuali formattazioni
-        Markdown come i blocchi di codice (```json ... ```) per estrarre il payload puro.
+        Pulisce la stringa restituita dal modello rimuovendo markdown in eccesso.
 
         Args:
             raw (str): La stringa grezza generata dall'LLM.
 
         Returns:
-            str: La stringa pulita pronta per essere elaborata da json.loads().
+            str: La stringa pulita pronta per json.loads().
         """
         if not raw:
             return ""
         
         cleaned: str = raw.strip()
         if "```" in cleaned:
-            # Cerca un blocco di codice markdown (opzionalmente etichettato con 'json').
-            # re.DOTALL permette al punto (.*?) di matchare anche i newline (\n).
             match = re.search(
                 r"```(?:json)?\s*(.*?)\s*```", 
                 cleaned, 
@@ -285,7 +280,7 @@ class LLMClient:
         Se fallisce, richiede automaticamente al modello di correggere la sintassi.
         """
         current_prompt = prompt
-        max_retries = settings.max_json_retries  # <-- Legge dal file di configurazione
+        max_retries = settings.max_json_retries
         
         for attempt in range(max_retries + 1):
             raw: str = await self.generate(current_prompt, json_mode=True)
@@ -300,13 +295,10 @@ class LLMClient:
                         f"  [warn] JSON malformato, richiedo correzione sintattica all'LLM. Errore: {err}", 
                         level=logging.WARNING
                     )
-                    # Aggiunta del feedback per il modello
-                    current_prompt = (
-                        f"{prompt}\n\n"
-                        f"ATTENZIONE: La tua risposta precedente non era un JSON valido.\n"
-                        f"Il tuo output errato: {cleaned}\n"
-                        f"Errore del parser Python: {err}\n"
-                        f"Correggi la sintassi e restituisci SOLO un oggetto JSON valido, senza testo aggiuntivo o nidificazioni errate."
+                    current_prompt = _JSON_RETRY_PROMPT_TEMPLATE.format(
+                        prompt=prompt,
+                        cleaned=cleaned,
+                        err=err
                     )
                 else:
                     self._log(
