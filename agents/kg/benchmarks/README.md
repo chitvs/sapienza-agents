@@ -39,6 +39,9 @@ Il report completo, domanda per domanda con la query prodotta, finisce in `data/
 
 Serve Ollama attivo e l'indice ontologico del grafo già costruito (`scripts/ingest_wikidata.py` o `scripts/ingest_dbpedia.py`).
 
+> [!NOTE]
+> Linker e traduttore usano due modelli diversi, che su una GPU con pochi GB di VRAM non risiedono contemporaneamente, così Ollama ne ricarica uno a ogni domanda. È questo a spiegare molti secondi impiegati per domanda su QALD-10.
+
 ## Risultati misurati
 
 Le due run complete, eseguite con `--gold executed`.
@@ -49,6 +52,45 @@ Le due run complete, eseguite con `--gold executed`.
 | QALD-9-plus (test) | dbpedia | 104 su 150 | **0.205** | 0.750 (4) | 0.250 (8) | 0.253 (41) | 0.117 (51) |
 
 Fra parentesi il numero di domande di quel tipo. Le domande mancanti all'appello sono quelle escluse dal filtro sul gold utilizzabile descritto sopra: 16 su QALD-10, 46 su QALD-9-plus.
+
+### Confronto con la baseline closed-book
+
+Le stesse domande poste al modello senza grafo, sulle 378 valutate anche dalla pipeline.
+
+| QALD-10 | pipeline | closed-book | delta |
+|---|---:|---:|---:|
+| **macro-F1** | **0.377** | **0.284** | **+0.093** |
+| ask (61) | 0.426 | 0.623 | −0.197 |
+| count (87) | 0.218 | 0.126 | +0.092 |
+| single (125) | 0.590 | 0.217 | +0.373 |
+| multi (105) | 0.225 | 0.297 | −0.072 |
+
+Il grafo paga un terzo di macro-F1 in più, ma il guadagno viene tutto dalle `single`.
+
+Su QALD-9-plus, sulle stesse 104 domande, il confronto si ribalta.
+
+| QALD-9-plus (test) | pipeline | closed-book | delta |
+|---|---:|---:|---:|
+| **macro-F1** | **0.205** | **0.224** | **−0.019** |
+| ask (4) | 0.750 | 0.250 | +0.500 |
+| count (8) | 0.250 | 0.250 | 0.000 |
+| single (41) | 0.253 | 0.261 | −0.008 |
+| multi (51) | 0.117 | 0.187 | −0.071 |
+
+Su DBpedia il grafo aggiunge solo verificabilità. Il valore del grounding dipende quindi dal grafo, non dall'architettura.
+
+### Dove la pipeline perde
+
+| | QALD-10 | QALD-9-plus |
+|---|---:|---:|
+| query con righe | 197 | 36 |
+| query valida, zero righe | 153 | 65 |
+| eccezione in esecuzione | 28 | 3 |
+| **F1 medio quando risponde** | **0.621** | **0.536** |
+
+Il sistema è accurato quando risponde, il punteggio crolla perché in metà dei casi non risponde. Ripiegare sul closed-book sulle sole query vuote porterebbe QALD-10 da 0.377 a 0.483, al prezzo di risposte non più grounded.
+
+Sui fallimenti a zero righe la proprietà è sbagliata nel 79% dei casi e l'entità nel 67%, e il 65% delle query vuote è comunque ancorato a un'entità corretta contro l'84% di quelle con righe. Quindi concludiamo che il collo di bottiglia è la scelta del predicato e non l'entity linking. I qualificatori (`p:`, `ps:`, `pq:`) non vengono mai generati, in 14 domande che li richiedono. Delle 28 eccezioni, 25 sono query rifiutate con HTTP 400.
 
 ## Gli esperimenti in `ablations/`
 
@@ -75,6 +117,8 @@ uv run python benchmarks/ablations/disambiguation_llm.py
 
 Riusa `disambiguation_signals.json` e confronta, sugli stessi casi, tre scelte: quella dell'LLM, quella del ranking senza LLM e quella banale del primo candidato.
 
+Esito: il ranking senza LLM prende 325 menzioni su 365 (0.890), l'LLM ne prende 249 sulle 282 in cui si pronuncia (0.883) e resta inconcludente nelle altre 83. La chiamata all'LLM per menzione, quindi, non compra accuratezza.
+
 ### Rigenerazione ReAct: la seconda query è davvero diversa?
 
 ```bash
@@ -83,6 +127,15 @@ uv run python benchmarks/ablations/retry_analyze.py               # riepilogo, o
 ```
 
 Quando una query si esegue senza errori ma restituisce zero righe, la pipeline la rigenera passando al modello un prompt di feedback. L'esperimento arriva fino alla prima esecuzione e, sui casi a zero righe, rigenera a più configurazioni di campionamento (temperatura 0.0 e 1.0 con top-p 0.9) registrando quante volte l'output è identico all'originale e quante volte recupera righe. A temperatura bassa una rigenerazione identica costa una chiamata all'LLM per nulla, ed è il motivo per cui l'esperimento esiste.
+
+Su 40 domande campionate: 26 risolte al primo tentativo, 2 con eccezione, 12 a zero righe. Una delle 12 è stata recuperata dal solo rilassamento dei filtri di classe, senza LLM.
+
+| configurazione | rigenerazioni identiche | con righe | casi recuperati |
+|---|---:|---:|---:|
+| temperatura 0.0 | 24/36 | 6/36 | 2/12 |
+| temperatura 1.0, top-p 0.9 | 15/36 | 5/36 | 2/12 |
+
+A temperatura 0 in 8 casi su 12 tutte e tre le rigenerazioni sono identiche all'originale. Alzare la temperatura riduce le identiche ma non aumenta i recuperi, e i due casi recuperati lo sono al primo tentativo sotto entrambe le configurazioni, quindi una sola rigenerazione basta.
 
 ## La baseline in `baselines/`
 
@@ -96,3 +149,5 @@ uv run python benchmarks/baselines/closed_book.py --benchmark qald9plus --gold e
 Il `--gold` deve coincidere con quello usato per la pipeline, altrimenti i due numeri sono calcolati su riferimenti diversi e il confronto non significa nulla. Vengono scartate le stesse domande senza gold utilizzabile, così i due macro-F1 insistono sulla stessa popolazione. Il grafo interviene solo per costruire il riferimento e per risolvere le etichette in fase di punteggio: la baseline non lo interroga mai per rispondere. Al modello non viene detto che tipo di risposta ci si aspetta, perché dedurlo dalla domanda fa parte del compito esattamente come per la pipeline, che deve scegliere da sola fra `ASK`, `COUNT` e `SELECT`.
 
 Si interroga `qwen2.5:7b-instruct` e non il modello di traduzione, che essendo specializzato sul codice sarebbe un avversario di comodo come baseline di conoscenza. Il riepilogo distingue le risposte che non rispettano il formato richiesto da quelle in cui il modello dichiara di non sapere, e il report finisce in `data/evaluations/closedbook_<benchmark>_<timestamp>.json`.
+
+I risultati misurati e il confronto con la pipeline sono riportati sopra, in [Confronto con la baseline closed-book](#confronto-con-la-baseline-closed-book).
