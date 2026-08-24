@@ -39,19 +39,63 @@ def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "planner-agent"}
 
 
-def _available_models() -> list[ModelInfo]:
-    models = [ModelInfo(id="ollama", provider="ollama", model=settings.ollama_model)]
-    if settings.gemini_api_key:
-        models.append(ModelInfo(id="gemini", provider="gemini", model=settings.gemini_model))
-    for name, cfg in settings.openai_providers.items():
-        if cfg.get("base_url") and cfg.get("model"):
-            models.append(ModelInfo(id=name, provider="openai_compatible", model=cfg["model"]))
-    return models
+async def _available_models() -> list[ModelInfo]:
+    """
+    Effettua l'auto-discovery asincrono dei modelli su Ollama e Gemini
+    e carica i modelli OpenRouter configurati.
+    """
+    models: list[ModelInfo] = []
+    from http_client import get_http_client
+    client = get_http_client()
+    
+    # 1. Ollama (Discovery in locale, non bloccante)
+    try:
+        resp = await client.get(f"{settings.ollama_host.rstrip('/')}/api/tags", timeout=1.5)
+        if resp.status_code == 200:
+            for m in resp.json().get("models", []):
+                models.append(ModelInfo(id=f"ollama/{m['name']}", provider="ollama", model=m["name"]))
+    except Exception as e:
+        logger.warning(f"Auto-discovery Ollama fallito: {e}")
 
+    # 2. Gemini (Discovery su Google AI Studio, non bloccante)
+    if settings.gemini_api_key:
+        try:
+            url = f"{settings.gemini_api_base}/models?key={settings.gemini_api_key}"
+            resp = await client.get(url, timeout=2.0)
+            if resp.status_code == 200:
+                # Escludiamo modelli audio, immagini, video e agentici/sperimentali non adatti al task JSON
+                excluded_keywords = [
+                    "tts", "image", "lyria", "robotics", "antigravity", 
+                    "deep-research", "computer-use", "banana", "customtools"
+                ]
+                for m in resp.json().get("models", []):
+                    if "generateContent" in m.get("supportedGenerationMethods", []):
+                        name = m["name"].replace("models/", "")
+                        # Aggiunge il modello solo se non contiene nessuna delle keyword escluse
+                        if not any(kw in name.lower() for kw in excluded_keywords):
+                            models.append(ModelInfo(id=f"gemini/{name}", provider="gemini", model=name))
+        except Exception as e:
+            logger.warning(f"Auto-discovery Gemini fallito: {e}")
+
+    # 3. OpenRouter (Caricato dalla lista separata da virgole nel .env)
+    if settings.openrouter_api_key:
+        for om in settings.parsed_openrouter_models:
+            models.append(ModelInfo(id=f"openrouter/{om}", provider="openai_compatible", model=om))
+            
+    return models
+        
 
 @router.get("/models", response_model=ModelsResponse)
-def list_models() -> ModelsResponse:
-    return ModelsResponse(default=settings.llm_provider, models=_available_models())
+async def list_models() -> ModelsResponse:
+    default_id = settings.llm_provider
+    if default_id == "ollama":
+        default_id = f"ollama/{settings.ollama_model}"
+    elif default_id == "gemini":
+        default_id = f"gemini/{settings.gemini_model}"
+    elif default_id == "openrouter":
+        default_id = f"openrouter/{settings.parsed_openrouter_models[0]}" if settings.parsed_openrouter_models else "openrouter/"
+        
+    return ModelsResponse(default=default_id, models=await _available_models())
 
 
 @router.get("/tools", response_model=list[ToolInfo])
@@ -60,10 +104,8 @@ def list_tools() -> list[ToolInfo]:
 
 
 def _validate_request(request: QueryRequest) -> None:
-    if request.llm_model is not None:
-        valid_ids = {m.id for m in _available_models()}
-        if request.llm_model not in valid_ids:
-            raise HTTPException(status_code=422, detail=f"llm_model sconosciuto: {request.llm_model!r}. Valori validi: {sorted(valid_ids)}")
+    # La validazione restrittiva su llm_model è rimossa: 
+    # la deleghiamo alla logica intelligente di LLMClient
     if request.allowed_tools is not None:
         unknown = set(request.allowed_tools) - set(TOOL_REGISTRY)
         if unknown:

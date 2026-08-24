@@ -131,16 +131,19 @@ def _result_key(test_id: str, model_name: str, context_mode: str) -> str:
 
 def _get_actual_model_name(provider: str) -> str:
     """
-    Recupera il nome effettivo del modello in base alla configurazione,
-    ripulendolo da prefissi (es. openai/) e suffissi (es. :free).
+    Recupera il nome effettivo del modello in base alla configurazione corrente,
+    preservando strettamente la logica storica (ripulendolo da prefissi es. 'openai/'
+    e suffissi es. ':free') affinché l'ID calcolato per il benchmark corrisponda
+    sempre ai file storici già salvati.
     """
     if provider == "ollama":
         raw_name = settings.ollama_model
     elif provider == "gemini":
         raw_name = settings.gemini_model
+    elif provider == "openrouter":
+        raw_name = settings.parsed_openrouter_models[0] if settings.parsed_openrouter_models else ""
     else:
-        provider_config = settings.openai_providers.get(provider, {})
-        raw_name = provider_config.get("model", provider)
+        raw_name = provider
         
     clean_name = raw_name.split("/")[-1] if "/" in raw_name else raw_name
     
@@ -261,6 +264,8 @@ async def main() -> None:
                 settings.gemini_model = model_name
             elif provider_name == "ollama":
                 settings.ollama_model = model_name
+            elif provider_name == "openrouter":
+                settings.openrouter_models = model_name
 
 
             pipeline: PlannerPipeline = PlannerPipeline(verbose=False)

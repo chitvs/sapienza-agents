@@ -36,27 +36,35 @@ class LLMClient:
 
     def __init__(self, verbose: bool = False, provider: str | None = None, model: str | None = None) -> None:
         """
-        Inizializza la pipeline e il client LLM sottostante.
+        Inizializza la pipeline e il client LLM sottostante tramite risoluzione dinamica.
 
         Args:
             verbose (bool): Se True, abilita la stampa a schermo dei log e dei passaggi.
+            provider (str | None): Identificativo del provider, opzionalmente nel formato "provider/modello"
+                (es. "openrouter/nvidia/nemotron").
+            model (str | None): Nome del modello esplicito.
         """
-        self.verbose = verbose
-
-        # 1. Fissa il provider (parametro o fallback globale)
-        self.provider: str = (provider or settings.llm_provider).lower()
+        self.verbose: bool = verbose
         
-        # 2. Fissa il modello (parametro o fallback specifico in base al provider)
-        if model:
-            self.model: str = model
-        elif self.provider == "gemini":
-            self.model = settings.gemini_model
-        elif self.provider == "ollama":
-            self.model = settings.ollama_model
+        requested_id: str = (provider or settings.llm_provider).strip()
+        
+        # Risoluzione namespace: se contiene "/", estrae provider e modello
+        if "/" in requested_id and requested_id.split("/", 1)[0] in ["gemini", "ollama", "openrouter"]:
+            prov, mod = requested_id.split("/", 1)
+            self.provider = prov
+            self.model = mod
         else:
-            # Per openrouter o altri openai-compatible
-            provider_config = settings.openai_providers.get(self.provider, {})
-            self.model = provider_config.get("model", "")
+            self.provider = requested_id
+            self.model = model or ""
+
+        # Fallback sui default configurati nel .env se il modello manca
+        if not self.model:
+            if self.provider == "gemini":
+                self.model = settings.gemini_model
+            elif self.provider == "ollama":
+                self.model = settings.ollama_model
+            elif self.provider == "openrouter":
+                self.model = settings.parsed_openrouter_models[0] if settings.parsed_openrouter_models else ""
 
     def _log(self, msg: str, level: int = logging.INFO) -> None:
         """
@@ -75,8 +83,7 @@ class LLMClient:
 
     async def generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
         """
-        Prova il provider configurato (gemini, una chiave di settings.openai_providers,
-        oppure ollama); se il provider primario è remoto e fallisce, ripiega su 'ollama'.
+        Prova il provider configurato; se il provider primario è remoto e fallisce, ripiega su 'ollama'.
 
         Args:
             prompt (str): Il testo del prompt da inviare.
@@ -95,20 +102,17 @@ class LLMClient:
             if provider == "gemini":
                 return await self._generate_gemini(prompt, temperature, json_mode)
 
-            provider_config = settings.openai_providers.get(provider)
-            if provider_config is None:
-                raise ValueError(
-                    f"provider '{provider}' non riconosciuto: non è 'gemini'/'ollama' "
-                    "né una chiave presente in openai_providers"
+            if provider == "openrouter":
+                return await self._generate_openai_compatible(
+                    prompt,
+                    temperature,
+                    json_mode,
+                    base_url=settings.openrouter_base_url,
+                    api_key=settings.openrouter_api_key,
                 )
-
-            return await self._generate_openai_compatible(
-                prompt,
-                temperature,
-                json_mode,
-                base_url=provider_config.get("base_url", ""),
-                api_key=provider_config.get("api_key", ""),
-            )
+                
+            raise ValueError(f"provider '{provider}' non riconosciuto")
+            
         except Exception as err:
             if not settings.enable_local_fallback:
                 self._log(

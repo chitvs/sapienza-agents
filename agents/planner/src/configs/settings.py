@@ -45,11 +45,20 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2"
     ollama_timeout: float = 2400.0
 
-    # Configurazioni multiple per provider OpenAI-compatibili (es. OpenRouter),
-    # caricate come JSON da .env: la chiave è il nome del provider (lo stesso valore 
-    # usabile in LLM_PROVIDER), il valore un dict con base_url/api_key/model.
-    # Es. OPENAI_PROVIDERS={"openrouter_gpt": {"base_url": "...", "api_key": "...", "model": "..."}, ...}
-    openai_providers: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # Configurazione OpenRouter (o provider OpenAI compatibili unificati)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_models: str = ""
+    
+    @property
+    def parsed_openrouter_models(self) -> list[str]:
+        """
+        Restituisce la lista pulita dei modelli OpenRouter definiti nel .env.
+        
+        Returns:
+            list[str]: Lista dei modelli, escludendo stringhe vuote.
+        """
+        return [m.strip() for m in self.openrouter_models.split(",") if m.strip()]
 
     # Pipeline: fallback
     max_draft_retries: int = 2
