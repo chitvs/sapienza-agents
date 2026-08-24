@@ -9,18 +9,23 @@ SUPPORTED INTENTS:
 - "unknown": anything that does not fit the above categories.
 
 RULES:
-- Return ONLY a valid JSON object with the key "intent".
-- Example: {{"intent": "weather"}}
-- Example: {{"intent": "exchange_rate"}}
-- Example: {{"intent": "country_info"}}
-- Example: {{"intent": "time_info"}}
-- Example: {{"intent": "unknown"}}
+- Return ONLY a valid JSON object with the keys "intent" and "other_intents".
+- "intent": the main intent of the question.
+- "other_intents": a list of the OTHER supported intents the question also asks about.
+  Use an empty list when the question asks about a single topic. Never repeat "intent" in it.
+- Example: {{"intent": "weather", "other_intents": []}}
+- Example: {{"intent": "exchange_rate", "other_intents": []}}
+- Example: {{"intent": "country_info", "other_intents": []}}
+- Example: {{"intent": "time_info", "other_intents": []}}
+- Example: {{"intent": "unknown", "other_intents": []}}
+- Example: {{"intent": "weather", "other_intents": ["time_info"]}}
 - Do not output explanations, markdown, or anything other than the JSON object.
 
 EXAMPLES:
 - "Che tempo fa a Roma?" -> {{"intent": "weather"}}
 - "Pioverà domani a Milano?" -> {{"intent": "weather"}}
 - "Qual è la temperatura a Londra?" -> {{"intent": "weather"}}
+- "Che tempo farà dopodomani a Napoli?" -> {{"intent": "weather"}}
 - "Quanto vale il dollaro in euro?" -> {{"intent": "exchange_rate"}}
 - "Cambio sterlina yen" -> {{"intent": "exchange_rate"}}
 - "Tasso di cambio franco svizzero dollaro" -> {{"intent": "exchange_rate"}}
@@ -34,6 +39,8 @@ EXAMPLES:
 - "Dimmi l'orario attuale a Sydney" -> {{"intent": "time_info"}}
 - "Sono le 3 in Giappone adesso?" -> {{"intent": "time_info"}}
 - "Orario corrente a Londra" -> {{"intent": "time_info"}}
-- "Chi ha inventato la pizza?" -> {{"intent": "unknown"}}
+- "Chi ha inventato la pizza?" -> {{"intent": "unknown", "other_intents": []}}
+- "Che tempo fa a Roma e che ore sono?" -> {{"intent": "weather", "other_intents": ["time_info"]}}
+- "Quanto vale il dollaro e che tempo fa a New York?" -> {{"intent": "exchange_rate", "other_intents": ["weather"]}}
 
 User question: "{question}"

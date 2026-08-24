@@ -11,6 +11,7 @@ from providers.weather_provider import WeatherProvider
 from providers.exchange_provider import ExchangeProvider
 from providers.country_provider import CountryProvider
 from providers.worldtime_provider import WorldTimeProvider
+import summaries
 from cache.response_cache import ResponseCache
 from correctors.llm_response_corrector import LlmResponseCorrector
 
@@ -93,51 +94,78 @@ class MultiApiPipeline:
         self._log(f"  -> risposta llm grezza: {raw}")
 
         try:
-            return json.loads(cleaned)
+            data = json.loads(cleaned)
         except (json.JSONDecodeError, AttributeError):
-            self._log("  [warn] json non valido, attivazione corrector...")
-            return self.corrector.extract_json_with_retry(
-                llm_generate_fn=self._llm_generate,
-                clean_json_fn=self._clean_json,
-                original_prompt=prompt,
-                failed_response=raw,
-            )
+            data = None
+
+        # json.loads accetta anche array e scalari, su cui l'accesso per chiave
+        # solleverebbe AttributeError: vale solo un oggetto
+        if isinstance(data, dict):
+            return data
+
+        if data is not None:
+            self._log(f"  [warn] json valido ma non è un oggetto ({type(data).__name__})")
+
+        self._log("  [warn] risposta inutilizzabile, attivazione corrector...")
+        corrected = self.corrector.extract_json_with_retry(
+            llm_generate_fn=self._llm_generate,
+            clean_json_fn=self._clean_json,
+            original_prompt=prompt,
+            failed_response=raw,
+        )
+        return corrected if isinstance(corrected, dict) else None
 
     # ----- classificatore di intent -----
 
-    def _classify_intent(self, question: str) -> str:
-        """usa il llm per classificare la domanda in un intent supportato."""
+    SUPPORTED_INTENTS = ("weather", "exchange_rate", "country_info", "time_info")
+
+    def _classify_intent(self, question: str) -> tuple[str, list[str]]:
+        """classifica la domanda e rileva gli eventuali temi secondari.
+
+        Returns:
+            (intent principale, altri intent citati nella domanda). La pipeline
+            risponde solo al principale: restituire anche gli altri permette di
+            dire quale parte della domanda è rimasta senza risposta.
+        """
         self._log("\n[info] [step] classificazione intent via llm")
         data = self._llm_extract_json("classify_intent.txt", question)
 
         if data and "intent" in data:
             intent = data["intent"]
-            self._log(f"  -> intent classificato: {intent}")
-            return intent
+            altri = data.get("other_intents") or []
+            if not isinstance(altri, list):
+                altri = []
+            # il modello può ripetere il principale o inventare etichette
+            altri = [i for i in altri if i in self.SUPPORTED_INTENTS and i != intent]
+            self._log(f"  -> intent classificato: {intent}" + (f" (ignorati: {altri})" if altri else ""))
+            return intent, altri
 
         self._log("  [warn] classificazione fallita, fallback a 'unknown'")
-        return "unknown"
+        return "unknown", []
 
     # ----- estrattori di parametri -----
 
-    def _extract_city(self, question: str) -> str | None:
-        """usa il llm per estrarre il nome della città dalla domanda."""
+    def _extract_weather_params(self, question: str) -> dict[str, Any]:
+        """usa il llm per estrarre città e giorno di riferimento dalla domanda."""
         self._log("\n[info] [step] estrazione città via llm")
-        data = self._llm_extract_json("extract_city.txt", question)
+        # senza la data corrente il modello non può tradurre "domani" in un numero
+        data = self._llm_extract_json(
+            "extract_city.txt", question, today=date.today().isoformat()
+        )
 
         if data and data.get("city"):
-            self._log(f"  -> città estratta: {data['city']}")
-            return data["city"]
+            giorni = data.get("days_ahead")
+            quando = "adesso" if giorni is None else f"+{giorni} giorni"
+            self._log(f"  -> città estratta: {data['city']} ({quando})")
+            return {"city": data["city"], "days_ahead": giorni}
 
-        # fallback: risposta grezza come nome della città
         self._log("  [warn] estrazione città fallita")
-        return None
+        return {"city": None, "days_ahead": None}
 
     def _extract_exchange_params(self, question: str) -> dict[str, Any]:
         """usa il llm per estrarre valute, importo ed eventuale data dalla domanda."""
         self._log("\n[info] [step] estrazione valute via llm")
-        # la data di oggi serve al modello per sciogliere le espressioni relative
-        # ("l'anno scorso"), che da solo non saprebbe ancorare
+        # la data corrente ancora le espressioni relative come "l'anno scorso"
         data = self._llm_extract_json(
             "extract_exchange.txt", question, today=date.today().isoformat()
         )
@@ -186,17 +214,22 @@ class MultiApiPipeline:
 
     def _run_weather(self, question: str) -> list[dict[str, Any]]:
         """esegue il ramo weather della pipeline."""
-        city = self._extract_city(question)
+        params = self._extract_weather_params(question)
+        city = params.get("city")
         if not city:
             return [{"error": "Non sono riuscito a identificare una città nella domanda."}]
 
         self._log(f"\n[info] [step] chiamata weather provider per '{city}'")
-        result = self.weather.fetch({"city": city})
+        result = self.weather.fetch(params)
 
         if "error" in result:
             self._log(f"  [warn] errore provider: {result['error']}")
         else:
-            self._log(f"  -> meteo recuperato: {result.get('condition')} {result.get('temperature_c')}°C")
+            if result.get("kind") == "forecast":
+                self._log(f"  -> previsione {result.get('date')}: {result.get('condition')} "
+                          f"{result.get('temperature_min_c')}-{result.get('temperature_max_c')}°C")
+            else:
+                self._log(f"  -> meteo attuale: {result.get('condition')} {result.get('temperature_c')}°C")
         return [result]
 
     def _run_exchange(self, question: str) -> list[dict[str, Any]]:
@@ -246,37 +279,60 @@ class MultiApiPipeline:
 
     # ----- pipeline principale -----
 
-    def run(self, question: str) -> tuple[list[dict[str, Any]], str, bool]:
+    def run(self, question: str) -> tuple[list[dict[str, Any]], str, bool, list[str]]:
         """esegue la pipeline: cache check -> classifica intent -> estrai parametri -> chiama provider.
 
         Returns:
-            tupla (lista risultati, intent string, risposta servita dalla cache).
+            tupla (risultati, intent, servito dalla cache, intent ignorati).
         """
         # step 0: controlla la cache
         cached = self.cache.get(question)
         if cached:
             self._log("\n[info] [step] cache hit! risultati trovati in cache")
-            return cached["results"], cached["intent"], True
+            return cached["results"], cached["intent"], True, cached.get("ignored", [])
 
         # step 1: classifica intent
-        intent = self._classify_intent(question)
+        intent, ignorati = self._classify_intent(question)
 
-        # step 2: esegui il ramo appropriato
-        if intent == "weather":
-            results = self._run_weather(question)
-        elif intent == "exchange_rate":
-            results = self._run_exchange(question)
-        elif intent == "country_info":
-            results = self._run_country(question)
-        elif intent == "time_info":
-            results = self._run_worldtime(question)
-        else:
-            results = [{"error": f"Intent '{intent}' non supportato. Prova con domande su meteo, tassi di cambio, informazioni sui paesi o orario locale."}]
+        # step 2: esegui un ramo per ogni intent riconosciuto, entro il tetto
+        # configurato: ogni intent in più costa una chiamata al llm e una all'api
+        rami = {
+            "weather": self._run_weather,
+            "exchange_rate": self._run_exchange,
+            "country_info": self._run_country,
+            "time_info": self._run_worldtime,
+        }
+        da_servire = [intent] + ignorati[: max(0, settings.max_intents_per_question - 1)]
 
-        # step 3: salva in cache (solo se non c'è errore), con la durata
-        # prevista per questo intent; un ttl di 0 significa non memorizzare
-        if results and "error" not in results[0]:
-            ttl = settings.cache_ttl_by_intent.get(intent, settings.cache_ttl_default)
-            self.cache.set(question, intent, results, ttl=ttl)
+        results: list[dict[str, Any]] = []
+        for corrente in da_servire:
+            ramo = rami.get(corrente)
+            if ramo is None:
+                results.append({
+                    "error": f"Intent '{corrente}' non supportato. Prova con domande su meteo, "
+                             "tassi di cambio, informazioni sui paesi o orario locale."
+                })
+                continue
 
-        return results, intent, False
+            parziali = ramo(question)
+            for r in parziali:
+                # ogni risultato dichiara da quale intent proviene: è ciò che
+                # permette di renderlo con la card giusta quando ce n'è più d'uno
+                r.setdefault("intent", corrente)
+            # step 2b: sintesi in linguaggio naturale, usata dagli llm a valle
+            results.extend(summaries.aggiungi(corrente, parziali))
+
+        # gli intent serviti non sono più "ignorati"
+        ignorati = [i for i in ignorati if i not in da_servire]
+
+        # step 3: salva in cache solo se ogni risultato è valido, con la durata
+        # più breve fra gli intent serviti: la risposta è unica e scade tutta
+        # insieme, quindi vale il dato che invecchia prima
+        if results and not any("error" in r for r in results):
+            ttl = min(
+                settings.cache_ttl_by_intent.get(i, settings.cache_ttl_default)
+                for i in da_servire
+            )
+            self.cache.set(question, intent, results, ttl=ttl, ignored=ignorati)
+
+        return results, intent, False, ignorati

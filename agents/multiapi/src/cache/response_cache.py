@@ -47,9 +47,14 @@ class ResponseCache:
             del self._cache[key]
             return None
 
-        return {"intent": entry["intent"], "results": entry["results"]}
+        return {
+            "intent": entry["intent"],
+            "results": entry["results"],
+            "ignored": entry.get("ignored", []),
+        }
 
-    def set(self, question: str, intent: str, results: list[dict], ttl: float | None = None):
+    def set(self, question: str, intent: str, results: list[dict],
+            ttl: float | None = None, ignored: list[str] | None = None):
         """memorizza intent e risultati per la domanda specificata.
 
         Args:
@@ -72,6 +77,7 @@ class ResponseCache:
         self._cache[key] = {
             "intent": intent,
             "results": results,
+            "ignored": ignored or [],
             "expires_at": time.monotonic() + ttl,
         }
 

@@ -18,3 +18,19 @@ class QueryResponse(BaseModel):
     confidence: float = 1.0 
     execution_time_ms: float | None = None
     cached: bool = False #risposta servita dalla cache invece che dalle api
+    ignored_intents: list[str] = Field(
+        default_factory=list,
+        description=(
+            "temi presenti nella domanda a cui non è stata data risposta. La "
+            "pipeline gestisce un intent per volta: questo campo permette al "
+            "chiamante di segnalare che la risposta copre solo parte della domanda."
+        ),
+    )
+    error: str | None = Field(
+        default=None,
+        description=(
+            "valorizzato quando nessun risultato è utilizzabile. I chiamanti "
+            "(planner, orchestratore) verificano il fallimento a questo livello, "
+            "non ispezionando i singoli elementi di results."
+        ),
+    )

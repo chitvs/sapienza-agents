@@ -1,4 +1,8 @@
 from providers.exchange_provider import ExchangeProvider
+from conftest import richiede_frankfurter
+
+# interrogano il servizio vero: senza rete si saltano, non falliscono
+pytestmark = richiede_frankfurter
 
 
 def test_fetch_usd_to_eur():

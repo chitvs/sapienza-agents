@@ -162,6 +162,11 @@ async def synthesizer_node(state: AgentState) -> dict:
     system_prompt = (
         "Sei un assistente AI integrato. Rispondi alla domanda dell'utente in modo chiaro, naturale e professionale "
         "basandoti esclusivamente sulle seguenti evidenze raccolte dagli agenti.\n"
+        # senza dichiarare attendibili le evidenze, il modello premette di non
+        # poter conoscere dati in tempo reale o futuri e poi li riporta comunque
+        "Le evidenze sono già state recuperate da fonti attendibili e sono valide, comprese quelle "
+        "su dati in tempo reale o su giorni futuri: riportale come fatti accertati. "
+        "Non premettere che non puoi conoscere queste informazioni e non invitare a verificarle altrove.\n"
         f"Le evidenze possono essere in inglese: scrivi comunque la risposta in {language}."
     )
     user_content = f"Domanda: {question}\n\nEvidenze:\n{context_str}"

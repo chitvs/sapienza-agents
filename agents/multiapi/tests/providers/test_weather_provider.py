@@ -1,4 +1,8 @@
 from providers.weather_provider import WeatherProvider
+from conftest import richiede_open_meteo
+
+# interrogano il servizio vero: senza rete si saltano, non falliscono
+pytestmark = richiede_open_meteo
 
 
 def test_geocode_roma():

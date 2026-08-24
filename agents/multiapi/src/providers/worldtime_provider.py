@@ -27,7 +27,9 @@ class WorldTimeProvider:
             dict con timezone IANA, nome località e codice paese ISO-2,
             oppure None se la località non è stata trovata.
         """
-        params = {"name": city, "count": 1, "language": "en", "format": "json"}
+        # stessa lingua del weather provider: con "en" la ricerca di "Roma"
+        # restituisce l'omonima città rumena invece di quella italiana
+        params = {"name": city, "count": 1, "language": "it", "format": "json"}
         try:
             res = self.session.get(
                 settings.open_meteo_geocoding_url, params=params, timeout=10
@@ -85,8 +87,8 @@ class WorldTimeProvider:
             if res.status_code == 404:
                 return {"error": f"Timezone '{timezone}' non trovato sul provider."}
             if res.status_code in (401, 403):
-                # 401 = chiave assente/errata, 403 = chiave valida ma non iscritta all'API
-                # (capita anche se la chiave contiene virgolette o spazi di troppo)
+                # 401: chiave assente o errata. 403: chiave valida ma non abilitata,
+                # oppure con virgolette o spazi finiti dentro il valore configurato
                 logger.error("autenticazione RapidAPI fallita (%s): %s", res.status_code, res.text[:200])
                 return {"error": "Chiave API per il servizio orario non valida o non abilitata (TIMEAPI_API_KEY)."}
             if res.status_code == 429:

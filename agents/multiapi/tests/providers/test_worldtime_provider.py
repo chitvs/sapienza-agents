@@ -1,4 +1,8 @@
 from providers.worldtime_provider import WorldTimeProvider
+from conftest import richiede_worldtime
+
+# interrogano il servizio vero: senza rete si saltano, non falliscono
+pytestmark = richiede_worldtime
 
 
 def test_fetch_tokyo():
@@ -74,3 +78,11 @@ def test_dst_field_is_bool():
     result = provider.fetch({"city": "Sydney"})
     if "error" not in result:
         assert isinstance(result["dst"], bool)
+
+
+def test_citta_italiana_omonima_di_una_straniera():
+    """'Roma' deve risolvere in Italia, non nell'omonima città rumena."""
+    result = WorldTimeProvider().fetch({"city": "Roma"})
+    assert "error" not in result
+    assert result["timezone"] == "Europe/Rome"
+    assert result["country_code"] == "IT"

@@ -1,22 +1,33 @@
 import pytest
-import requests
 from fastapi.testclient import TestClient
 from main import app
+from conftest import is_ollama_running
 
 client = TestClient(app)
 
 
-def is_ollama_running():
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
+
 
 
 def test_health():
     res = client.get("/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok", "service": "multiapi-agent"}
+    body = res.json()
+    assert body["status"] == "ok"
+    assert body["service"] == "multiapi-agent"
+
+
+def test_health_espone_lo_stato_dei_provider():
+    """l'healthcheck deve rendere visibile una configurazione mancante."""
+    from configs.settings import settings
+
+    providers = client.get("/health").json()["providers"]
+    assert set(providers) == {"weather", "exchange_rate", "country_info", "time_info"}
+    # i tre senza api key sono sempre ok
+    assert providers["weather"] == providers["exchange_rate"] == providers["country_info"] == "ok"
+    # il quarto deve riflettere la presenza della chiave, non dire "ok" a prescindere
+    atteso = "ok" if settings.timeapi_api_key else "TIMEAPI_API_KEY mancante"
+    assert providers["time_info"] == atteso
 
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")

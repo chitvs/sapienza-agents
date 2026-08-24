@@ -92,9 +92,8 @@ class ExchangeProvider:
         try:
             res = self.session.get(
                 url,
-                # si chiede il tasso unitario e si moltiplica qui: chiedendo già
-                # l'importo convertito, l'api lo arrotonda a 2 decimali e il
-                # tasso non sarebbe più ricavabile con la sua precisione piena
+                # si chiede il tasso unitario e si moltiplica qui: l'api arrotonda
+                # l'importo convertito a 2 decimali, perdendo la precisione del tasso
                 params={"from": from_currency, "to": to_currency},
                 timeout=20,
             )
@@ -116,8 +115,8 @@ class ExchangeProvider:
                 "date": data["date"],
             }
 
-            # nei giorni non lavorativi il fixing richiesto non esiste e frankfurter
-            # risponde con quello precedente: va detto, non nascosto
+            # nei giorni senza fixing frankfurter risponde con l'ultimo pubblicato:
+            # requested_date conserva la data chiesta
             if wanted_date and data["date"] != wanted_date.isoformat():
                 result["requested_date"] = wanted_date.isoformat()
 

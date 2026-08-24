@@ -155,8 +155,7 @@ function currencyFlag(currency) {
 }
 
 
-// onerror: se flagcdn non ha quella bandiera l'immagine si rimuove da sola,
-// invece di lasciare l'icona di risorsa rotta.
+// onerror: una bandiera assente su flagcdn si rimuove invece di restare rotta
 function flagImg(url, alt, cls) {
   if (!url) return "";
   return `<img class="${cls || "flag"}" src="${escape(url)}" alt="${escape(alt)}" onerror="this.remove()">`;
@@ -187,20 +186,45 @@ function tagGroup(label, values) {
 
 // ---- una card dedicata per ogni tipo di risposta ----
 
+// oltre dopodomani i nomi relativi diventano ambigui: si usa la data
+function dayLabel(daysAhead, iso) {
+  const nomi = ["oggi", "domani", "dopodomani"];
+  if (typeof daysAhead === "number" && nomi[daysAhead]) return nomi[daysAhead];
+  return formatDate(iso);
+}
+
 function cardWeather(r) {
-  const head = cardHead(r.city || "località", r.country || "", flagImg(flagUrl(r.country_code), r.country || ""));
-  const temp = r.temperature_c;
+  const flag = flagImg(flagUrl(r.country_code), r.country || "");
+  const isForecast = r.kind === "forecast";
+
+  // senza il giorno, una previsione sembrerebbe il meteo attuale
+  const sub = isForecast
+    ? [r.country, dayLabel(r.days_ahead, r.date)].filter(Boolean).join(" · ")
+    : (r.country || "");
+  const head = cardHead(r.city || "località", sub, flag);
+
+  const heroValue = isForecast ? r.temperature_max_c : r.temperature_c;
   const hero = `<div class="hero">` +
     `<span class="hero-icon">${weatherIcon(r.weather_code)}</span>` +
     `<div class="hero-text">` +
-    `<div class="hero-value">${temp === null || temp === undefined ? "?" : escape(String(temp))}<span class="hero-unit">&deg;C</span></div>` +
+    `<div class="hero-value">${heroValue === null || heroValue === undefined ? "?" : escape(String(heroValue))}<span class="hero-unit">&deg;C</span></div>` +
     `<div class="hero-label">${escape(r.condition || "")}</div>` +
     `</div></div>`;
-  const stats = statList([
-    ["percepita", r.apparent_temperature_c != null ? `${r.apparent_temperature_c} °C` : ""],
-    ["umidità", r.humidity_percent != null ? `${r.humidity_percent} %` : ""],
-    ["vento", r.wind_speed_kmh != null ? `${r.wind_speed_kmh} km/h` : ""],
-  ]);
+
+  const stats = isForecast
+    ? statList([
+        ["minima", r.temperature_min_c != null ? `${r.temperature_min_c} °C` : ""],
+        ["massima", r.temperature_max_c != null ? `${r.temperature_max_c} °C` : ""],
+        ["prob. pioggia", r.precipitation_probability_percent != null ? `${r.precipitation_probability_percent} %` : ""],
+        ["alba", r.sunrise || ""],
+        ["tramonto", r.sunset || ""],
+      ])
+    : statList([
+        ["percepita", r.apparent_temperature_c != null ? `${r.apparent_temperature_c} °C` : ""],
+        ["umidità", r.humidity_percent != null ? `${r.humidity_percent} %` : ""],
+        ["vento", r.wind_speed_kmh != null ? `${r.wind_speed_kmh} km/h` : ""],
+      ]);
+
   return `<div class="card">${head}${hero}${stats}</div>`;
 }
 
@@ -213,8 +237,7 @@ function cardExchange(r) {
     `<div class="card-name">${escape(base)}${quote ? " &rarr; " + escape(quote) : ""}</div>` +
     `<div class="card-sub">tasso di cambio</div></div>` +
     flagImg(currencyFlag(quote), quote) + `</div>`;
-  // quando la domanda contiene un importo, il dato che risponde è la conversione;
-  // il tasso unitario scende fra i dettagli
+  // con un importo il dato principale è la conversione, non il tasso
   const amount = typeof r.amount === "number" ? r.amount : 1;
   const isConversion = amount !== 1 && typeof r.converted === "number";
   const heroValue = isConversion ? r.converted : (r.rates ?? "?");
@@ -231,8 +254,7 @@ function cardExchange(r) {
 
   const stats = statList([
     ...(isConversion ? [["tasso", `1 ${base} = ${r.rates} ${quote}`]] : []),
-    // se il fixing richiesto cadeva in un giorno non lavorativo, la data usata
-    // è un'altra: dirlo evita che sembri un errore
+    // la data usata può differire da quella chiesta (giorni senza fixing)
     ...(r.requested_date ? [["richiesto per", formatDate(r.requested_date)]] : []),
     ["aggiornato al", formatDate(r.date)],
   ]);
@@ -290,7 +312,10 @@ const CARD_BY_INTENT = {
 
 function renderMultiapi(data) {
   if (!data) return "";
-  if (data.error) return `<p class="err">agente multiapi non raggiungibile: ${escape(data.error)}</p>`;
+  // "error" senza risultati = agente irraggiungibile; con risultati = provider falliti
+  if (data.error && !(data.results || []).length) {
+    return `<p class="err">agente multiapi non raggiungibile: ${escape(data.error)}</p>`;
+  }
 
   const intentLabels = {
     weather: "🌤 Meteo",
@@ -308,22 +333,36 @@ function renderMultiapi(data) {
     ["tempo", formatSeconds(data.execution_time_ms)],
   ]);
 
+  // la pipeline risponde a un intent per volta: gli altri vanno dichiarati
+  const etichette = {
+    weather: "meteo", exchange_rate: "cambio valute",
+    country_info: "informazioni sul paese", time_info: "ora locale",
+  };
+  const ignorati = (data.ignored_intents || []).map(i => etichette[i] || i);
+  const avviso = ignorati.length
+    ? `<p class="msg">Ho risposto solo alla parte su <strong>${escape(etichette[data.intent] || data.intent)}</strong>. ` +
+      `Non ho trattato: ${escape(ignorati.join(", "))}. Prova a chiederlo in una domanda separata.</p>`
+    : "";
+
   const results = data.results || [];
-  if (!results.length) return meta + "<p class='msg'>nessun risultato trovato.</p>";
+  if (!results.length) return meta + avviso + "<p class='msg'>nessun risultato trovato.</p>";
 
   // gli errori dei provider arrivano come risultato con chiave "error"
   const failed = results.filter(r => r && r.error);
   if (failed.length === results.length) {
-    return meta + failed.map(r => `<p class="err">${escape(r.error)}</p>`).join("");
+    return meta + avviso + failed.map(r => `<p class="err">${escape(r.error)}</p>`).join("");
   }
 
-  const card = CARD_BY_INTENT[data.intent];
-  const content = card
-    ? results.map(r => (r && r.error) ? `<p class="err">${escape(r.error)}</p>` : card(r)).join("")
-    : renderTable(results);
+  // la card si sceglie per singolo risultato: una domanda su più temi produce
+  // risultati di forma diversa, ognuno con il proprio "intent"
+  const content = results.map(r => {
+    if (r && r.error) return `<p class="err">${escape(r.error)}</p>`;
+    const card = CARD_BY_INTENT[(r && r.intent) || data.intent];
+    return card ? card(r) : renderTable([r]);
+  }).join("");
 
   // i campi non mostrati nelle card restano comunque consultabili
-  return meta + content + renderRaw("dati grezzi", results);
+  return meta + avviso + content + renderRaw("dati grezzi", results);
 }
 
 function renderOrchestrator(data) {
@@ -362,9 +401,7 @@ form.addEventListener("submit", async event => {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify(body),
     });
-    // la risposta si legge come testo e poi si parsa: se un agente è giù,
-    // nginx risponde con una pagina di errore HTML e response.json() esploderebbe
-    // nascondendo lo stato reale
+    // con un agente giù nginx risponde HTML: response.json() nasconderebbe lo stato
     const raw = await response.text();
     let data;
     try {
@@ -372,8 +409,7 @@ form.addEventListener("submit", async event => {
     } catch {
       throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
     }
-    // sui 422 di FastAPI "detail" è un array di oggetti: senza formatDetail
-    // l'utente leggerebbe [object Object]
+    // sui 422 di FastAPI "detail" è un array: senza formatDetail dà [object Object]
     if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
     output.innerHTML = mode === "kg"
       ? renderKg(data)

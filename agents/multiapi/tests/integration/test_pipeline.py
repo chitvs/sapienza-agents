@@ -1,20 +1,16 @@
 import pytest
-import requests
 from configs.settings import settings
 from pipeline import MultiApiPipeline
+from conftest import is_ollama_running
 
 
-def is_ollama_running():
-    try:
-        return requests.get("http://localhost:11434/", timeout=1).status_code == 200
-    except Exception:
-        return False
+
 
 
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_weather_roma():
     pipeline = MultiApiPipeline()
-    results, intent, cached = pipeline.run("Che tempo fa a Roma?")
+    results, intent, cached, ignorati = pipeline.run("Che tempo fa a Roma?")
     assert intent == "weather"
     assert len(results) > 0
     assert "error" not in results[0]
@@ -24,7 +20,7 @@ def test_weather_roma():
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_exchange_usd_eur():
     pipeline = MultiApiPipeline()
-    results, intent, cached = pipeline.run("Quanto vale il dollaro in euro?")
+    results, intent, cached, ignorati = pipeline.run("Quanto vale il dollaro in euro?")
     assert intent == "exchange_rate"
     assert len(results) > 0
     assert "error" not in results[0]
@@ -34,7 +30,7 @@ def test_exchange_usd_eur():
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_country_france():
     pipeline = MultiApiPipeline()
-    results, intent, cached = pipeline.run("Qual è la capitale della Francia?")
+    results, intent, cached, ignorati = pipeline.run("Qual è la capitale della Francia?")
     assert intent == "country_info"
     assert len(results) > 0
     assert "error" not in results[0]
@@ -44,7 +40,7 @@ def test_country_france():
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_unknown_intent():
     pipeline = MultiApiPipeline()
-    results, intent, cached = pipeline.run("Chi ha inventato la pizza?")
+    results, intent, cached, ignorati = pipeline.run("Chi ha inventato la pizza?")
     assert intent == "unknown"
     assert "error" in results[0]
 
@@ -52,7 +48,7 @@ def test_unknown_intent():
 @pytest.mark.skipif(not is_ollama_running(), reason="Ollama non è attivo")
 def test_worldtime_tokyo():
     pipeline = MultiApiPipeline()
-    results, intent, cached = pipeline.run("Che ore sono a Tokyo?")
+    results, intent, cached, ignorati = pipeline.run("Che ore sono a Tokyo?")
     assert intent == "time_info"
     assert len(results) > 0
     assert "error" not in results[0]
@@ -64,7 +60,7 @@ def test_cache_hit():
     pipeline = MultiApiPipeline()
     # popola la cache manualmente
     pipeline.cache.set("test meteo roma", "weather", [{"temperature_c": 25, "condition": "Sereno"}])
-    results, intent, cached = pipeline.run("test meteo roma")
+    results, intent, cached, ignorati = pipeline.run("test meteo roma")
     assert intent == "weather"
     assert results[0]["temperature_c"] == 25
     assert cached is True
