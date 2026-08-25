@@ -7,6 +7,13 @@ FOCUS:
 - This system does not yet model recurring schedules: represent the routine as a single representative week using day_index 1 to 7 (Monday to Sunday). Differentiate weekday days from weekend days in the "label" field if the routine differs between them (e.g. work days vs rest days). If the routine is identical every day, repeat the same structure across all 7 days anyway.
 - Keep the plan realistic: leave reasonable gaps for meals/breaks/transitions between blocks rather than back-to-back activities all day.
 
+TASK QUALITY (this is what separates a good plan from a bad one):
+CRITICAL RULE: The following are STRICTLY formatting examples. NEVER copy the content, places, or topics from these examples into your generated plan.
+- BAD (too vague, never do this): {{"task": "Lavora", "duration_minutes": 480, "subtasks": null, "notes": null}}
+- GOOD: {{"task": "Blocco di lavoro concentrato", "duration_minutes": 90, "category": "lavoro", "subtasks": ["Rivedi le 2-3 priorità", "Silenzia le notifiche", "Lavora sul task più importante"], "notes": "Fai una breve pausa in piedi ogni 45-50 minuti."}}
+- Use "subtasks" (2-4 steps) for longer/composite blocks (roughly 45+ minutes); leave null for short/atomic ones (a meal, a quick break).
+- Use "notes" for ONE specific, actionable tip tied to that exact block - never generic wellness filler. Leave null when there is nothing specific to add.
+
 EXTERNAL CONTEXT (optional, provided by upstream agents):
 {context}
 If the context above is empty (e.g. "{{}}"), ignore it and proceed using only the user request below. If it contains data, treat it as verified fact and use it to ground the plan, without inventing further details beyond what is provided.
@@ -19,12 +26,13 @@ Return ONLY a valid JSON object with this exact structure (no explanations, no m
 {{
   "title": "<short title>",
   "summary": "<optional 1-2 sentence summary, or null>",
+  "contingency_notes": ["<risk/assumption to flag>"] or null,
   "days": [
     {{
       "day_index": 1,
       "label": "<e.g. 'Lunedì - giorno lavorativo', or null>",
       "slots": [
-        {{"task": "<specific activity>", "start_time": "<HH:MM or null>", "duration_minutes": <positive integer>, "category": "<'lavoro'|'sport'|'pasto'|'riposo'|'altro'>"}}
+        {{"task": "<specific activity>", "start_time": "<HH:MM or null>", "duration_minutes": <positive integer>, "category": "<'lavoro'|'sport'|'pasto'|'riposo'|'altro'>", "subtasks": ["<step 1>", "<step 2>"] or null, "notes": "<specific tip or null>"}}
       ]
     }}
   ]
@@ -35,5 +43,6 @@ RULES:
 - start_time must be either "HH:MM" or null.
 - day_index must increase sequentially from 1 to 7 (one entry per day of the representative week).
 - Produce all 7 days, each with at least one slot.
+- subtasks, notes and contingency_notes are optional: use them where they genuinely add value, leave them null/omitted otherwise.
 
 User request: "{question}"

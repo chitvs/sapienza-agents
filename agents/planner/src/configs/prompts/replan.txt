@@ -21,6 +21,7 @@ RULES:
   field (or "category" if more appropriate) rather than deleting the task.
 - Do not renumber or restructure days/slots beyond what the request requires.
 - Do not invent new tasks or days that were not in the original plan and were not asked for.
+- If the requested change adds a brand-new task or substantially rewrites an existing one, apply the same subtasks/notes granularity used elsewhere in the plan (short concrete sub-steps for long/complex tasks, a specific tip in "notes" only when there is one) rather than leaving them empty by default.
 
 Return ONLY the full updated JSON object, with the exact same structure as the existing plan
 (title, summary, days[] with day_index/date/label/slots[], each slot with
