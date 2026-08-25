@@ -112,13 +112,11 @@ L'agente multiapi risponde a domande in linguaggio naturale interrogando api pub
 | intent | api | api key | esempi |
 |---|---|---|---|
 | `weather` | [Open-Meteo](https://open-meteo.com) | no | "Che tempo fa a Roma?", "Pioverà domani a Milano?" |
-| `exchange_rate` | [Frankfurter](https://frankfurter.dev) | no | "Quanto sono 100 dollari in euro?", "Quanto valeva il dollaro nel 2020?" |
+| `exchange_rate` | [Frankfurter](https://frankfurter.dev) | no | "Quanto sono 100 dollari in euro?", "Quanto valeva il cambio dollaro euro il 14 Aprile 2026?" |
 | `country_info` | [countries.dev](https://countries.dev) | no | "Quanti abitanti ha il Giappone?" |
 | `time_info` | world-time-api3 su RapidAPI | **sì** | "Che ore sono a Tokyo?" |
 
 Il meteo distingue le condizioni correnti dalle previsioni: `days_ahead` viene estratto dalla domanda (`null` = adesso, `0` = oggi, `1` = domani, fino a 6 giorni). Il cambio valuta converte un importo e accetta una data passata; nei giorni senza fixing usa l'ultimo disponibile e lo dichiara nel campo `requested_date`.
-
-La pipeline risponde a **un intento per domanda**. Se la domanda ne contiene altri, questi vengono elencati in `ignored_intents` e l'interfaccia avvisa che la risposta è parziale.
 
 ### Configurazione
 
