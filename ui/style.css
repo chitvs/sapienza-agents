@@ -206,30 +206,40 @@ pre {
 
 /* ---- layout a tre colonne, sempre presenti: cambia solo il contenuto della destra ---- */
 
-body { max-width: none; padding: 0; }
+html, body { height: 100%; }
+body { max-width: none; padding: 0; overflow: hidden; }
 
-.layout { display: flex; min-height: 100vh; }
+.layout { display: flex; height: 100vh; }
 
 .sidebar {
   flex: none;
   width: 15rem;
   padding: 1.25rem 0.9rem;
+  overflow-y: auto;
   background: var(--surface);
   border-right: 1px solid var(--line);
 }
 
+/* il main è una colonna a tutta altezza: header fisso, chat che scorre,
+   form sempre ancorato in basso, come in una chat AI classica */
 .main {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 60rem;
+  max-width: 65rem;
+  min-height: 0;
   margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
 }
+
+.main-header { flex: none; }
 
 .settings-panel {
   flex: none;
   width: 17rem;
   padding: 1.25rem 1rem;
+  overflow-y: auto;
   background: var(--surface);
   border-left: 1px solid var(--line);
 }
@@ -257,6 +267,9 @@ body:not(.mode-planner) .settings-placeholder { display: block; }
 .chat-list { display: flex; flex-direction: column; gap: 0.3rem; }
 
 .chat-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.5rem 0.6rem;
   border-radius: var(--radius);
   color: var(--muted);
@@ -265,9 +278,48 @@ body:not(.mode-planner) .settings-placeholder { display: block; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  background: var(--surface-bg, transparent); /* o un colore di sfondo leggero */
+  border: 1px solid var(--line); /* Bordo sempre presente */
+  margin-bottom: 0.3rem;
 }
-.chat-item:hover { background: var(--bg); }
-.chat-item.active { background: var(--bg); color: var(--fg); border: 1px solid var(--line); }
+
+.chat-item-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-item:hover { background: var(--bg); color: var(--fg);}
+.chat-item.active { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-color: var(--primary, var(--fg)); }
+.chat-item:hover .chat-delete,
+.chat-item.active .chat-delete {
+  opacity: 1;
+}
+
+.chat-delete {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+} 
+
+.chat-delete:hover {
+  color: var(--err);
+  background: var(--bg);
+}
 
 .planner-banner {
   margin-bottom: 1rem;
@@ -287,8 +339,14 @@ body:not(.mode-planner) .settings-placeholder { display: block; }
 
 @media (max-width: 60rem) {
   .layout { flex-direction: column; }
-  .sidebar, .settings-panel { width: auto; border: none; border-bottom: 1px solid var(--line); }
-  .main { max-width: none; margin: 0; }
+  .sidebar, .settings-panel {
+    width: auto;
+    max-height: 11rem;
+    flex: none;
+    border: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .main { flex: 1 1 auto; max-width: none; margin: 0; }
 }
 
 .timeline { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.75rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.85rem; }
@@ -307,7 +365,49 @@ body:not(.mode-planner) .settings-placeholder { display: block; }
 .slot-duration { margin-top: 0.1rem; }
 .slot-body { flex: 1 1 auto; min-width: 0; }
 .slot-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-.slot-category { font-size: 0.75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0.05rem 0.5rem; }
+.slot-category { display: inline-flex; align-items: center; font-size: 0.75rem; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0.05rem 0.5rem 0.05rem 0.4rem; }
+.slot-cat-dot { width: 0.5rem; height: 0.5rem; margin-right: 0.35rem; border-radius: 50%; background: var(--cat-color, var(--muted)); }
+
+/* linea del tempo grafica del giorno: mostra a colpo d'occhio buchi e intensità,
+   con blocchi colorati per categoria (stesso colore usato in .slot-cat-dot) */
+.day-timeline { margin: 0.7rem 0 1rem; }
+.tl-track {
+  position: relative;
+  height: 2.4rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.tl-block {
+  position: absolute;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  min-width: 3px;
+  background: var(--cat-color, var(--accent));
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.tl-block-label {
+  display: block;
+  padding: 0.25rem 0.4rem;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+.tl-axis { position: relative; height: 1.1rem; margin-top: 0.3rem; }
+.tl-hour {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  padding-left: 1px;
+  border-left: 1px solid var(--line);
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.1rem;
+}
 .slot-subtasks { margin: 0.3rem 0 0; padding-left: 1.1rem; font-size: 0.85rem; color: var(--muted); }
 .slot-notes { margin: 0.3rem 0 0; font-size: 0.85rem; color: var(--muted); }
 .plan-notes { margin-top: 0.9rem; padding: 0.75rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--err); border-radius: var(--radius); }
@@ -315,11 +415,40 @@ body:not(.mode-planner) .settings-placeholder { display: block; }
 .plan-notes ul { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; }
 
 /* ---- Fase 6: Stile Chat UI ---- */
-#output {
+#output.chat-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 2rem;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
+  padding: 0.25rem 0.25rem 1rem;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding-right: 1rem;
+  padding-left: 1rem;
+}
+
+#output.chat-scroll:empty {
+  display: block;
+  flex: 1 1 auto;
+}
+#output.chat-scroll:empty::before {
+  content: "nessun messaggio ancora. fai una domanda per iniziare.";
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.chat-form {
+  flex: none;
+  margin-top: 0.75rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
 }
 
 .chat-msg {

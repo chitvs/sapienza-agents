@@ -27,7 +27,6 @@ from api.schemas import QueryRequest
 from configs.settings import settings  
 from http_client import close_http_client  
 from pipeline import PlannerPipeline, REPLAN_FAILURE_NOTE  
-from state import plan_state_store  
 
 from unittest.mock import patch
 from validators import validate_draft as original_validate_draft
@@ -160,12 +159,13 @@ async def _run_single_test(
 ) -> dict[str, Any]:
     """
     Esegue un singolo test case contro il modello/modalità di context
-    gathering correnti, gestendo l'iniezione dello stato per i test 'replan'.
+    gathering correnti, passando direttamente il piano precedente nei test
+    di replanning.
     """
     test_id: str = test["id"]
     expected_domain: str = test["expected_domain"]
     intent: str = test.get("intent", "new_plan")
-    
+
     actual_model_name: str = _get_actual_model_name(provider_name)
 
     val_errors_history: list[list[str]] = []
@@ -175,7 +175,7 @@ async def _run_single_test(
         if errors:
             val_errors_history.append(list(errors))
         return errors
-    
+
     original_extract = pipeline._llm_extract_json
 
     async def delayed_extract(*args, **kwargs):
@@ -198,18 +198,16 @@ async def _run_single_test(
     }
 
     try:
-        session_id: str | None = None
-        if intent == "replan":
-            session_id = "bench_session"
-            plan_state_store.save(
-                session_id=session_id,
-                domain=expected_domain, # type: ignore
-                question="mock",
-                draft=test["previous_plan"],
-            )
+        request_kwargs: dict[str, Any] = {
+            "question": test["question"],
+        }
 
-        request = QueryRequest(question=test["question"], session_id=session_id)
-        
+        if intent == "replan":
+            request_kwargs["previous_plan"] = test["previous_plan"]
+            request_kwargs["previous_domain"] = expected_domain
+
+        request = QueryRequest(**request_kwargs)
+
         with patch("pipeline.validate_draft", new=tracking_validate_draft), \
              patch.object(pipeline, "_llm_extract_json", side_effect=delayed_extract):
             response = await pipeline.run(request)

@@ -15,7 +15,6 @@ from pydantic import ValidationError
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse, ResponseDomain, DOMAIN_DESCRIPTIONS
 from configs.settings import settings
 from llm_client import LLMClient
-from state import plan_state_store, StoredPlan
 from validators import validate_draft
 
 from context_gathering import ContextGatherer
@@ -102,53 +101,9 @@ class PlannerPipeline:
 
     # ----- fase 2: replanning (modifica di un piano esistente) -----
 
-    async def _classify_intent(
-        self, 
-        request: QueryRequest, 
-        stored: StoredPlan, 
-        llm: LLMClient, 
-        on_event: EventCallback | None = None
-    ) -> Literal["new_plan", "replan"]:
-        """
-        Invocato se esiste già un piano salvato per la sessione corrente per 
-        decidere se l'utente vuole un piano nuovo o modificare quello in corso.
-
-        Args:
-            request (QueryRequest): La richiesta dell'utente.
-            stored (StoredPlan): L'oggetto contenente il dominio e la bozza salvati precedentemente.
-            llm (LLMClient): Istanza del client LLM da interrogare.
-            on_event (EventCallback | None): Callback per notifica SSE.
-
-        Returns:
-            Literal["new_plan", "replan"]: L'intento classificato.
-        """
-        self._log("\n[info] [step] classificazione intento (nuovo piano vs replanning)")
-        await emit(on_event, EventStatus.CLASSIFYING_INTENT, "Verifica se la richiesta modifica il piano esistente")
-        
-        data = await self.prompts.extract_json(
-            "classify_intent.txt", 
-            llm,
-            question=request.question, 
-            domain=stored.domain, 
-            existing_title=stored.draft.get("title", ""),
-        )
-        intent: str | None = data.get("intent") if data else None
-        
-        if intent in ("new_plan", "replan"):
-            self._log(f"  -> intento classificato: {intent}")
-            return intent  # type: ignore
-
-        # Fallback sicuro: in caso di dubbio creiamo un nuovo piano
-        self._log(
-            f"  [warn] intento non riconosciuto ({intent!r}), fallback su 'new_plan'",
-            level=logging.WARNING
-        )
-        return "new_plan"
-
     async def _replan(
         self, 
         request: QueryRequest, 
-        stored: StoredPlan, 
         llm: LLMClient, 
         on_event: EventCallback | None = None
     ) -> tuple[dict[str, Any], int]:
@@ -157,25 +112,33 @@ class PlannerPipeline:
 
         Args:
             request (QueryRequest): La richiesta di modifica dell'utente.
-            stored (StoredPlan): Il piano da usare come punto di partenza.
             llm (LLMClient): Istanza del client LLM da interrogare.
             on_event (EventCallback | None): Callback per notifica SSE.
 
         Returns:
             tuple[dict[str, Any], int]: La bozza modificata/corretta e il numero di tentativi di retry impiegati.
         """
-        self._log(f"\n[info] [step] replanning (dominio={stored.domain}) a partire dallo stato salvato")
+
+        if request.previous_plan is None:
+            raise ValueError("previous_plan richiesto per il replanning")
+
+        if request.previous_domain is None:
+            raise ValueError("previous_domain richiesto quando previous_plan è presente")
+
+        domain = request.previous_domain
+
+        self._log(f"\n[info] [step] replanning (dominio={domain}) a partire dal piano precedente")
         await emit(on_event, EventStatus.DRAFTING, "Applicazione delle modifiche al piano esistente")
         
         draft = await self.prompts.extract_json(
             "replan.txt", 
             llm,
+            domain=domain,
             question=request.question, 
-            domain=stored.domain,
-            previous_plan=json.dumps(stored.draft, ensure_ascii=False, indent=2),
+            previous_plan=json.dumps(request.previous_plan, ensure_ascii=False, indent=2),
             constraints=request.constraints or "nessuno",
         )
-        return await self._validate_and_correct(draft, stored.domain, request, llm, on_event, previous_plan=stored.draft)
+        return await self._validate_and_correct(draft, domain, request, llm, on_event, previous_plan=request.previous_plan)
     
     # ----- fase 3: drafting -----
 
@@ -364,7 +327,7 @@ class PlannerPipeline:
 
     async def run(self, request: QueryRequest, on_event: EventCallback | None = None) -> QueryResponse:
         """
-        Esegue l'intera pipeline dell'agente: gestisce replanning su sessioni esistenti,
+        Esegue l'intera pipeline dell'agente: gestisce replanning piani esistenti,
         recupero di contesto via determinismo/ReAct e la generazione iterativa di nuovi piani.
 
         Args:
@@ -379,24 +342,24 @@ class PlannerPipeline:
         await emit(on_event, EventStatus.STARTED, "Richiesta ricevuta")
 
         # Gestione Replanning
-        stored: StoredPlan | None = plan_state_store.get(request.session_id)
-        if stored is not None:
-            intent = await self._classify_intent(request, stored, llm, on_event)
-            if intent == "replan":
-                draft, draft_attempts = await self._replan(request, stored, llm, on_event)
-                elapsed_ms = round((time.time() - start_time) * 1000, 2)
-                
-                await emit(on_event, EventStatus.FINALIZING, "Composizione della risposta")
-                response = self._finalize(
-                    request, stored.domain, draft, elapsed_ms, draft_attempts, 
-                    context={}, context_errors=[], trace=None, replanned=True
-                )
-                
-                if draft.get("days"):
-                    plan_state_store.save(request.session_id, stored.domain, request.question, draft)
-                    
-                await emit(on_event, EventStatus.COMPLETED, "Piano aggiornato", confidence=response.confidence)
-                return response
+        if request.previous_plan is not None:
+            if request.previous_domain is None:
+                raise ValueError("previous_domain è obbligatorio quando previous_plan è presente")
+
+            draft, draft_attempts = await self._replan(request, llm, on_event)
+
+            elapsed_ms = round((time.time() - start_time) * 1000, 2)
+
+            await emit(on_event, EventStatus.FINALIZING, "Composizione della risposta")
+
+            response = self._finalize(
+                request, request.previous_domain, draft, elapsed_ms, draft_attempts,
+                context={}, context_errors=[], trace=None, replanned=True,
+            )
+
+            await emit(on_event, EventStatus.COMPLETED, "Piano aggiornato", confidence=response.confidence)
+
+            return response
 
         # Classificazione e Gestione Nuovi Piani
         domain = await self._classify_domain(request, llm, on_event)
@@ -418,7 +381,7 @@ class PlannerPipeline:
         elif context_mode == "react":
             context, context_errors, trace = await self.context_gatherer.gather_react(domain, request, llm, on_event)  # type: ignore
         else:
-            context, context_errors = await self.context_gatherer.gather_deterministic(domain, request, on_event) # type: ignore
+            context, context_errors = await self.context_gatherer.gather_deterministic(domain, request, llm, on_event)  # type: ignore
 
         # Generazione della Bozza
         draft, draft_attempts = await self._draft(request, domain, context, llm, on_event) # type: ignore
@@ -429,9 +392,6 @@ class PlannerPipeline:
             request, domain, draft, elapsed_ms, draft_attempts,  # type: ignore
             context, context_errors, trace
         )
-        
-        if draft.get("days"):
-            plan_state_store.save(request.session_id, domain, request.question, draft) # type: ignore
             
         await emit(on_event, EventStatus.COMPLETED, "Piano generato", confidence=response.confidence)
         

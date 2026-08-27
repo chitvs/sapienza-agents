@@ -2,8 +2,10 @@
 Recupero del contesto esterno per il Planner (kg-agent, multiapi-agent).
 
 Due strategie, selezionabili per-richiesta (QueryRequest.context_mode):
-- deterministica: esegue ciecamente e in parallelo i tool richiesti esplicitamente 
-  dall'utente tramite `request.allowed_tools` (ContextGatherer.gather_deterministic).
+- deterministica: formula (via LLM leggero) una sotto-domanda mirata per
+  ciascun tool richiesto esplicitamente dall'utente tramite
+  `request.allowed_tools`, poi li esegue in parallelo; il dispatch (quali/se
+  chiamare) resta deciso a priori, non dall'LLM (ContextGatherer.gather_deterministic).
 - ReAct: un loop di tool-calling in cui l'LLM decide dinamicamente quali
   fonti interrogare, entro TOOL_DESCRIPTIONS e settings.max_react_steps
   (ContextGatherer.gather_react).
@@ -41,14 +43,18 @@ class ContextGatherer:
         self._prompts = prompts
 
     async def gather_deterministic(
-        self, domain: PlanDomain, request: QueryRequest, on_event: EventCallback | None = None
+        self, domain: PlanDomain, request: QueryRequest, llm: LLMClient, on_event: EventCallback | None = None
     ) -> tuple[dict[str, Any], list[str]]:
-        """Recupera il contesto esterno in modo deterministico: esegue ciecamente 
-        i tool specificati in input dall'utente tramite `allowed_tools`.
+        """Recupera il contesto esterno in modo deterministico: esegue i tool
+        specificati in input dall'utente tramite `allowed_tools`, dopo aver
+        formulato per ciascuno una sotto-domanda mirata (passaggio LLM leggero,
+        non un tool-calling loop: la scelta di quali/se chiamare i tool resta
+        fissata da `allowed_tools`, non decisa dall'LLM).
 
         Args:
             domain: Il dominio del piano classificato al passo 1 (ignorato in questa modalità).
             request: La richiesta originale.
+            llm: Il client LLM risolto per questa richiesta, usato solo per formulare le sotto-domande.
             on_event: Callback opzionale per gli eventi di avanzamento (streaming).
 
         Returns:
@@ -70,12 +76,36 @@ class ContextGatherer:
 
         self._log(f"\n[info] [step] recupero contesto esterno deterministico ({', '.join(active_names)})")
         await emit(on_event, EventStatus.GATHERING_CONTEXT, "Recupero contesto esterno in corso")
-        
-        # Esecuzione in parallelo dei tool richiesti
-        results = await asyncio.gather(
-            *(run_tracked_tool(on_event, name, TOOL_REGISTRY[name](request.question)) for name in active_names)
+
+        # Formuliamo una sotto-domanda mirata per ciascun tool attivo, ripescando
+        # nome+descrizione da TOOL_DESCRIPTIONS (stessa fonte usata da gather_react):
+        # niente elenco di tool hardcoded nel prompt.
+        active_tools = [t for t in TOOL_DESCRIPTIONS if t["name"] in active_names]
+        queries = await self._prompts.extract_json(
+            "formulate_queries.txt", llm,
+            question=request.question,
+            tools=json.dumps(active_tools, ensure_ascii=False, indent=2),
         )
-        
+        if not isinstance(queries, dict):
+            self._log(
+                "  [warn] formulate_queries: risposta LLM non valida, fallback alla domanda originale per tutti i tool",
+                level=logging.WARNING,
+            )
+            queries = {}
+
+        # Fallback per-singolo-tool: se l'LLM omette o sbaglia la chiave di un
+        # tool, quel tool riceve comunque la domanda originale invece di essere
+        # saltato o rotto.
+        sub_questions: dict[str, str] = {}
+        for name in active_names:
+            candidate = queries.get(name)
+            sub_questions[name] = candidate.strip() if isinstance(candidate, str) and candidate.strip() else request.question
+
+        # Esecuzione in parallelo dei tool richiesti, ciascuno con la propria sotto-domanda mirata
+        results = await asyncio.gather(
+            *(run_tracked_tool(on_event, name, TOOL_REGISTRY[name](sub_questions[name])) for name in active_names)
+        )
+
         for name, result in zip(active_names, results):
             if "error" in result:
                 errors.append(result["error"])

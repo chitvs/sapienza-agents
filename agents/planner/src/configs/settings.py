@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # Context gathering 
     kg_agent_url: str = "http://localhost:8000"
     multiapi_agent_url: str = "http://localhost:8002"
-    external_call_timeout: float = 60.0
+    external_call_timeout: float = 120.0
 
     context_gathering_mode: Literal["deterministic", "react", "none"] = "react"
     max_react_steps: int = 3

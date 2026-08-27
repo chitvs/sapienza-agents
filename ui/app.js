@@ -8,6 +8,12 @@ const ENDPOINTS = {
 
 const META_KEYS = ["_provenance", "_sources"];
 
+const PROVIDER_LABELS = {
+  ollama: "Ollama (locale)",
+  gemini: "Gemini",
+  openai_compatible: "OpenRouter",
+};
+
 const form = document.getElementById("form");
 const output = document.getElementById("output");
 const submit = document.getElementById("submit");
@@ -16,6 +22,7 @@ const kgSelect = document.getElementById("kg");
 const newChatBtn = document.getElementById("newChat");
 const chatListEl = document.getElementById("chatList");
 const plannerBanner = document.getElementById("plannerBanner");
+const advProvider = document.getElementById("advProvider");
 const advModel = document.getElementById("advModel");
 const advContext = document.getElementById("advContext");
 const advDomain = document.getElementById("advDomain");
@@ -23,57 +30,117 @@ const advConstraints = document.getElementById("advConstraints");
 const advToolsWrap = document.getElementById("advToolsWrap");
 const advTools = document.getElementById("advTools");
 
-
 let advPanelLoaded = false;
+let allModels = [];
 
+// Funzione di utilità per sincronizzare le checkbox dei tool
+function syncContextUI() {
+  if (!advToolsWrap || !advContext) return;
+  advToolsWrap.style.display = advContext.value === "deterministic" ? "flex" : "none";
+}
+
+if (advContext) {
+  advContext.addEventListener("change", syncContextUI);
+}
+
+// Aggiorna il menu a tendina dei modelli in base al provider
+function updateModelDropdown() {
+  if (!advModel || !advProvider) return;
+  const selectedProvider = advProvider.value;
+  advModel.innerHTML = '<option value="">Auto</option>';
+
+  const filteredModels = selectedProvider
+    ? allModels.filter(m => m.provider === selectedProvider)
+    : allModels;
+
+  for (const m of filteredModels) {
+    const opt = document.createElement("option");
+    opt.value = m.id;
+    opt.textContent = m.model;
+    advModel.appendChild(opt);
+  }
+}
+
+if (advProvider) {
+  advProvider.addEventListener("change", updateModelDropdown);
+}
+
+// Caricamento asincrono delle opzioni per il pannello avanzato
 async function loadAdvPanelData() {
   if (advPanelLoaded) return;
-  advPanelLoaded = true;
 
   try {
     const res = await fetch("/api/planner/models");
-    const data = await res.json();
-    advModel.innerHTML = '<option value="">Auto</option>';
-    for (const m of data.models) {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = m.id === data.default ? `${m.id} (default)` : m.id;
-      advModel.appendChild(opt);
+    if (res.ok) {
+      const data = await res.json();
+      allModels = Array.isArray(data.models) ? data.models : [];
+
+      if (advProvider) {
+        const uniqueProviders = [...new Set(allModels.map(m => m.provider))];
+        advProvider.innerHTML = '<option value="">Auto / Tutti</option>';
+        uniqueProviders.forEach(provider => {
+          const opt = document.createElement("option");
+          opt.value = provider;
+          opt.textContent = PROVIDER_LABELS[provider] || provider;
+          advProvider.appendChild(opt);
+        });
+      }
+
+      updateModelDropdown();
     }
   } catch (err) {
-    console.error("errore nel caricamento dei modelli:", err);
+    console.error("Errore nel caricamento dei modelli:", err);
   }
 
   try {
     const res = await fetch("/api/planner/tools");
-    const tools = await res.json();
-    advTools.innerHTML = tools.map(t =>
-      `<label><input type="checkbox" value="${escapeAttr(t.name)}" checked> ${escape(t.name)}</label>`
-    ).join("");
+    if (res.ok && advTools) {
+      const tools = await res.json();
+      advTools.innerHTML = tools.map(t =>
+        `<label><input type="checkbox" value="${escapeAttr(t.name)}" checked> ${escape(t.name)}</label>`
+      ).join("");
+    }
   } catch (err) {
-    console.error("errore nel caricamento dei tool:", err);
+    console.error("Errore nel caricamento dei tool:", err);
   }
+
+  advPanelLoaded = true;
+  syncContextUI();
 }
 
-advContext.addEventListener("change", () => {
-  advToolsWrap.hidden = advContext.value !== "deterministic" && advContext.value !== "react";
-});
-
 function renderSidebar() {
+  if (!chatListEl) return;
+
   if (!sessionState.sessions.length) {
-    chatListEl.innerHTML = "<p class='msg' style='margin-top:0'>nessuna chat ancora.</p>";
+    chatListEl.innerHTML =
+      "<p class='msg' style='margin-top:0'>nessuna chat ancora.</p>";
     return;
   }
+
   chatListEl.innerHTML = sessionState.sessions.map(s => {
     const active = s.id === sessionState.activeId ? " active" : "";
     const label = s.title || "nuova conversazione";
-    return `<div class="chat-item${active}" data-id="${escapeAttr(s.id)}">${escape(label)}</div>`;
+
+    return `
+      <div class="chat-item${active}" data-id="${escapeAttr(s.id)}">
+        <span class="chat-item-title">${escape(label)}</span>
+        <button
+          type="button"
+          class="chat-delete"
+          data-delete-id="${escapeAttr(s.id)}"
+          aria-label="Elimina conversazione"
+          title="Elimina conversazione"
+        >×</button>
+      </div>
+    `;
   }).join("");
 }
 
 function renderPlannerBanner() {
+  if (!plannerBanner) return;
   const session = activeSession();
-  if (session && session.hasPlan) {
+  const previousPlan = getLatestPlannerPlan(session);
+  if (previousPlan) {
     plannerBanner.textContent = "Questa conversazione ha già un piano: le richieste verranno trattate come modifiche. Per un piano completamente diverso, apri una nuova chat.";
     plannerBanner.hidden = false;
   } else {
@@ -81,10 +148,7 @@ function renderPlannerBanner() {
   }
 }
 
-// ---- gestione sessioni planner (Fase 1) ----
-// solo metadati lato client (id, titolo, presenza di un piano): la
-// conversazione e il piano vero restano lato Planner, indicizzati da session_id.
-
+// ---- Gestione Sessioni ----
 const SESSIONS_KEY = "minerva_planner_sessions";
 
 function loadSessionState() {
@@ -107,31 +171,187 @@ function activeSession() {
   return sessionState.sessions.find(s => s.id === sessionState.activeId) || null;
 }
 
+function getLatestPlannerPlan(session) {
+  if (!session || !Array.isArray(session.messages)) {
+    return null;
+  }
+
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    const message = session.messages[i];
+
+    if (
+      message &&
+      message.role === "assistant" &&
+      message.type === "planner" &&
+      message.data &&
+      Array.isArray(message.data.days) &&
+      message.data.days.length > 0
+    ) {
+      return message.data;
+    }
+  }
+
+  return null;
+}
+
+function addSessionMessage(message) {
+  const session = activeSession();
+  if (!session) return;
+
+  if (!Array.isArray(session.messages)) {
+    session.messages = [];
+  }
+
+  session.messages.push(message);
+
+  if (
+    message.role === "user" &&
+    !session.title &&
+    message.content
+  ) {
+    session.title =
+      message.content.length > 42
+        ? message.content.slice(0, 42) + "…"
+        : message.content;
+  }
+
+  saveSessionState();
+  renderSidebar();
+}
+
+function renderConversation(session) {
+  if (!output) return;
+
+  output.innerHTML = "";
+
+  if (!session || !Array.isArray(session.messages)) {
+    return;
+  }
+
+  for (const message of session.messages) {
+    if (message.role === "user") {
+      const userMsg = document.createElement("div");
+      userMsg.className = "chat-msg user-msg";
+      userMsg.innerHTML = `<div class="msg-content">${escape(message.content || "")}</div>`;
+      output.appendChild(userMsg);
+      continue;
+    }
+
+    if (message.role === "assistant") {
+      const assistantMsg = document.createElement("div");
+      assistantMsg.className = "chat-msg assistant-msg";
+
+      if (message.type === "planner") {
+        assistantMsg.innerHTML = renderPlanner(message.data);
+      } else if (message.type === "kg") {
+        assistantMsg.innerHTML = renderKg(message.data);
+      } else if (message.type === "multiapi") {
+        assistantMsg.innerHTML = renderMultiapi(message.data);
+      } else if (message.type === "orchestrator") {
+        assistantMsg.innerHTML = renderOrchestrator(message.data);
+      } else if (message.type === "error") {
+        assistantMsg.innerHTML =
+          `<p class="err">${escape(message.content || "errore sconosciuto")}</p>`;
+      } else {
+        assistantMsg.innerHTML =
+          `<div class="msg-content">${escape(message.content || "")}</div>`;
+      }
+
+      output.appendChild(assistantMsg);
+    }
+  }
+
+  output.scrollTop = output.scrollHeight;
+}
+
 function createSession() {
-  const session = { id: crypto.randomUUID(), title: null, hasPlan: false };
+  const session = {
+    id: crypto.randomUUID(),
+    title: null,
+    messages: []
+  };
+
   sessionState.sessions.unshift(session);
   sessionState.activeId = session.id;
+
   saveSessionState();
-  output.innerHTML = "";
-  document.getElementById("question").value = "";
+
+  if (output) output.innerHTML = "";
+
+  const q = document.getElementById("question");
+  if (q) q.value = "";
+
   renderSidebar();
   renderPlannerBanner();
 }
 
 function setActiveSession(id) {
+  const session = sessionState.sessions.find(s => s.id === id);
+  if (!session) return;
+
   sessionState.activeId = id;
   saveSessionState();
-  output.innerHTML = "";
-  document.getElementById("question").value = "";
+
+  const q = document.getElementById("question");
+  if (q) q.value = "";
+
   renderSidebar();
   renderPlannerBanner();
+  renderConversation(session);
+}
+
+function deleteSession(id) {
+  const index = sessionState.sessions.findIndex(s => s.id === id);
+  if (index === -1) return;
+
+  const wasActive = sessionState.activeId === id;
+
+  sessionState.sessions.splice(index, 1);
+
+  if (wasActive) {
+    if (sessionState.sessions.length) {
+      sessionState.activeId = sessionState.sessions[0].id;
+    } else {
+      sessionState.activeId = null;
+    }
+  }
+
+  saveSessionState();
+
+  if (!sessionState.sessions.length) {
+    createSession();
+    return;
+  }
+
+  renderSidebar();
+  renderConversation(activeSession());
+  renderPlannerBanner();
+
+  const q = document.getElementById("question");
+  if (q) q.value = "";
 }
 
 function updateSessionAfterPlannerResponse(question, data) {
   const session = activeSession();
   if (!session) return;
-  if (!session.title) session.title = question.length > 42 ? question.slice(0, 42) + "…" : question;
-  if (data && data.days && data.days.length) session.hasPlan = true;
+
+  if (!Array.isArray(session.messages)) {
+    session.messages = [];
+  }
+
+  if (!session.title) {
+    session.title =
+      question.length > 42
+        ? question.slice(0, 42) + "…"
+        : question;
+  }
+
+  session.messages.push({
+    role: "assistant",
+    type: "planner",
+    data: data
+  });
+
   saveSessionState();
   renderSidebar();
   renderPlannerBanner();
@@ -145,8 +365,6 @@ function renderToolCalls(trace) {
     const action = t.tool ? `<div><strong>Azione:</strong> <code>${escape(t.tool)}(${escape(t.tool_input)})</code></div>` : "";
     const obsObj = t.observation || {};
     const obsTitle = obsObj.error ? "Errore" : "Osservazione (Dati Ricevuti)";
-    
-    // Riutilizziamo renderRaw per avere il JSON formattato ed espandibile per l'osservazione
     const obsBody = renderRaw(obsTitle, obsObj);
     
     return `<div class="react-step">
@@ -181,8 +399,6 @@ function renderPlanner(data) {
   const head = `<div class="panel"><strong>${escape(data.title)}</strong>` +
     (data.summary ? `<p>${escape(data.summary)}</p>` : "") + `</div>`;
   const days = data.days.map(renderPlanDay).join("");
-  
-  // Aggiunta: Rendering della traccia ReAct se presente
   const reactTraceHtml = renderToolCalls(data.tool_calls);
   
   return meta + head + `<div class="plan-days">${days}</div>` + renderContingencyNotes(data.contingency_notes) + reactTraceHtml + renderRaw("dati grezzi", data);
@@ -198,7 +414,6 @@ function timelineIcon(data) {
 async function runPlannerStream(body, container) {
   const timeline = document.createElement("div");
   timeline.className = "timeline";
-  
   container.appendChild(timeline);
 
   const response = await fetch(ENDPOINTS.plannerStream, {
@@ -233,17 +448,17 @@ async function runPlannerStream(body, container) {
       const eventLine = block.split("\n").find(l => l.startsWith("event:"));
       const dataLine = block.split("\n").find(l => l.startsWith("data:"));
       if (!eventLine || !dataLine) continue;
-      const eventName = eventLine.slice(6).trim();
       const data = JSON.parse(dataLine.slice(5).trim());
 
-      if (eventName === "progress") {
+      if (eventLine.slice(6).trim() === "progress") {
         const line = document.createElement("div");
         line.className = "timeline-item";
         line.textContent = `${timelineIcon(data)} ${data.message}`;
         timeline.appendChild(line);
-      } else if (eventName === "result") {
+        if (output) output.scrollTop = output.scrollHeight;
+      } else if (eventLine.slice(6).trim() === "result") {
         result = data;
-      } else if (eventName === "error") {
+      } else if (eventLine.slice(6).trim() === "error") {
         streamError = data.message || "errore sconosciuto";
       }
     }
@@ -253,12 +468,33 @@ async function runPlannerStream(body, container) {
   return result;
 }
 
-chatListEl.addEventListener("click", event => {
-  const item = event.target.closest(".chat-item");
-  if (item) setActiveSession(item.dataset.id);
-});
+if (chatListEl) {
+  chatListEl.addEventListener("click", event => {
+    const deleteButton = event.target.closest(".chat-delete");
 
-newChatBtn.addEventListener("click", createSession);
+    if (deleteButton) {
+      event.stopPropagation();
+
+      const id = deleteButton.dataset.deleteId;
+
+      if (confirm("Eliminare questa conversazione?")) {
+        deleteSession(id);
+      }
+
+      return;
+    }
+
+    const item = event.target.closest(".chat-item");
+
+    if (item) {
+      setActiveSession(item.dataset.id);
+    }
+  });
+}
+
+if (newChatBtn) {
+  newChatBtn.addEventListener("click", createSession);
+}
 
 function syncModeUI() {
   const isPlanner = modeSelect.value === "planner";
@@ -266,16 +502,15 @@ function syncModeUI() {
   if (isPlanner) {
     loadAdvPanelData();
     renderPlannerBanner();
+    syncContextUI();
   } else {
-    plannerBanner.hidden = true;
+    if (plannerBanner) plannerBanner.hidden = true;
   }
 }
 
-modeSelect.addEventListener("change", syncModeUI);
-
-if (!activeSession()) createSession();
-else renderSidebar();
-syncModeUI();
+if (modeSelect) {
+  modeSelect.addEventListener("change", syncModeUI);
+}
 
 function escape(text) {
   const div = document.createElement("div");
@@ -284,8 +519,6 @@ function escape(text) {
 }
 
 function escapeAttr(text) {
-  // textContent non tocca gli apici: dentro un attributo servono anche quelli,
-  // altrimenti un valore che ne contiene uno chiude l'attributo e ne apre altri
   return escape(text).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
@@ -297,8 +530,6 @@ function formatDetail(detail) {
 }
 
 function safeUrl(uri) {
-  // gli uri arrivano dal knowledge graph, non da noi: uno schema "javascript:"
-  // eseguirebbe codice al clic, quindi si ammettono solo http e https assoluti
   try {
     const parsed = new URL(String(uri));
     return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : null;
@@ -313,7 +544,6 @@ function renderMeta(entries) {
 }
 
 function formatSeconds(ms) {
-  // 0 è un tempo misurato, non un dato mancante: solo null/undefined valgono "?"
   return typeof ms === "number" ? `${(ms / 1000).toFixed(1)}s` : "?";
 }
 
@@ -372,16 +602,11 @@ function renderKg(data) {
   return meta + table + query;
 }
 
-// ---- helper di presentazione per i risultati multiapi ----
-
 const NUM = new Intl.NumberFormat("it-IT");
 const DATE_FMT = new Intl.DateTimeFormat("it-IT", {
   weekday: "long", day: "numeric", month: "long", year: "numeric",
 });
 
-// le date arrivano come "AAAA-MM-GG". Costruiamo la data dai singoli pezzi:
-// passando la stringa intera a new Date() verrebbe letta come UTC e, a fusi
-// negativi, mostrerebbe il giorno precedente.
 function formatDate(iso) {
   if (typeof iso !== "string") return "";
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
@@ -389,7 +614,6 @@ function formatDate(iso) {
   return DATE_FMT.format(new Date(+m[1], +m[2] - 1, +m[3]));
 }
 
-// codici WMO -> icona (stessa tabella che il provider usa per il testo)
 function weatherIcon(code) {
   if (code === 0) return "☀️";
   if (code === 1) return "🌤️";
@@ -405,23 +629,17 @@ function weatherIcon(code) {
   return "🌡️";
 }
 
-// flagcdn indicizza le bandiere per codice ISO-3166 alpha-2 minuscolo.
 function flagUrl(code, size) {
   if (typeof code !== "string" || !/^[A-Za-z]{2}$/.test(code)) return "";
   return `https://flagcdn.com/${size || "w40"}/${code.toLowerCase()}.png`;
 }
 
-// quasi tutti i codici valuta ISO-4217 iniziano col codice paese
-// (USD -> US, JPY -> JP...): l'euro è l'eccezione che vale la pena gestire.
 function currencyFlag(currency) {
   if (typeof currency !== "string" || currency.length < 3) return "";
   if (currency.toUpperCase() === "EUR") return flagUrl("eu");
   return flagUrl(currency.slice(0, 2));
 }
 
-
-// onerror: se flagcdn non ha quella bandiera l'immagine si rimuove da sola,
-// invece di lasciare l'icona di risorsa rotta.
 function flagImg(url, alt, cls) {
   if (!url) return "";
   return `<img class="${cls || "flag"}" src="${escape(url)}" alt="${escape(alt)}" onerror="this.remove()">`;
@@ -449,8 +667,6 @@ function tagGroup(label, values) {
   const tags = list.map(v => `<span class="tag">${escape(String(v))}</span>`).join("");
   return `<div class="tag-row"><span class="stat-label">${escape(label)}</span><div>${tags}</div></div>`;
 }
-
-// ---- una card dedicata per ogni tipo di risposta ----
 
 function cardWeather(r) {
   const head = cardHead(r.city || "località", r.country || "", flagImg(flagUrl(r.country_code), r.country || ""));
@@ -512,7 +728,6 @@ function cardCountry(r) {
 }
 
 function cardTime(r) {
-  // niente sottotitolo: il fuso orario è già fra le stat qui sotto
   const head = cardHead(r.city || "località", "", flagImg(flagUrl(r.country_code), r.city || ""));
   const hero = `<div class="hero">` +
     `<span class="hero-icon">🕒</span>` +
@@ -559,7 +774,6 @@ function renderMultiapi(data) {
   const results = data.results || [];
   if (!results.length) return meta + "<p class='msg'>nessun risultato trovato.</p>";
 
-  // gli errori dei provider arrivano come risultato con chiave "error"
   const failed = results.filter(r => r && r.error);
   if (failed.length === results.length) {
     return meta + failed.map(r => `<p class="err">${escape(r.error)}</p>`).join("");
@@ -570,8 +784,16 @@ function renderMultiapi(data) {
     ? results.map(r => (r && r.error) ? `<p class="err">${escape(r.error)}</p>` : card(r)).join("")
     : renderTable(results);
 
-  // i campi non mostrati nelle card restano comunque consultabili
   return meta + content + renderRaw("dati grezzi", results);
+}
+
+const CATEGORY_PALETTE = ["#4c6ef5", "#f76707", "#37b24d", "#e64980", "#7048e8", "#12b886", "#f59f00", "#495057"];
+
+function categoryColor(category) {
+  if (!category) return null;
+  let hash = 0;
+  for (let i = 0; i < category.length; i++) hash = (hash * 31 + category.charCodeAt(i)) | 0;
+  return CATEGORY_PALETTE[Math.abs(hash) % CATEGORY_PALETTE.length];
 }
 
 function formatMinutes(min) {
@@ -586,7 +808,10 @@ function renderSlot(slot) {
     ? `<span class="slot-time">${escape(slot.start_time)}</span>`
     : `<span class="slot-time slot-time-empty">—</span>`;
   const duration = `<span class="slot-duration">${formatMinutes(slot.duration_minutes)}</span>`;
-  const category = slot.category ? `<span class="slot-category">${escape(slot.category)}</span>` : "";
+  const catColor = categoryColor(slot.category);
+  const category = slot.category
+    ? `<span class="slot-category" style="${catColor ? `--cat-color:${catColor}` : ""}"><span class="slot-cat-dot"></span>${escape(slot.category)}</span>`
+    : "";
   const subtasks = (slot.subtasks || []).length
     ? `<ul class="slot-subtasks">${slot.subtasks.map(s => `<li>${escape(s)}</li>`).join("")}</ul>`
     : "";
@@ -600,13 +825,73 @@ function renderSlot(slot) {
   </div>`;
 }
 
+function timeToMinutes(timeStr) {
+  if (!timeStr) return 0;
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function formatHour(minutes) {
+  const h = Math.floor(minutes / 60);
+  return `${h.toString().padStart(2, '0')}:00`;
+}
+
+function renderDayTimeline(slots) {
+  const timedSlots = (slots || []).filter(s => s.start_time && s.duration_minutes > 0).map(s => {
+    const start = timeToMinutes(s.start_time);
+    return { ...s, startMin: start, endMin: start + s.duration_minutes };
+  });
+
+  if (timedSlots.length === 0) return "";
+
+  const minTime = Math.min(...timedSlots.map(s => s.startMin));
+  const maxTime = Math.max(...timedSlots.map(s => s.endMin));
+
+  const axisStart = Math.floor(minTime / 60) * 60; 
+  const axisEnd = Math.ceil(maxTime / 60) * 60;   
+  const totalMinutes = axisEnd - axisStart;
+  
+  if (totalMinutes <= 0) return "";
+
+  const blocksHtml = timedSlots.map(s => {
+    const leftPct = ((s.startMin - axisStart) / totalMinutes) * 100;
+    const widthPct = (s.duration_minutes / totalMinutes) * 100;
+    const color = categoryColor(s.category);
+    const style = `left: ${leftPct}%; width: ${widthPct}%; ${color ? `--cat-color:${color}` : ""}`;
+    
+    return `<div class="tl-block" style="${style}">
+              <span class="tl-block-label">${escape(s.task)}</span>
+            </div>`;
+  }).join("");
+
+  let axisHtml = "";
+  for (let m = axisStart; m <= axisEnd; m += 60) {
+    const leftPct = ((m - axisStart) / totalMinutes) * 100;
+    axisHtml += `<div class="tl-hour" style="left: ${leftPct}%;">${formatHour(m)}</div>`;
+  }
+
+  return `
+    <div class="day-timeline">
+      <div class="tl-track">${blocksHtml}</div>
+      <div class="tl-axis">${axisHtml}</div>
+    </div>`;
+}
+
 function renderPlanDay(day) {
   const dateLabel = day.date ? formatDate(day.date) : `Giorno ${day.day_index}`;
   const heading = day.label ? `${escape(dateLabel)} — ${escape(day.label)}` : escape(dateLabel);
+  
+  const timelineHtml = renderDayTimeline(day.slots || []);
+  
   const slots = (day.slots || []).length
     ? day.slots.map(renderSlot).join("")
     : "<p class='msg'>nessuna attività per questo giorno.</p>";
-  return `<div class="plan-day"><h3>${heading}</h3><div class="plan-slots">${slots}</div></div>`;
+    
+  return `<div class="plan-day">
+            <h3>${heading}</h3>
+            ${timelineHtml}
+            <div class="plan-slots">${slots}</div>
+          </div>`;
 }
 
 function renderContingencyNotes(notes) {
@@ -633,81 +918,141 @@ function renderOrchestrator(data) {
   return html;
 }
 
-form.addEventListener("submit", async event => {
-  event.preventDefault();
-  const question = document.getElementById("question").value.trim();
-  if (!question) return;
+// ---- Invio Form ----
+if (form) {
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const qInput = document.getElementById("question");
+    const question = qInput ? qInput.value.trim() : "";
+    if (!question) return;
 
-  const mode = modeSelect.value;
-  const body = {question, target_kg: kgSelect.value};
-  if (mode === "planner") {
-    if (!activeSession()) createSession();
-    body.session_id = activeSession().id;
-    if (advModel.value) body.llm_model = advModel.value;
-    if (advContext.value) body.context_mode = advContext.value;
-    if (advDomain.value) body.domain_hint = advDomain.value;
-    const constraints = advConstraints.value.trim();
-    if (constraints) body.constraints = constraints;
-    if (!advToolsWrap.hidden) {
-      const boxes = [...advTools.querySelectorAll("input[type=checkbox]")];
-      const checked = boxes.filter(b => b.checked).map(b => b.value);
-      if (checked.length < boxes.length) body.allowed_tools = checked;
-    }
-  }
+    const mode = modeSelect.value;
+    const body = { question, target_kg: kgSelect.value };
 
-  // Svuota l'input dell'utente subito dopo l'invio
-  document.getElementById("question").value = "";
-  submit.disabled = true;
-
-  // 1. Crea e aggiungi il messaggio dell'utente all'output
-  const userMsg = document.createElement("div");
-  userMsg.className = "chat-msg user-msg";
-  userMsg.innerHTML = `<div class="msg-content">${escape(question)}</div>`;
-  output.appendChild(userMsg);
-
-  // 2. Crea e aggiungi il contenitore per la risposta dell'assistente
-  const assistantMsg = document.createElement("div");
-  assistantMsg.className = "chat-msg assistant-msg";
-  output.appendChild(assistantMsg);
-
-  // Scrolla la pagina per mostrare il nuovo blocco
-  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-
-  if (mode !== "planner") {
-    assistantMsg.innerHTML = "<p class='msg'>interrogazione in corso, può richiedere qualche decina di secondi.</p>";
-  }
-
-  try {
     if (mode === "planner") {
-      // Passa il contenitore 'assistantMsg' alla funzione stream
-      const data = await runPlannerStream(body, assistantMsg);
-      updateSessionAfterPlannerResponse(question, data);
-      
-      // Aggiungi il piano generato sotto la timeline all'interno dello stesso blocco
-      assistantMsg.innerHTML += renderPlanner(data);
-    } else {
-      const response = await fetch(ENDPOINTS[mode], {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(body),
-      });
-      const raw = await response.text();
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+      if (!activeSession()) createSession();
+
+      const session = activeSession();
+      const previousPlan = getLatestPlannerPlan(session);
+
+      if (previousPlan) {
+        body.previous_plan = previousPlan;
+
+        if (previousPlan.domain) {
+          body.previous_domain = previousPlan.domain;
+        }
       }
-      if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
-      
-      // Inietta il risultato direttamente nel blocco dell'assistente
-      assistantMsg.innerHTML = mode === "kg" ? renderKg(data) : mode === "multiapi" ? renderMultiapi(data) : renderOrchestrator(data);
+
+      if (advModel && advModel.value) body.llm_model = advModel.value;
+      if (advContext && advContext.value) body.context_mode = advContext.value;
+      if (advDomain && advDomain.value) body.domain_hint = advDomain.value;
+
+      const constraints = advConstraints ? advConstraints.value.trim() : "";
+      if (constraints) body.constraints = constraints;
+
+      // Invia allowed_tools in modalità deterministic basandosi sulle checkbox attive
+      if (advContext && advContext.value === "deterministic" && advTools) {
+        const boxes = [...advTools.querySelectorAll("input[type=checkbox]")];
+        const checked = boxes.filter(b => b.checked).map(b => b.value);
+        body.allowed_tools = checked;
+      }
     }
-  } catch (err) {
-    assistantMsg.innerHTML = `<p class="err">${escape(err.message)}</p>`;
-  } finally {
-    submit.disabled = false;
-    // Auto-scroll finale per assicurarsi che l'esito della generazione sia visibile
-    window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-  }
-});
+
+    if (qInput) qInput.value = "";
+    if (submit) submit.disabled = true;
+
+    const userMsg = document.createElement("div");
+    userMsg.className = "chat-msg user-msg";
+    userMsg.innerHTML = `<div class="msg-content">${escape(question)}</div>`;
+    if (output) output.appendChild(userMsg);
+
+    addSessionMessage({
+      role: "user",
+      type: "text",
+      content: question
+    });
+
+    const assistantMsg = document.createElement("div");
+    assistantMsg.className = "chat-msg assistant-msg";
+    if (output) output.appendChild(assistantMsg);
+
+    if (output) output.scrollTop = output.scrollHeight;
+
+    if (mode !== "planner") {
+      assistantMsg.innerHTML = "<p class='msg'>interrogazione in corso, può richiedere qualche decina di secondi.</p>";
+    }
+
+    try {
+      if (mode === "planner") {
+        const data = await runPlannerStream(body, assistantMsg);
+        updateSessionAfterPlannerResponse(question, data);
+        assistantMsg.innerHTML += renderPlanner(data);
+      } else {
+        const response = await fetch(ENDPOINTS[mode], {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const raw = await response.text();
+        let data;
+        try {
+          data = JSON.parse(raw);
+        } catch {
+          throw new Error(`errore ${response.status}: ${raw.trim().slice(0, 200) || "risposta vuota"}`);
+        }
+        if (!response.ok) throw new Error(formatDetail(data.detail) || `errore ${response.status}`);
+        
+        if (mode === "kg") {
+          assistantMsg.innerHTML = renderKg(data);
+
+          addSessionMessage({
+            role: "assistant",
+            type: "kg",
+            data: data
+          });
+
+        } else if (mode === "multiapi") {
+          assistantMsg.innerHTML = renderMultiapi(data);
+
+          addSessionMessage({
+            role: "assistant",
+            type: "multiapi",
+            data: data
+          });
+
+        } else {
+          assistantMsg.innerHTML = renderOrchestrator(data);
+
+          addSessionMessage({
+            role: "assistant",
+            type: "orchestrator",
+            data: data
+          });
+        }
+      }
+    } catch (err) {
+      assistantMsg.innerHTML =
+        `<p class="err">${escape(err.message)}</p>`;
+
+      addSessionMessage({
+        role: "assistant",
+        type: "error",
+        content: err.message
+      });
+    } finally {
+      if (submit) submit.disabled = false;
+      if (output) output.scrollTop = output.scrollHeight;
+    }
+  });
+}
+
+// Avvio applicazione
+if (!activeSession()) {
+  createSession();
+} else {
+  renderSidebar();
+  renderPlannerBanner();
+  renderConversation(activeSession());
+}
+
+syncModeUI();

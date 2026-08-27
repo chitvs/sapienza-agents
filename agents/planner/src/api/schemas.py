@@ -70,15 +70,19 @@ class QueryRequest(BaseModel):
             "da _gather_context; ignorato se assente."
         ),
     )
-    session_id: str | None = Field(
+    previous_plan: dict[str, Any] | None = Field(
+    default=None,
+    description=(
+        "ultimo piano disponibile fornito dal client. Se presente, la richiesta "
+        "viene trattata come replanning del piano esistente."
+        ),
+    )
+
+    previous_domain: PlanDomain | None = Field(
         default=None,
         description=(
-            "identificativo di sessione/conversazione. Se presente e nello stato è già "
-            "salvato un piano per questo id, la richiesta viene classificata come "
-            "'new_plan' oppure 'replan' (modifica del piano esistente, vedi "
-            "PlannerPipeline._classify_intent); un 'replan' aggiorna il piano invece di "
-            "generarne uno da zero. Se assente, il comportamento è quello storico: nessuno "
-            "stato viene letto o salvato."
+            "dominio del piano precedente. Viene utilizzato durante il replanning "
+            "quando previous_plan è presente."
         ),
     )
     context_mode: ContextMode | None = Field(
