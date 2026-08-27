@@ -399,9 +399,10 @@ function renderPlanner(data) {
   const head = `<div class="panel"><strong>${escape(data.title)}</strong>` +
     (data.summary ? `<p>${escape(data.summary)}</p>` : "") + `</div>`;
   const days = data.days.map(renderPlanDay).join("");
+  const legend = renderCategoryLegend(data.days);
   const reactTraceHtml = renderToolCalls(data.tool_calls);
   
-  return meta + head + `<div class="plan-days">${days}</div>` + renderContingencyNotes(data.contingency_notes) + reactTraceHtml + renderRaw("dati grezzi", data);
+  return meta + head + legend + `<div class="plan-days">${days}</div>` + renderContingencyNotes(data.contingency_notes) + reactTraceHtml + renderRaw("dati grezzi", data);
 }
 
 function timelineIcon(data) {
@@ -412,13 +413,15 @@ function timelineIcon(data) {
 }
 
 async function runPlannerStream(body, container) {
+  const wrap = document.createElement("div");
   const timeline = document.createElement("div");
   timeline.className = "timeline";
-  container.appendChild(timeline);
+  wrap.appendChild(timeline);
+  container.appendChild(wrap);
 
   const response = await fetch(ENDPOINTS.plannerStream, {
     method: "POST",
-    headers: {"Content-Type": "application/json"},
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 
@@ -433,14 +436,12 @@ async function runPlannerStream(body, container) {
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
-  let result = null;
-  let streamError = null;
+  let buffer = "", result = null, streamError = null, stepCount = 0;
 
   while (true) {
-    const {done, value} = await reader.read();
+    const { done, value } = await reader.read();
     if (done) break;
-    buffer += decoder.decode(value, {stream: true});
+    buffer += decoder.decode(value, { stream: true });
     let sep;
     while ((sep = buffer.indexOf("\n\n")) !== -1) {
       const block = buffer.slice(0, sep);
@@ -449,20 +450,37 @@ async function runPlannerStream(body, container) {
       const dataLine = block.split("\n").find(l => l.startsWith("data:"));
       if (!eventLine || !dataLine) continue;
       const data = JSON.parse(dataLine.slice(5).trim());
+      const evt = eventLine.slice(6).trim();
 
-      if (eventLine.slice(6).trim() === "progress") {
+      if (evt === "progress") {
+        stepCount++;
         const line = document.createElement("div");
         line.className = "timeline-item";
-        line.textContent = `${timelineIcon(data)} ${data.message}`;
+        line.innerHTML = `<span class="timeline-icon">${timelineIcon(data)}</span><span>${escape(data.message)}</span>`;
         timeline.appendChild(line);
         if (output) output.scrollTop = output.scrollHeight;
-      } else if (eventLine.slice(6).trim() === "result") {
+      } else if (evt === "result") {
         result = data;
-      } else if (eventLine.slice(6).trim() === "error") {
+      } else if (evt === "error") {
         streamError = data.message || "errore sconosciuto";
       }
     }
   }
+
+  const details = document.createElement("details");
+  details.className = "timeline-details";
+  const summary = document.createElement("summary");
+  if (streamError) {
+    summary.textContent = `✗ elaborazione interrotta — ${stepCount} passaggi`;
+    details.open = true;
+  } else {
+    const time = result ? formatSeconds(result.execution_time_ms) : "";
+    summary.textContent = `✓ piano generato${time ? ` in ${time}` : ""} — ${stepCount} passaggi`;
+    details.open = false;
+  }
+  details.appendChild(summary);
+  wrap.insertBefore(details, timeline);
+  details.appendChild(timeline);
 
   if (streamError) throw new Error(streamError);
   return result;
@@ -787,13 +805,28 @@ function renderMultiapi(data) {
   return meta + content + renderRaw("dati grezzi", results);
 }
 
-const CATEGORY_PALETTE = ["#4c6ef5", "#f76707", "#37b24d", "#e64980", "#7048e8", "#12b886", "#f59f00", "#495057"];
+const CATEGORY_PALETTE = ["#4c6ef5", "#f76707", "#37b24d", "#e64980", "#7048e8", "#12b886", "#f59f00", "#495057"];  
 
 function categoryColor(category) {
   if (!category) return null;
   let hash = 0;
   for (let i = 0; i < category.length; i++) hash = (hash * 31 + category.charCodeAt(i)) | 0;
   return CATEGORY_PALETTE[Math.abs(hash) % CATEGORY_PALETTE.length];
+}
+
+function collectCategories(days) {
+  const set = new Set();
+  (days || []).forEach(d => (d.slots || []).forEach(s => { if (s.category) set.add(s.category); }));
+  return [...set];
+}
+
+function renderCategoryLegend(days) {
+  const categories = collectCategories(days);
+  if (!categories.length) return "";
+  const items = categories.map(c =>
+    `<span class="legend-item" style="--cat-color:${categoryColor(c)}"><span class="legend-dot"></span>${escape(c)}</span>`
+  ).join("");
+  return `<div class="plan-legend">${items}</div>`;
 }
 
 function formatMinutes(min) {
@@ -804,22 +837,24 @@ function formatMinutes(min) {
 }
 
 function renderSlot(slot) {
+  const color = categoryColor(slot.category);
   const time = slot.start_time
     ? `<span class="slot-time">${escape(slot.start_time)}</span>`
     : `<span class="slot-time slot-time-empty">—</span>`;
-  const duration = `<span class="slot-duration">${formatMinutes(slot.duration_minutes)}</span>`;
-  const catColor = categoryColor(slot.category);
+  const duration = slot.duration_minutes
+    ? `<span class="slot-duration">${formatMinutes(slot.duration_minutes)}</span>`
+    : "";
   const category = slot.category
-    ? `<span class="slot-category" style="${catColor ? `--cat-color:${catColor}` : ""}"><span class="slot-cat-dot"></span>${escape(slot.category)}</span>`
+    ? `<span class="slot-category">${escape(slot.category)}</span>`
     : "";
   const subtasks = (slot.subtasks || []).length
     ? `<ul class="slot-subtasks">${slot.subtasks.map(s => `<li>${escape(s)}</li>`).join("")}</ul>`
     : "";
   const notes = slot.notes ? `<p class="slot-notes">${escape(slot.notes)}</p>` : "";
-  return `<div class="slot">
+  return `<div class="slot" style="${color ? `--cat-color:${color}` : ""}">
     <div class="slot-time-col">${time}${duration}</div>
     <div class="slot-body">
-      <div class="slot-head"><span>${escape(slot.task)}</span>${category}</div>
+      <div class="slot-head"><span class="slot-task">${escape(slot.task)}</span>${category}</div>
       ${subtasks}${notes}
     </div>
   </div>`;
@@ -836,44 +871,66 @@ function formatHour(minutes) {
   return `${h.toString().padStart(2, '0')}:00`;
 }
 
+function formatMinutesToTime(min) {
+  const h = Math.floor(min / 60) % 24;
+  const m = min % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function assignLanes(slots) {
+  const sorted = [...slots].sort((a, b) => a.startMin - b.startMin);
+  const laneEnds = [];
+  return sorted.map(s => {
+    let lane = laneEnds.findIndex(end => s.startMin >= end);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(s.endMin); }
+    else { laneEnds[lane] = s.endMin; }
+    return { ...s, lane };
+  });
+}
+
 function renderDayTimeline(slots) {
   const timedSlots = (slots || []).filter(s => s.start_time && s.duration_minutes > 0).map(s => {
     const start = timeToMinutes(s.start_time);
     return { ...s, startMin: start, endMin: start + s.duration_minutes };
   });
-
-  if (timedSlots.length === 0) return "";
+  if (!timedSlots.length) return "";
 
   const minTime = Math.min(...timedSlots.map(s => s.startMin));
   const maxTime = Math.max(...timedSlots.map(s => s.endMin));
-
-  const axisStart = Math.floor(minTime / 60) * 60; 
-  const axisEnd = Math.ceil(maxTime / 60) * 60;   
+  const axisStart = Math.floor(minTime / 60) * 60;
+  const axisEnd = Math.ceil(maxTime / 60) * 60;
   const totalMinutes = axisEnd - axisStart;
-  
   if (totalMinutes <= 0) return "";
 
-  const blocksHtml = timedSlots.map(s => {
+  const laned = assignLanes(timedSlots);
+  const laneCount = Math.max(...laned.map(s => s.lane)) + 1;
+
+  const blocksHtml = laned.map(s => {
     const leftPct = ((s.startMin - axisStart) / totalMinutes) * 100;
     const widthPct = (s.duration_minutes / totalMinutes) * 100;
     const color = categoryColor(s.category);
-    const style = `left: ${leftPct}%; width: ${widthPct}%; ${color ? `--cat-color:${color}` : ""}`;
-    
-    return `<div class="tl-block" style="${style}">
+    const style = [
+      `left:${leftPct}%`, `width:${widthPct}%`,
+      `top:calc(${s.lane} * (100% / ${laneCount}))`, `height:calc(100% / ${laneCount})`,
+      color ? `--cat-color:${color}` : "",
+    ].filter(Boolean).join(";");
+    const range = `${s.start_time}–${formatMinutesToTime(s.endMin)}`;
+    return `<div class="tl-block" style="${style}" title="${escapeAttr(`${s.task} (${range})`)}">
               <span class="tl-block-label">${escape(s.task)}</span>
             </div>`;
   }).join("");
 
-  let axisHtml = "";
+  const gridHtml = [], labelsHtml = [];
   for (let m = axisStart; m <= axisEnd; m += 60) {
     const leftPct = ((m - axisStart) / totalMinutes) * 100;
-    axisHtml += `<div class="tl-hour" style="left: ${leftPct}%;">${formatHour(m)}</div>`;
+    gridHtml.push(`<div class="tl-gridline" style="left:${leftPct}%"></div>`);
+    labelsHtml.push(`<div class="tl-hour" style="left:${leftPct}%">${formatHour(m)}</div>`);
   }
 
   return `
     <div class="day-timeline">
-      <div class="tl-track">${blocksHtml}</div>
-      <div class="tl-axis">${axisHtml}</div>
+      <div class="tl-track" style="--lane-count:${laneCount}">${gridHtml.join("")}${blocksHtml}</div>
+      <div class="tl-axis">${labelsHtml.join("")}</div>
     </div>`;
 }
 
