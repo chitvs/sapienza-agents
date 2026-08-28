@@ -248,7 +248,7 @@ body { max-width: none; padding: 0; overflow: hidden; }
 .settings-planner { display: none; }
 body.mode-planner .settings-placeholder { display: none; }
 body.mode-planner .settings-planner { display: block; }
-body:not(.mode-planner) .settings-placeholder { display: block; }
+body:not(.mode-planner) .settings-placeholder { display: block; } /* se vuoi che il placeholder appaia quando NON sei nel planner */
 
 .new-chat {
   width: 100%;

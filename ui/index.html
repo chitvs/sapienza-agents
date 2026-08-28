@@ -31,11 +31,6 @@
         <option value="multiapi">solo agente multiapi</option>
         <option value="planner">agente planner</option>
       </select>
-      <select id="kg">
-        <option value="wikidata">wikidata</option>
-        <option value="dbpedia">dbpedia</option>
-        <option value="neo4j">neo4j (cinema)</option>
-      </select>
       <button type="submit" id="submit">chiedi</button>
     </form>
   </main>
@@ -43,7 +38,18 @@
   <aside id="settingsPanel" class="settings-panel">
     <h2 class="settings-title">impostazioni</h2>
 
-    <p id="settingsPlaceholder" class="settings-placeholder">le opzioni avanzate sono disponibili in modalità "solo agente planner".</p>
+    <div class="settings-section">
+      <label class="adv-field">Knowledge Graph
+        <select id="kg">
+          <option value="wikidata">wikidata</option>
+          <option value="dbpedia">dbpedia</option>
+          <option value="neo4j">neo4j (cinema)</option>
+        </select>
+      </label>
+    </div>
+
+    <hr class="settings-divider">
+
 
     <div id="settingsPlanner" class="settings-planner">
       <label class="adv-field">Provider

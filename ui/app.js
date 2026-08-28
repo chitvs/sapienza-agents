@@ -515,8 +515,13 @@ if (newChatBtn) {
 }
 
 function syncModeUI() {
-  const isPlanner = modeSelect.value === "planner";
+  const mode = modeSelect ? modeSelect.value : "orchestrator";
+  const isPlanner = mode === "planner";
+  const isKg = mode === "kg";
+
   document.body.classList.toggle("mode-planner", isPlanner);
+  document.body.classList.toggle("mode-kg", isKg);
+
   if (isPlanner) {
     loadAdvPanelData();
     renderPlannerBanner();
