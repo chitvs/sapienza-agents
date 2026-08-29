@@ -26,11 +26,11 @@ if str(src_dir) not in sys.path:
 
 from api.schemas import QueryRequest  
 from configs.settings import settings  
-from http_client import close_http_client  
-from pipeline import PlannerPipeline, REPLAN_FAILURE_NOTE  
+from clients.http_client import close_http_client  
+from core.pipeline import PlannerPipeline, REPLAN_FAILURE_NOTE  
 
 from unittest.mock import patch
-from validators import validate_draft as original_validate_draft
+from core.validators import validate_draft as original_validate_draft
 
 logger = logging.getLogger("planner_benchmark")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -232,7 +232,7 @@ async def _run_single_test(
 
         request = QueryRequest(**request_kwargs)
 
-        with patch("pipeline.validate_draft", new=tracking_validate_draft), \
+        with patch("core.pipeline.validate_draft", new=tracking_validate_draft), \
              patch.object(pipeline.prompts, "extract_json", side_effect=delayed_extract):
             response = await pipeline.run(request)
 

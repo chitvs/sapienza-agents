@@ -1,5 +1,5 @@
 """
-Client LLM del planner: gestisce la comunicazione con i provider (Gemini o Ollama).
+Client LLM del planner: gestisce la comunicazione con i provider.
 
 Si occupa esclusivamente del trasporto della richiesta verso il modello e della
 pulizia iniziale della risposta grezza (estrazione JSON). Non contiene logica
@@ -12,7 +12,7 @@ import re
 from typing import Any
 
 from configs.settings import settings
-from http_client import get_http_client
+from clients.http_client import get_http_client
 
 logger = logging.getLogger("planner_llm_client")
 

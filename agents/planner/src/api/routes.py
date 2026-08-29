@@ -16,8 +16,9 @@ from fastapi.responses import StreamingResponse
 
 from api.schemas import ModelInfo, ModelsResponse, QueryRequest, QueryResponse, ToolInfo
 from configs.settings import settings
-from pipeline import PlannerPipeline
-from tools import TOOL_DESCRIPTIONS, TOOL_REGISTRY
+from core.pipeline import PlannerPipeline
+from core.tools import TOOL_DESCRIPTIONS, TOOL_REGISTRY
+from clients.http_client import get_http_client
 
 logger = logging.getLogger("planner_api")
 
@@ -45,7 +46,6 @@ async def _available_models() -> list[ModelInfo]:
     e carica i modelli OpenRouter configurati.
     """
     models: list[ModelInfo] = []
-    from http_client import get_http_client
     client = get_http_client()
     
     # 1. Ollama (Discovery in locale, non bloccante)

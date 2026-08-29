@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from configs.settings import settings
-from llm_client import LLMClient
+from clients.llm_client import LLMClient
 
 
 class PromptLibrary:

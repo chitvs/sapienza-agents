@@ -14,13 +14,13 @@ from pydantic import ValidationError
 
 from api.schemas import PlanDay, PlanDomain, QueryRequest, QueryResponse, ResponseDomain, DOMAIN_DESCRIPTIONS
 from configs.settings import settings
-from llm_client import LLMClient
-from validators import validate_draft
+from clients.llm_client import LLMClient
+from core.validators import validate_draft
 
-from context_gathering import ContextGatherer
-from events import EventCallback, EventStatus, emit
-from logging_utils import make_logger
-from prompts import PromptLibrary
+from core.context_gathering import ContextGatherer
+from utils.events import EventCallback, EventStatus, emit
+from utils.logging_utils import make_logger
+from core.prompts import PromptLibrary
 
 logger = logging.getLogger("planner_pipeline")
 

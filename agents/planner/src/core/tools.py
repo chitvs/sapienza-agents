@@ -15,7 +15,7 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from configs.settings import settings
-from http_client import get_http_client
+from clients.http_client import get_http_client
 
 logger = logging.getLogger("planner_tools")
 

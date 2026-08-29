@@ -23,7 +23,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from api.routes import router as api_router
-from http_client import close_http_client, get_http_client
+from clients.http_client import close_http_client, get_http_client
 
 
 @asynccontextmanager

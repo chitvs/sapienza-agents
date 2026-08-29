@@ -2,9 +2,9 @@ import asyncio
 from unittest.mock import patch
 
 from api.schemas import QueryRequest
-from context_gathering import ContextGatherer
-from prompts import PromptLibrary
-from llm_client import LLMClient
+from core.context_gathering import ContextGatherer
+from core.prompts import PromptLibrary
+from clients.llm_client import LLMClient
 
 
 def _network_call_should_not_happen(*args, **kwargs):

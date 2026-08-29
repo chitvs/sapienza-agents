@@ -21,8 +21,8 @@ if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
 from configs.settings import settings
-from http_client import close_http_client
-from llm_client import LLMClient
+from clients.http_client import close_http_client
+from clients.llm_client import LLMClient
 
 logger = logging.getLogger("semantic_eval")
 logging.basicConfig(level=logging.INFO, format="%(message)s")

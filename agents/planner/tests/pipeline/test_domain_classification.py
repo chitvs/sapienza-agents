@@ -3,7 +3,7 @@ import json
 from unittest.mock import patch
 
 from api.schemas import QueryRequest
-from pipeline import PlannerPipeline
+from core.pipeline import PlannerPipeline
 
 
 class _FakeResponse:

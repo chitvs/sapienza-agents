@@ -1,5 +1,5 @@
 from api.schemas import QueryRequest
-from pipeline import PlannerPipeline
+from core.pipeline import PlannerPipeline
 
 _VALID_DRAFT = {
     "title": "Piano di prova",

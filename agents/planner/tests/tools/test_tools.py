@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import httpx
 
-from tools import query_kg, query_multiapi
+from core.tools import query_kg, query_multiapi
 
 
 class _FakeResponse:
