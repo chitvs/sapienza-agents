@@ -1,4 +1,8 @@
 from providers.country_provider import CountryProvider
+from conftest import richiede_countries_dev
+
+# interrogano il servizio vero: senza rete si saltano, non falliscono
+pytestmark = richiede_countries_dev
 
 
 def test_fetch_france():
@@ -32,12 +36,16 @@ def test_fetch_italy_fields():
     result = provider.fetch({"country": "Italy"})
     assert "error" not in result
     expected_fields = [
-        "provider", "name", "official_name", "capital", "region",
+        "provider", "name", "native_name", "capital", "region",
         "subregion", "population", "area_km2", "languages",
         "currencies", "timezones", "borders", "flag_emoji",
     ]
     for field in expected_fields:
         assert field in result, f"campo mancante: {field}"
+    # countries.dev non espone un nome ufficiale ne' i link alle mappe: esporli
+    # copiando altri campi dava valori sbagliati o sempre vuoti
+    assert "official_name" not in result
+    assert "maps_url" not in result
     assert result["capital"] == "Rome"
     assert len(result["borders"]) > 0  # Italia confina con diversi paesi
 

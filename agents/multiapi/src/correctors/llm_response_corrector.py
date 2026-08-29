@@ -50,6 +50,10 @@ class LlmResponseCorrector:
 
             try:
                 result = json.loads(cleaned)
+                # il contratto è un oggetto: un array supera json.loads ma non è
+                # utilizzabile da chi accede ai campi per chiave
+                if not isinstance(result, dict):
+                    raise json.JSONDecodeError("attesa un oggetto json", cleaned or "", 0)
                 logger.info("retry %d/%d riuscito", attempt + 1, self.max_retries)
                 return result
             except (json.JSONDecodeError, AttributeError):

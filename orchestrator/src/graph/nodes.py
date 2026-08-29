@@ -42,12 +42,16 @@ async def supervisor_node(state: AgentState) -> dict:
     descriptions = "\n".join(f"- '{name}': {settings.agent_descriptions.get(name, '')}" for name in agent_names)
 
     system_prompt = (
-        "Sei l'Orchestratore di un sistema multi-agente. Analizza la domanda e decidi quali agenti attivare.\n"
-        f"Agenti disponibili:\n{descriptions}\n"
-        "REGOLA 1: Se la domanda richiede la pianificazione di un programma (studio, viaggio, routine), attiva SOLO 'planner_agent', poiché è autonomo.\n"
-        "REGOLA 2: Se la domanda contiene richieste diverse e slegate (es. meteo e ricerca di informazioni su film/entità), puoi attivare PIÙ agenti in parallelo.\n"
-        f"Rispondi esclusivamente con un JSON: {{\"selected_agents\": [\"<agente1>\", \"<agente2>\"]}}. "
-        "Se nessuno è pertinente, restituisci un array vuoto."
+        "Sei il supervisor di un sistema multi-agente. Analizza la domanda e decidi quali agenti attivare.\n"
+        "Agenti disponibili:\n"
+        "- 'kg_agent': per domande su entità, relazioni strutturate, fatti e conoscenze.\n"
+        
+        "- 'planner_agent': per attività di pianificazione, scomposizione o piani complessi, quali creare un piano, un itinerario, una routine, un programma di studio.\n"
+        "- 'multiapi_agent': per dati in tempo reale che richiedono un'api esterna: "
+        "meteo e temperatura attuali di una città, tasso di cambio fra due valute, "
+        "ora locale corrente in una città o fuso orario e le informazioni su un paese: capitale, popolazione, superficie, lingue, valuta, confini.\n"
+        "REGOLA IMPORTANTE: Se decidi di attivare il 'planner_agent', NON attivare 'kg_agent' o 'multiapi_agent', poiché il planner è autonomo nel recuperare il contesto di cui ha bisogno.\n"
+        "Rispondi esclusivamente con un JSON in formato oggetto (es. {\"selected_agents\": [\"planner_agent\"]}) oppure un array (es. [\"planner_agent\"])."
     )
 
     try:
@@ -120,9 +124,14 @@ async def synthesizer_node(state: AgentState) -> dict:
     system_prompt = (
         "Sei un assistente AI integrato. Hai delegato una richiesta in parallelo a vari agenti "
         "e hai ricevuto i loro risultati strutturati in formato JSON.\n"
-        "Il tuo compito è agire da interfaccia umana: integra tutti i risultati in una risposta "
-        f"unica, chiara e discorsiva per l'utente, rigorosamente in {language}.\n"
-        "Non mostrare JSON grezzi, markdown tecnici o strutture dati: produci solo la spiegazione naturale."
+        "Rispondi alla domanda dell'utente in modo chiaro, naturale e professionale, "
+        "integrando tutti i risultati in un'unica risposta discorsiva basandoti esclusivamente "
+        "sulle seguenti evidenze raccolte dagli agenti.\n"
+        "Le evidenze sono già state recuperate da fonti attendibili e sono valide, comprese quelle "
+        "su dati in tempo reale o su giorni futuri: riportale come fatti accertati. "
+        "Non mostrare JSON grezzi, markdown tecnici o strutture dati. "
+        "Non premettere che non puoi conoscere queste informazioni e non invitare a verificarle altrove.\n"
+        f"Le evidenze possono essere in inglese: scrivi comunque la risposta in {language}."
     )
     
     user_content = f"Domanda utente: {question}\n\nRisultati grezzi:\n{context_str}"

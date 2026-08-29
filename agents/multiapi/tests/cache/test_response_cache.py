@@ -1,3 +1,5 @@
+import time
+
 from cache.response_cache import ResponseCache
 
 
@@ -52,3 +54,39 @@ def test_cache_clear():
     cache.set("test", "weather", [{"x": 1}])
     cache.clear()
     assert cache.get("test") is None
+
+
+def test_cache_entry_expires():
+    """una voce scaduta non deve essere restituita."""
+    cache = ResponseCache(capacity=5)
+    cache.set("domanda", "weather", [{"a": 1}], ttl=0.05)
+    assert cache.get("domanda") is not None
+    time.sleep(0.1)
+    assert cache.get("domanda") is None
+
+
+def test_cache_ttl_zero_non_memorizza():
+    """ttl 0 = dato troppo volatile: non deve entrare in cache."""
+    cache = ResponseCache(capacity=5)
+    cache.set("che ore sono a tokyo", "time_info", [{"time": "04:39:12"}], ttl=0)
+    assert cache.get("che ore sono a tokyo") is None
+
+
+def test_cache_default_ttl_dal_costruttore():
+    """senza ttl esplicito vale quello del costruttore."""
+    cache = ResponseCache(capacity=5, default_ttl=0.05)
+    cache.set("domanda", "weather", [{"a": 1}])
+    assert cache.get("domanda") is not None
+    time.sleep(0.1)
+    assert cache.get("domanda") is None
+
+
+def test_eviction_non_sacrifica_voci_valide():
+    """le voci scadute vengono rimosse prima di sfrattare quelle ancora valide."""
+    cache = ResponseCache(capacity=2)
+    cache.set("scaduta", "weather", [{"a": 1}], ttl=0.05)
+    cache.set("viva", "weather", [{"b": 2}], ttl=60)
+    time.sleep(0.1)
+    cache.set("nuova", "weather", [{"c": 3}], ttl=60)
+    assert cache.get("viva") is not None, "una voce valida e stata sfrattata al posto di una scaduta"
+    assert cache.get("nuova") is not None

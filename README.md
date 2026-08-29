@@ -103,6 +103,80 @@ curl -X POST localhost:3000/api/kg/query \
 
 poi apri http://localhost:3000.
 
+## Agente multiapi
+
+L'agente multiapi risponde a domande in linguaggio naturale interrogando api pubbliche. Un llm classifica l'intento della domanda, un secondo prompt ne estrae i parametri, e il provider corrispondente chiama l'api. A differenza dell'agente kg lavora direttamente in italiano: non ha bisogno della traduzione dell'orchestratore.
+
+### Intenti supportati
+
+| intent | api | api key | esempi |
+|---|---|---|---|
+| `weather` | [Open-Meteo](https://open-meteo.com) | no | "Che tempo fa a Roma?", "Pioverà domani a Milano?" |
+| `exchange_rate` | [Frankfurter](https://frankfurter.dev) | no | "Quanto sono 100 dollari in euro?", "Quanto valeva il cambio dollaro euro il 14 Aprile 2026?" |
+| `country_info` | [countries.dev](https://countries.dev) | no | "Quanti abitanti ha il Giappone?" |
+| `time_info` | world-time-api3 su RapidAPI | **sì** | "Che ore sono a Tokyo?" |
+
+Il meteo distingue le condizioni correnti dalle previsioni: `days_ahead` viene estratto dalla domanda (`null` = adesso, `0` = oggi, `1` = domani, fino a 6 giorni). Il cambio valuta converte un importo e accetta una data passata; nei giorni senza fixing usa l'ultimo disponibile e lo dichiara nel campo `requested_date`.
+
+### Configurazione
+
+Il solo provider che richiede una chiave è quello dell'ora locale. Copiare `.env.example` in `.env` e inserire la chiave RapidAPI **senza virgolette**: nella sintassi a lista di `docker-compose` le virgolette entrerebbero nel valore e RapidAPI risponderebbe `403`.
+
+```bash
+cd agents/multiapi
+cp .env.example .env
+```
+
+In alternativa si può valorizzare `TIMEAPI_API_KEY` nel `.env` alla root, che `docker compose` carica da solo.
+
+`/health` riporta lo stato di ciascun provider: senza chiave, `time_info` segnala `TIMEAPI_API_KEY mancante` mentre il servizio resta `ok`, perché gli altri tre continuano a funzionare.
+
+```bash
+curl -s localhost:8002/health
+```
+
+### Cache
+
+Le risposte sono memorizzate con una scadenza per intento, proporzionata a quanto invecchia il dato: `time_info` non viene mai messo in cache (un orario riusato è per definizione sbagliato), il meteo dura 10 minuti, il cambio valuta un'ora, i dati di un paese un giorno. Il campo `cached` nella risposta dice se il risultato è stato riusato.
+
+### Struttura del codice
+
+```text
+agents/multiapi/
+├── Dockerfile
+├── pytest.ini
+├── requirements.txt
+├── .env.example
+└── src/
+    ├── api/                        # endpoint fastapi e schemi di richiesta/risposta
+    ├── cache/                      # cache delle risposte con scadenza per intento
+    ├── configs/                    # settings e prompt
+    ├── correctors/                 # riprova quando il llm non produce json valido
+    ├── providers/                  # un modulo per api esterna
+    ├── pipeline.py                 # classificazione, estrazione, instradamento
+    └── main.py                     # entrypoint fastapi
+```
+
+### Esecuzione in locale (senza docker)
+
+```bash
+cd agents/multiapi
+uvicorn main:app --app-dir src --reload --host 0.0.0.0 --port 8002
+```
+
+```bash
+curl -X POST localhost:8002/query -H "Content-Type: application/json" -d '{"question": "Che tempo fa a Roma?"}'
+```
+
+### Test
+
+```bash
+cd agents/multiapi
+python -m pytest -q
+```
+
+La suite si divide in due famiglie. I test di unità (`test_*_offline.py`, `test_robustezza_llm.py`) usano risposte finte e girano in frazioni di secondo senza rete. I test di integrazione interrogano le api vere e Ollama, e vengono **saltati** quando il servizio non è raggiungibile o la chiave non è configurata: le sonde stanno in `tests/conftest.py`. Questo evita sia i fallimenti offline sia il consumo della quota gratuita di RapidAPI a ogni esecuzione.
+
 ## Agente kg
 
 L'agente kg traduce domande in linguaggio naturale in query eseguite su un knowledge graph, tramite llm zero-shot. Supporta tre knowledge graph, selezionabili per richiesta con il campo `target_kg`.

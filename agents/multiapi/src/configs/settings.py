@@ -1,11 +1,9 @@
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Nel repo il file sta in agents/multiapi/src/configs/settings.py, quindi
-# parents[2] = agents/multiapi e parents[4] = root del repo.
-# Nel container invece il Dockerfile copia solo src/ dentro /app, quindi il
-# percorso diventa /app/src/configs/settings.py e quei livelli non esistono:
-# gli indici troppo alti vanno scartati, non dati per scontati.
+# Nel repo parents[2] è la cartella dell'agente e parents[4] la root, ma nel
+# container il Dockerfile copia solo src/ dentro /app e quei livelli non
+# esistono: gli indici oltre la profondità disponibile vanno scartati.
 _PARENTS = Path(__file__).resolve().parents
 _ENV_FILES = tuple(
     _PARENTS[i] / ".env"
@@ -37,8 +35,8 @@ class Settings(BaseSettings):
     open_meteo_geocoding_url: str = "https://geocoding-api.open-meteo.com/v1/search"
     open_meteo_forecast_url: str = "https://api.open-meteo.com/v1/forecast"
 
-    # cambio valuta (senza api key)
-    frankfurter_base_url: str = "https://api.frankfurter.app"
+    # cambio valuta (senza api key).
+    frankfurter_base_url: str = "https://api.frankfurter.dev/v1"
 
     # info paesi via countries.dev (senza api key)
     countries_dev_base_url: str = "https://countries.dev"
@@ -52,9 +50,25 @@ class Settings(BaseSettings):
 
     # cache
     cache_capacity: int = 100
+    # Validità in cache per intent, proporzionata alla volatilità del dato.
+    # 0 disabilita la memorizzazione.
+    cache_ttl_default: float = 300.0
+    cache_ttl_by_intent: dict[str, float] = {
+        "time_info": 0.0,        # è un orologio: una risposta riusata è per definizione sbagliata
+        "weather": 600.0,        # open-meteo aggiorna il dato corrente ogni ~15 min
+        "exchange_rate": 3600.0, # frankfurter pubblica un fixing al giorno
+        "country_info": 86400.0, # capitale, superficie e lingue non cambiano
+    }
+
+    # quanti intent servire per una singola domanda: ognuno in più costa una
+    # chiamata al llm per l'estrazione dei parametri e una all'api esterna
+    max_intents_per_question: int = 2
 
     # corrector (retry llm per json non valido)
     max_llm_retries: int = 2
+
+    # log passo-passo della pipeline
+    verbose_pipeline: bool = False
 
 
 settings = Settings()

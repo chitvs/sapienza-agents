@@ -38,7 +38,8 @@ class CountryProvider:
             return {
                 "provider": "countries.dev",
                 "name": c.get("name", country),
-                "official_name": c.get("nativeName", ""),
+                # countries.dev espone il solo nome nella lingua locale
+                # ("Italia"), non quello ufficiale ("Repubblica Italiana")
                 "native_name": c.get("nativeName", ""),
                 "capital": c.get("capital"),
                 "region": c.get("region", ""),
@@ -51,7 +52,6 @@ class CountryProvider:
                 "borders": c.get("borders", []),
                 "flag_emoji": c.get("flag", ""),
                 "flag_png": c.get("flags", {}).get("png", "") if isinstance(c.get("flags"), dict) else "",
-                "maps_url": c.get("maps", {}).get("googleMaps", "") if isinstance(c.get("maps"), dict) else "",
             }
 
         except Exception as err:

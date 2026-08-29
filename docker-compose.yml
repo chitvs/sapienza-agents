@@ -92,6 +92,13 @@ services:
     environment:
       - OLLAMA_HOST=http://host.docker.internal:11434
       - TIMEAPI_API_KEY=${TIMEAPI_API_KEY}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      # nessun modello da precaricare: il servizio risponde in pochi secondi
+      start_period: 15s
+      retries: 3
     networks:
       - agents-net
 
@@ -117,7 +124,7 @@ services:
       planner-agent:
         condition: service_started
       multiapi-agent:
-        condition: service_started
+        condition: service_healthy
     networks:
       - agents-net
 
