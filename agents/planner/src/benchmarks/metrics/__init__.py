@@ -24,8 +24,6 @@ from .report_md import generate_markdown
 from .run import main
 
 __all__ = [
-    "TestOutcome",
-    "normalize",
     "build_report",
     "generate_markdown",
     "main",

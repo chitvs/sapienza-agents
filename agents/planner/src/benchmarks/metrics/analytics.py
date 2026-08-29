@@ -131,41 +131,6 @@ def domain_accuracy(outcomes: list[TestOutcome]) -> float:
         len(outcomes),
     )
 
-def intent_accuracy(outcomes: list[TestOutcome]) -> float:
-    """
-    Accuratezza complessiva della classificazione dell'intento (es. new_plan vs replan).
-    Viene calcolata solo sui test appartenenti ai domini supportati.
-    I crash restano nel denominatore e vengono considerati errori.
-    """
-    relevant = _supported_domain_tests(outcomes)
-    
-    if not relevant:
-        return 0.0
-
-    correct = sum(
-        1
-        for outcome in relevant
-        if not outcome.crashed
-        and outcome.actual_intent == outcome.expected_intent
-    )
-
-    return _pct(correct, len(relevant))
-
-def intent_confusion_matrix(outcomes: list[TestOutcome]) -> dict[str, dict[str, int]]:
-    """
-    Calcola la matrice di confusione degli intenti (expected vs actual) sui test supportati.
-    Restituisce un dizionario nel formato: matrix[expected][actual] = count.
-    """
-    relevant = _supported_domain_tests(outcomes)
-    matrix: defaultdict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    
-    for outcome in relevant:
-        actual = str(outcome.actual_intent) if outcome.actual_intent else "missing"
-        matrix[outcome.expected_intent][actual] += 1
-        
-    return {k: dict(v) for k, v in matrix.items()}
-
-
 def non_empty_plan_rate(outcomes: list[TestOutcome]) -> float:
     """
     Percentuale di test supportati in cui il planner ha prodotto un piano non vuoto
@@ -215,29 +180,6 @@ def self_correction_recovery_rate(outcomes: list[TestOutcome]) -> float:
     recovered = sum(1 for outcome in needed_correction if outcome.success and not outcome.plan_is_empty)
 
     return _pct(recovered, len(needed_correction))
-
-
-def avg_confidence(outcomes: list[TestOutcome]) -> float:
-    """
-    Confidence media sui risultati riusciti e non vuoti.
-    """
-    pool = [outcome for outcome in outcomes if outcome.success and not outcome.plan_is_empty]
-
-    values = [outcome.confidence for outcome in pool if math.isfinite(outcome.confidence)]
-
-    return round(mean(values), 3) if values else 0.0
-
-
-def avg_confidence_non_crashed(outcomes: list[TestOutcome]) -> float:
-    """
-    Confidence media su tutti i risultati valutabili senza crash e con piano
-    non vuoto, indipendentemente dall'esito del test.
-    """
-    pool = [outcome for outcome in outcomes if not outcome.crashed and not outcome.plan_is_empty]
-
-    values = [outcome.confidence for outcome in pool if math.isfinite(outcome.confidence)]
-
-    return round(mean(values), 3) if values else 0.0
 
 
 def system_crash_rate(outcomes: list[TestOutcome]) -> float:

@@ -10,7 +10,6 @@ Salva in modo incrementale su semantic_eval_results.json.
 import asyncio
 import json
 import logging
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -38,7 +37,7 @@ EXTRACTOR_MODEL = "llama3.2"  # Inserisci qui il modello locale che preferisci u
 
 
 # --- FILTRI DI ESECUZIONE ---
-TARGET_MODELS: list[str] = ["laguna-s-2.1", "nemotron-3.5-lightning"]          
+TARGET_MODELS: list[str] = []          
 TARGET_CONTEXT_MODES: list[str] = []   
 TARGET_TEST_IDS: list[str] = []        
 

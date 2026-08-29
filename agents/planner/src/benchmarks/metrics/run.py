@@ -41,7 +41,6 @@ def main() -> None:
     print(f"Test: {report['global']['n_test']}")
     print(f"Supported-domain success rate: {report['global']['supported_success_rate']:.2f}%")
     print(f"Domain accuracy: {report['global']['domain_accuracy']:.2f}%")
-    print(f"Intent accuracy: {report['global']['intent_accuracy']:.2f}%")
     print(f"Non-empty plan rate: {report['global']['non_empty_plan_rate']:.2f}%")
     print(f"Crash rate: {report['global']['system_crash_rate']:.2f}%")
     print(f"Semantic score: {report['global']['semantic']['overall_score']}")

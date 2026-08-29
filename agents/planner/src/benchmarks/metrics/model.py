@@ -11,7 +11,6 @@ modulo tocca il filesystem: è testabile passando solo dizionari.
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -61,35 +60,10 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
 # ==============================================================================
 # ERRORI DI CONTESTO
 # ==============================================================================
-#
-# Le seguenti regex fanno matching sui messaggi letterali generati da
-# tools.py (_call_agent) e pipeline.py (_gather_context_react). Vanno
-# aggiornate se cambia il testo di quei messaggi.
-
-_CONTEXT_ERROR_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(
-        r"^(kg-agent|multiapi-agent): "
-        r"(timeout dopo|errore HTTP|errore di connessione|risposta non JSON valida)"
-    ),
-    re.compile(r"^gather_context_react: "),
-    re.compile(r"^tool sconosciuto: "),
-    re.compile(r"^tool non più disponibile in questo step: "),
-)
-
 
 def _extract_context_errors(record: dict[str, Any]) -> list[str]:
     plan_output = record.get("plan_output") or {}
-
-    if "context_errors" in plan_output:
-        return list(plan_output.get("context_errors") or [])
-
-    notes: list[str] = plan_output.get("contingency_notes") or []
-
-    return [
-        note
-        for note in notes
-        if any(pattern.match(note) for pattern in _CONTEXT_ERROR_PATTERNS)
-    ]
+    return list(plan_output.get("context_errors") or [])
 
 
 def normalize(

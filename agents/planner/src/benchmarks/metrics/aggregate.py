@@ -18,11 +18,7 @@ from typing import Any
 from .analytics import (
     _semantic_overall,
     _semantic_scores,
-    avg_confidence,
-    avg_confidence_non_crashed,
     domain_accuracy,
-    intent_accuracy,
-    intent_confusion_matrix,
     non_empty_plan_rate,
     external_failure_metrics,
     first_try_pass_rate,
@@ -50,8 +46,6 @@ def _aggregate_outcomes(outcomes: list[TestOutcome]) -> dict[str, Any]:
         "success_rate": success_rate(outcomes),
         "supported_success_rate": supported_success_rate(outcomes),
         "domain_accuracy": domain_accuracy(outcomes),
-        "intent_accuracy": intent_accuracy(outcomes),
-        "intent_confusion_matrix": intent_confusion_matrix(outcomes),
         "unknown_domain_accuracy": unknown_domain_accuracy(outcomes),
         "non_empty_plan_rate": non_empty_plan_rate(outcomes),
 
@@ -64,10 +58,6 @@ def _aggregate_outcomes(outcomes: list[TestOutcome]) -> dict[str, Any]:
         "mean_attempts_per_corrected_test": mean_attempts_per_corrected_test(outcomes),
         "average_context_errors": average_context_errors(outcomes),
         "overconfidence_rate": overconfidence_rate(outcomes),
-
-        # Confidence
-        "confidence_mean_successes": avg_confidence(outcomes),
-        "confidence_mean_non_crashed": avg_confidence_non_crashed(outcomes),
 
         # Diagnostica
         "validation_errors": validation_error_metrics(outcomes),
@@ -108,7 +98,6 @@ def _test_detail(outcome: TestOutcome) -> dict[str, Any]:
         "test_target": outcome.test_target,
         "model": outcome.model_name,
         "context_mode": outcome.context_mode,
-        "intent": outcome.expected_intent,
         "expected_intent": outcome.expected_intent,
         "actual_intent": outcome.actual_intent,
         "expected_domain": outcome.expected_domain,
@@ -182,6 +171,35 @@ def _generate_insights(
         "correction_failure_rate_global": global_metrics.get("correction_failure_rate", 0.0),
     }
 
+def _nested_group_by(
+    outcomes: list[TestOutcome], 
+    outer_attr: str, 
+    inner_attr: str
+) -> dict[str, dict[str, Any]]:
+    """
+    Crea un raggruppamento nidificato: outer_attr -> inner_attr -> list[TestOutcome].
+    Poi aggrega ogni gruppo interno con _aggregate_outcomes.
+    """
+    nested: defaultdict[tuple[str, str], list[TestOutcome]] = defaultdict(list)
+    
+    for outcome in outcomes:
+        outer_val = str(getattr(outcome, outer_attr, "unknown"))
+        inner_val = getattr(outcome, inner_attr, None)
+        if inner_val is None:
+            inner_val = "none"
+        else:
+            inner_val = str(inner_val)
+        nested[(outer_val, inner_val)].append(outcome)
+    
+    # Trasforma in dict annidato e aggrega
+    result: dict[str, dict[str, Any]] = {}
+    for (outer, inner), group in nested.items():
+        if outer not in result:
+            result[outer] = {}
+        result[outer][inner] = _aggregate_outcomes(group)
+    
+    return result
+
 
 def build_report(
     records: list[dict[str, Any]],
@@ -199,6 +217,8 @@ def build_report(
 
     global_metrics = _aggregate_outcomes(outcomes)
     by_model_metrics = _aggregate_groups(outcomes, "model_name")
+    by_model_and_difficulty = _nested_group_by(outcomes, "model_name", "difficulty")
+    by_model_and_test_target = _nested_group_by(outcomes, "model_name", "test_target")
 
     report = {
         "metadata": {
@@ -215,10 +235,8 @@ def build_report(
         "by_model": by_model_metrics,
         "by_context_mode": _aggregate_groups(outcomes, "context_mode"),
         "by_domain": _aggregate_groups(outcomes, "expected_domain"),
-        "by_intent": _aggregate_groups(outcomes, "expected_intent"),
-        "by_difficulty": _aggregate_groups(outcomes, "difficulty"),
-        "by_test_target": _aggregate_groups(outcomes, "test_target"),
-        "by_model_and_context": {},
+        "by_model_and_difficulty": by_model_and_difficulty,
+        "by_model_and_test_target": by_model_and_test_target,
         "tests": [
             _test_detail(outcome)
             for outcome in sorted(
@@ -231,20 +249,5 @@ def build_report(
             )
         ],
     }
-
-    # --------------------------------------------------------------------------
-    # MODEL + CONTEXT
-    # --------------------------------------------------------------------------
-
-    model_context_groups: defaultdict[tuple[str, str], list[TestOutcome]] = defaultdict(list)
-
-    for outcome in outcomes:
-        model_context_groups[(outcome.model_name, outcome.context_mode)].append(outcome)
-
-    for (model_name, context_mode), grouped in sorted(model_context_groups.items()):
-        if model_name not in report["by_model_and_context"]:
-            report["by_model_and_context"][model_name] = {}
-
-        report["by_model_and_context"][model_name][context_mode] = _aggregate_outcomes(grouped)
 
     return report

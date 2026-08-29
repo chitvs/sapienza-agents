@@ -19,7 +19,6 @@ class EventStatus(str, Enum):
     STARTED = "started"
     CLASSIFYING_DOMAIN = "classifying_domain"
     DOMAIN_CLASSIFIED = "domain_classified"
-    CLASSIFYING_INTENT = "classifying_intent"
     GATHERING_CONTEXT = "gathering_context"
     TOOL_STARTED = "tool_started"
     TOOL_COMPLETED = "tool_completed"

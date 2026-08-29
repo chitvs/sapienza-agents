@@ -36,10 +36,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 # --- CONFIGURAZIONE ---
 
-# Ogni valore deve corrispondere a "gemini", "ollama", oppure a una chiave
-# presente in settings.openai_providers (.env, OPENAI_PROVIDERS). Le due
-# varianti OpenRouter qui sotto assumono due chiavi separate nel JSON con lo
-# stesso base_url/api_key e "model" diverso.
+# Ogni valore deve corrispondere a "gemini", "ollama" oppure "openrouter".
 
 # MODELS_TO_TEST = [
 #     # Modelli Google
@@ -51,15 +48,34 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 #     ("ollama", "llama3.2"),
     
 #     # Modelli Remoti Open-Source (OpenRouter)
-#     ("openrouter_gpt_oss", "openai/gpt-oss-20b:free")
+#     ("openrouter", "openai/gpt-oss-20b:free")
 # ]
 
 MODELS_TO_TEST = [
-    #("openrouter_dots", "dots-studio/dots-3-note-preview:free"),
-    ("openrouter_glm", "z-ai/glm-5.2:free"),
+    ("gemini", "gemini-3.5-flash-lite"),
+    ("gemini", "gemini-3.6-flash"),
+    ("ollama", "llama3.2"),
+    ("ollama", "ministral-3:3b"),
+    ("ollama", "qwen3:1.7b"),
+    ("ollama", "qwen3:4b"),
+    ("ollama", "phi4-mini"),
+    #("openrouter", "openai/gpt-oss-20b:free"),
+    #("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"),
+    #("openrouter", "nvidia/nemotron-3.5-lightning:free"),
+    #("openrouter", "nvidia/nemotron-3.5-lightning:free"),
+    #("openrouter", "poolside/laguna-s-2.1:free"),
+    #("openrouter", "z-ai/glm-5.2:free"),
 ]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
+
+# In caso di test deterministc decidere quali agenti esterni chiamare.
+DETERMINISTIC_ROUTING_MAP = {
+    "travel": ["kg_agent", "multiapi_agent"],
+    "study": [],
+    "routine": [],
+    "unknown": []
+}
 
 BENCHMARK_DIR: Path = Path(__file__).resolve().parent
 DATASET_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_dataset.json"
@@ -176,7 +192,7 @@ async def _run_single_test(
             val_errors_history.append(list(errors))
         return errors
 
-    original_extract = pipeline._llm_extract_json
+    original_extract = pipeline.prompts.extract_json
 
     async def delayed_extract(*args, **kwargs):
         if provider_name != "ollama":
@@ -202,6 +218,13 @@ async def _run_single_test(
             "question": test["question"],
         }
 
+        if context_mode == "deterministic":
+            # Prende i tool dal dataset se specificati, altrimenti usa la mappa del Supervisor
+            request_kwargs["allowed_tools"] = test.get(
+                "allowed_tools", 
+                DETERMINISTIC_ROUTING_MAP.get(expected_domain, [])
+            )
+
         if intent == "replan":
             request_kwargs["previous_plan"] = test["previous_plan"]
             request_kwargs["previous_domain"] = expected_domain
@@ -209,7 +232,7 @@ async def _run_single_test(
         request = QueryRequest(**request_kwargs)
 
         with patch("pipeline.validate_draft", new=tracking_validate_draft), \
-             patch.object(pipeline, "_llm_extract_json", side_effect=delayed_extract):
+             patch.object(pipeline.prompts, "extract_json", side_effect=delayed_extract):
             response = await pipeline.run(request)
 
         result["timestamp"] = datetime.now(timezone.utc).isoformat()
@@ -299,9 +322,6 @@ async def main() -> None:
                             "    [%d/%d - %s%%] [error] Test fallito su %s. Errore: %s",
                             current_test_idx, total_tests, progress_pct, key, result["error"]
                         )
-
-                    if provider_name != "ollama":
-                        await asyncio.sleep(RATE_LIMIT_DELAY_SECONDS)
 
         logger.info("\n>>> Benchmark completato con successo: %d risultati totali salvati in %s", len(results), RESULTS_PATH)
     finally:
