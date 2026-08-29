@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any
 
 # Bootstrap di sys.path
-src_dir: Path = Path(__file__).resolve().parent.parent
+project_root: Path = Path(__file__).resolve().parent.parent
+src_dir: Path = project_root / "src"
 if str(src_dir) not in sys.path:
     sys.path.insert(0, str(src_dir))
 
