@@ -1,4 +1,4 @@
-from validators import validate_draft
+from core.validators import validate_draft
 
 
 def _valid_study_draft() -> dict:

@@ -1,15 +1,14 @@
-from typing import TypedDict, List, Dict, Any, Optional
+from typing import TypedDict, Any, Optional, Annotated
 
-class AgentState(TypedDict):
-    """stato condiviso nel grafo LangGraph."""
+def merge_results(left: dict, right: dict) -> dict:
+    """Reducer per unire i risultati di più agenti eseguiti in parallelo senza sovrascriverli."""
+    return {**(left or {}), **(right or {})}
+
+class AgentState(TypedDict, total=False):
+    """Stato condiviso nel grafo LangGraph."""
     question: str
-    # domanda normalizzata in inglese (necessario per kg)
-    question_en: str
     language: str
-    # knowledge graph scelto dall'utente; None lascia decidere il kg-agent
     target_kg: Optional[str]
-    selected_agents: List[str]
-    kg_results: Optional[Dict[str, Any]]
-    planner_results: Optional[Dict[str, Any]]
-    multiapi_results: Optional[Dict[str, Any]]
+    selected_agents: list[str]
     final_response: str
+    agent_results: Annotated[dict[str, Any], merge_results]

@@ -1,54 +1,44 @@
 from langgraph.graph import StateGraph, END
+from src.config import settings
 from src.graph.state import AgentState
-from src.graph.nodes import (
-    translate_node,
-    supervisor_node,
-    kg_node,
-    planner_node,
-    multiapi_node,
-    synthesizer_node,
-)
+from src.graph.nodes import supervisor_node, make_agent_node, unsupported_node, synthesizer_node
+
+def _node_name(agent_name: str) -> str:
+    return f"{agent_name.removesuffix('_agent')}_node"
 
 def route_agents(state: AgentState) -> list[str]:
-    """funzione di routing condizionale per l'esecuzione in parallelo."""
+    """Instrada verso tutti gli agenti selezionati (in parallelo) o unsupported."""
     selected = state.get("selected_agents", [])
-    routes = []
-    if "kg_agent" in selected:
-        routes.append("kg_node")
-    if "planner_agent" in selected or "planner" in selected:
-        routes.append("planner_node")
-    if "multiapi_agent" in selected or "multiapi" in selected:
-        routes.append("multiapi_node")
+    valid_nodes = [_node_name(a) for a in selected if a in settings.agent_registry]
     
-    # Se nessun agente è stato selezionato dal supervisor, vai subito al sintetizzatore
-    return routes if routes else ["synthesizer"]
+    if not valid_nodes:
+        return ["unsupported"]
+    return valid_nodes
 
 def build_orchestrator_graph():
     """costruisce e compila lo StateGraph di LangGraph."""
     workflow = StateGraph(AgentState)
-
-    # registrazione dei nodi
-    workflow.add_node("translator", translate_node)
+    
     workflow.add_node("supervisor", supervisor_node)
-    workflow.add_node("kg_node", kg_node)
-    workflow.add_node("planner_node", planner_node)
-    workflow.add_node("multiapi_node", multiapi_node)
     workflow.add_node("synthesizer", synthesizer_node)
+    workflow.add_node("unsupported", unsupported_node)
 
-    # entrypoint del grafo: la domanda si normalizza in inglese prima di qualsiasi routing
-    workflow.set_entry_point("translator")
-    workflow.add_edge("translator", "supervisor")
+    # Registrazione dinamica nodi agenti
+    node_names = []
+    for agent_name in settings.agent_registry:
+        node_name = _node_name(agent_name)
+        workflow.add_node(node_name, make_agent_node(agent_name))
+        
+        # Fanning-in: tutti gli agenti convergono verso il sintetizzatore
+        workflow.add_edge(node_name, "synthesizer")
+        node_names.append(node_name)
 
-    # routing condizionale dal supervisor verso gli agenti
-    workflow.add_conditional_edges("supervisor", route_agents, ["kg_node", "planner_node", "multiapi_node", "synthesizer"])
-
-    # confluenza dagli agenti verso il sintetizzatore
-    workflow.add_edge("kg_node", "synthesizer")
-    workflow.add_edge("planner_node", "synthesizer")
-    workflow.add_edge("multiapi_node", "synthesizer")
-
-    # fine del workflow
+    # Fanning-out: il supervisor lancia gli agenti in parallelo
+    workflow.set_entry_point("supervisor")
+    workflow.add_conditional_edges("supervisor", route_agents, node_names + ["unsupported"])
+    
     workflow.add_edge("synthesizer", END)
+    workflow.add_edge("unsupported", END)
 
     return workflow.compile()
 

@@ -14,3 +14,6 @@ def test_prompts_exist():
     assert (settings.prompts_dir / "draft_travel.txt").exists()
     assert (settings.prompts_dir / "draft_routine.txt").exists()
     assert (settings.prompts_dir / "correct_draft.txt").exists()
+    assert (settings.prompts_dir / "formulate_queries.txt").exists()
+    assert (settings.prompts_dir / "gather_context_react.txt").exists()
+    assert (settings.prompts_dir / "replan.txt").exists()

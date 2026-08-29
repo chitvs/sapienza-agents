@@ -1,5 +1,5 @@
 """
-Test unitari per tools.py (Step 5 della roadmap planner): verificano che query_kg/
+Test unitari per tools.py: verificano che query_kg/
 query_multiapi rispettino il contratto {"error": "..."} in caso di fallimento - mai
 un'eccezione propagata - sia in caso di successo che di timeout/errore HTTP/errore di
 connessione.
@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import httpx
 
-from tools import query_kg, query_multiapi
+from core.tools import query_kg, query_multiapi
 
 
 class _FakeResponse:

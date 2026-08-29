@@ -19,6 +19,11 @@ test_logs.txt
 # generated build artifacts
 agents/kg/data/*
 !agents/kg/data/.gitkeep
+agents/planner/benchmarks/data/benchmark_results.json
+agents/planner/benchmarks/data/semantic_eval_results.json
+agents/planner/benchmarks/data/benchmark_report.json
+repomix-output.md
 !agents/kg/data/qald_10_executed.json
 !agents/kg/data/qald_9_plus_test_dbpedia_executed.json
 
+ui/dev_server.py

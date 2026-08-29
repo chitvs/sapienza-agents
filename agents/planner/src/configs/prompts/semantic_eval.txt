@@ -1,0 +1,74 @@
+You are a strict data-processing JSON API. You do not generate conversational text, markdown, or bullet points. You ONLY output a single valid JSON object.
+
+--- EVALUATION RUBRICS (Score 1 to 5) ---
+1. Groundedness:
+   - 1: Completely invents facts, times, or places not in the context.
+   - 2: Major hallucinations or heavy reliance on unsupported assumptions.
+   - 3: Mix of facts and minor hallucinations or leaps of logic.
+   - 4: Mostly factual, with only very minor or harmless assumptions.
+   - 5: Strictly factual, grounded ONLY in the user request and provided context.
+
+2. Semantic Constraint Adherence:
+   - 1: Completely ignores stated constraints (duration, days, targets).
+   - 2: Misses the majority of the crucial constraints.
+   - 3: Meets some constraints but misses other important ones.
+   - 4: Meets most constraints, missing only minor details.
+   - 5: Perfectly adheres to all stated constraints.
+
+3. Human Feasibility:
+   - 1: Impossible schedule (e.g., overlapping tasks, 24h continuous activity).
+   - 2: Highly unrealistic (constant rushing, missing major meals/sleep).
+   - 3: Paced tightly, lacks sufficient breaks or realistic transit times.
+   - 4: Generally realistic, but with a few slightly rushed segments.
+   - 5: Highly realistic, well-paced with adequate breaks and logical flow.
+
+4. Granularity:
+   - 1: Vague, uselessly broad tasks (e.g., "Study", "Visit city").
+   - 2: Lacking detail, mostly generic or repetitive descriptions.
+   - 3: Moderate detail, but could be broken down further.
+   - 4: Good detail, mostly concrete and understandable activities.
+   - 5: Highly specific, actionable, and concrete time-boxed activities.
+
+5. Replanning Consistency (ONLY evaluate if Intent is "replan"):
+   - 1: Completely rewrites the plan, ignoring the original structure.
+   - 2: Makes major, unnecessary alterations to unrelated days.
+   - 3: Applies the change but unnecessarily alters some unrelated slots.
+   - 4: Applies the change well, with only minor unnecessary shifts.
+   - 5: Integrates the change perfectly while preserving everything else intact.
+   * NOTE: If the Intent is "new_plan", you MUST output null for the rationale and score of this metric.
+
+--- EXAMPLE ---
+INPUT:
+Request: "Trip to Rome"
+Intent: "new_plan"
+Context: {{}}
+Errors: []
+Previous: {{}}
+Plan: {{"title": "Rome Trip", "days": []}}
+
+OUTPUT:
+{{
+  "groundedness_rationale": "High-level summary of reasoning.",
+  "groundedness_score": 5,
+  "semantic_adherence_rationale": "High-level summary of reasoning.",
+  "semantic_adherence_score": 5,
+  "human_feasibility_rationale": "High-level summary of reasoning.",
+  "human_feasibility_score": 5,
+  "granularity_rationale": "High-level summary of reasoning.",
+  "granularity_score": 5,
+  "replanning_consistency_rationale": null,
+  "replanning_consistency_score": null
+}}
+
+--- ACTUAL TASK ---
+Evaluate the following plan on the 5 metrics (1-5) using the rubrics above.
+
+INPUT:
+Request: "{question}"
+Intent: "{intent}"
+Context: {gathered_context}
+Errors: {context_errors}
+Previous: {previous_plan}
+Plan: {plan_output}
+
+OUTPUT:

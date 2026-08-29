@@ -6,21 +6,35 @@ FOCUS:
 - If the user gives a daily time budget, split it into one or more slots per day rather than a single unbroken block longer than ~90 minutes; short focused sessions with distinct sub-tasks are more realistic than one giant task.
 - Distribute topics progressively across the available days (do not cram everything into the first days), and place review/self-assessment sessions toward the end of the plan rather than only on the very last day.
 - If the user does not specify how much material there is, use a reasonable generic decomposition (e.g. by macro-topic) without inventing specific book chapters or facts you cannot know.
+- Do not invent specific exam dates, deadlines, chapter/page numbers, syllabus contents, or fixed commitments unless the user or the context above provided them.
+
+TASK QUALITY (this is what separates a good plan from a bad one):
+CRITICAL RULE: The following are STRICTLY formatting examples. NEVER copy the content, places, or topics from these examples into your generated plan.
+- BAD (too vague, never do this): {{"task": "Studia gli scacchi", "duration_minutes": 180, "subtasks": null, "notes": null}}
+- GOOD: {{"task": "Studio delle aperture principali (Italiana, Siciliana)", "duration_minutes": 45, "category": "studio", "subtasks": ["Rivedi le prime 4-5 mosse", "Confronta gli obiettivi"], "notes": "Usa una scacchiera fisica per visualizzare le mosse, non solo la teoria a memoria."}}
+- Use "subtasks" (2-4 short, concrete steps) whenever a slot is long enough (roughly 40+ minutes) or the activity naturally has sequential parts. Leave "subtasks" null for short/atomic slots - do not force subtasks everywhere.
+- Use "notes" for ONE specific, actionable tip tied to that exact task (a prerequisite, a common pitfall, a resource type) - never a generic restatement of the task. Leave "notes" null when there is nothing specific to add.
+- Use the top-level "contingency_notes" ONLY if the plan rests on a risky assumption the user should know about (e.g. the time budget looks too tight for the material). Leave it null if there is no real risk to flag.
 
 EXTERNAL CONTEXT (optional, provided by upstream agents):
 {context}
 If the context above is empty (e.g. "{{}}"), ignore it and proceed using only the user request below. If it contains data, treat it as verified fact and use it to ground the plan, without inventing further details beyond what is provided.
 
+ADDITIONAL USER CONSTRAINTS (optional, provided by the user for this specific request):
+{constraints}
+If this says "nessuno", ignore it. Otherwise treat it as a hard constraint with the same priority as constraints already stated in the user request below.
+
 Return ONLY a valid JSON object with this exact structure (no explanations, no markdown):
 {{
   "title": "<short title>",
   "summary": "<optional 1-2 sentence summary, or null>",
+  "contingency_notes": ["<risk/assumption to flag>"] or null,
   "days": [
     {{
       "day_index": 1,
       "label": "<optional day label, e.g. topic focus, or null>",
       "slots": [
-        {{"task": "<specific study activity>", "start_time": "<HH:MM or null>", "duration_minutes": <positive integer>, "category": "<'studio'|'ripasso'|'esercizi'|'autovalutazione'>"}}
+        {{"task": "<specific study activity>", "start_time": "<HH:MM or null>", "duration_minutes": <positive integer>, "category": "<'studio'|'ripasso'|'esercizi'|'autovalutazione'>", "subtasks": ["<step 1>", "<step 2>"] or null, "notes": "<specific tip or null>"}}
       ]
     }}
   ]
@@ -31,5 +45,6 @@ RULES:
 - start_time must be either "HH:MM" or null - use null if the user did not specify a time of day.
 - day_index must increase sequentially starting from 1, one entry per usable day (skip non-usable days entirely, do not include empty days).
 - Produce at least one day and at least one slot per day.
+- subtasks, notes and contingency_notes are optional: use them where they genuinely add value, leave them null/omitted otherwise. Do not fill every field just because it exists.
 
 User request: "{question}"

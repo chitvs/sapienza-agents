@@ -1,9 +1,5 @@
 """
-Schema Pydantic per l'agente Planner (Minerva).
-Percorso di destinazione previsto: agents/planner/src/api/schemas.py
-
-Segue le convenzioni già in uso in kg-agent e multiapi-agent:
-QueryRequest / QueryResponse, Field con description, sintassi `str | None`.
+Schema Pydantic per l'agente Planner    .
 """
 
 from datetime import date as date_
@@ -11,17 +7,43 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-# domini supportati dal planner (usato anche per domain_hint: non ha senso forzare "unknown")
+# --- DOMAIN DEFINITIONS --- 
+
+# Verrà iniettato dinamicamente nel prompt di classificazione.
+DOMAIN_DESCRIPTIONS: dict[str, str] = {
+    "study": "study plans, exam preparation, course schedules, learning goals.",
+    "travel": "travel itineraries, trips, visits to places, vacation planning.",
+    "routine": "daily/weekly routines, habits, recurring personal schedules not tied to study or travel."
+}
+
+# Domini supportati dal planner (usato anche per domain_hint)
 PlanDomain = Literal["study", "travel", "routine"]
 
-# dominio effettivo restituito in output: può anche essere "unknown" se la richiesta
-# non rientra in nessuno dei domini gestiti dal planner
+# Dominio effettivo restituito in output (incluso l'out-of-scope)
 ResponseDomain = PlanDomain | Literal["unknown"]
 
+ContextMode = Literal["none", "deterministic", "react"]
 
-# ---------------------------------------------------------------------------
+class ModelInfo(BaseModel):
+    """un modello/provider LLM configurato e disponibile."""
+
+    id: str = Field(..., description="valore da passare in QueryRequest.llm_model per usarlo")
+    provider: Literal["ollama", "gemini", "openai_compatible"]
+    model: str = Field(..., description="nome del modello presso il provider")
+
+
+class ModelsResponse(BaseModel):
+    """elenco dei modelli configurati, per popolare la dropdown della UI."""
+
+    default: str = Field(..., description="id del modello usato quando llm_model è assente")
+    models: list[ModelInfo]
+
+class ToolInfo(BaseModel):
+    """Informazioni su un tool disponibile per il Planner."""
+    name: str
+    description: str
+
 # INPUT
-# ---------------------------------------------------------------------------
 
 class QueryRequest(BaseModel):
     """richiesta in ingresso al planner-agent."""
@@ -48,11 +70,53 @@ class QueryRequest(BaseModel):
             "da _gather_context; ignorato se assente."
         ),
     )
+    previous_plan: dict[str, Any] | None = Field(
+    default=None,
+    description=(
+        "ultimo piano disponibile fornito dal client. Se presente, la richiesta "
+        "viene trattata come replanning del piano esistente."
+        ),
+    )
+
+    previous_domain: PlanDomain | None = Field(
+        default=None,
+        description=(
+            "dominio del piano precedente. Viene utilizzato durante il replanning "
+            "quando previous_plan è presente."
+        ),
+    )
+    context_mode: ContextMode | None = Field(
+        default=None,
+        description=(
+            "override per-richiesta di settings.context_gathering_mode "
+            "('none'/'deterministic'/'react'). Se assente, usa il default globale."
+        ),
+    )
+    llm_model: str | None = Field(
+        default=None,
+        description=(
+            "override del provider/modello per questa richiesta; deve corrispondere a uno "
+            "degli id restituiti da GET /models. Se assente, usa settings.llm_provider."
+        ),
+    )
+    allowed_tools: list[str] | None = Field(
+        default=None,
+        description=(
+            "sottoinsieme di nomi tool consentiti (tra quelli di TOOL_REGISTRY). "
+            "Se assente, tutti sono consentiti. Non valido con context_mode='none'."
+        ),
+    )
+    constraints: str | None = Field(
+        default=None,
+        description=(
+            "vincoli aggiuntivi in linguaggio libero (es. 'budget massimo 300 euro'), "
+            "distinti da context (dati tecnici/esterni recuperati da altri agenti) e da question."
+        ),
+    )
+    
 
 
-# ---------------------------------------------------------------------------
 # OUTPUT
-# ---------------------------------------------------------------------------
 
 class TimeSlot(BaseModel):
     """unità minima di time-boxing: un'attività allocata in un intervallo di tempo."""
@@ -111,7 +175,30 @@ class QueryResponse(BaseModel):
         default=None,
         description=(
             "risposte grezze recuperate da kg-agent/multiapi-agent (dominio 'travel'), sotto le "
-            "chiavi 'kg_agent'/'multiapi_agent', più l'eventuale request.context di partenza. "
-            "None se non è stato recuperato/fornito alcun contesto."
+            "chiavi 'kg_agent'/'multiapi_agent'. Ogni chiave contiene una lista di risposte grezze "
+            "(un solo elemento in modalità 'deterministic', uno o più in modalità 'react' se lo "
+            "stesso tool viene richiamato più volte nello stesso loop), più l'eventuale "
+            "request.context di partenza riportato così com'è. None se non è stato "
+            "recuperato/fornito alcun contesto."
+        )
+    )
+    context_errors: list[str] | None = Field(
+        default=None,
+        description=(
+            "errori di rete/timeout registrati durante il recupero del contesto esterno "
+            "(kg-agent/multiapi-agent). Sono anche riportati in contingency_notes per l'utente "
+            "finale; qui restano isolati per introspezione/benchmark. None se non è stato "
+            "tentato alcun recupero di contesto o non ci sono stati errori."
+        )
+    )
+    tool_calls: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Traccia del loop ReAct: contiene i thought, le azioni scelte e le osservazioni."
+    )
+    replanned: bool = Field(
+        default=False,
+        description=(
+            "True se questa risposta è un aggiornamento di un piano esistente (replanning) "
+            "invece di un piano generato da zero."
         ),
     )

@@ -1,0 +1,541 @@
+[
+  {
+    "id": "study_01",
+    "intent": "new_plan",
+    "question": "Devo prepararmi per l'esame di Basi di Dati tra 4 settimane, posso studiare 2 ore al giorno nei giorni feriali.",
+    "expected_domain": "study",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "study_02",
+    "intent": "new_plan",
+    "question": "Devo ripassare Analisi Matematica 1 prima dell'esame, non ho un piano preciso di quanto tempo ho a disposizione.",
+    "expected_domain": "study",
+    "difficulty": "medium",
+    "test_target": "vague_instructions"
+  },
+  {
+    "id": "travel_01",
+    "intent": "new_plan",
+    "question": "Organizzami un viaggio di 4 giorni a Kyoto dal 10 al 13 settembre 2026, con un ritmo rilassato.",
+    "expected_domain": "travel",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "travel_02",
+    "intent": "new_plan",
+    "question": "Vorrei un itinerario di 3 giorni a Roma, mi interessano soprattutto arte e cibo, non ho ancora deciso le date esatte.",
+    "expected_domain": "travel",
+    "difficulty": "medium",
+    "test_target": "vague_instructions"
+  },
+  {
+    "id": "routine_01",
+    "intent": "new_plan",
+    "question": "Ho una routine lavorativa dal lunedì al venerdì con sveglia alle 7 e palestra la sera; nel weekend non ho impegni fissi.",
+    "expected_domain": "routine",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "routine_02",
+    "intent": "new_plan",
+    "question": "Voglio strutturare meglio le mie giornate: sveglia alle 6:30 tutti i giorni, lavoro fisso 9-18 nei feriali, weekend dedicato a sport e famiglia.",
+    "expected_domain": "routine",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "study_replan_01",
+    "intent": "replan",
+    "question": "Sposta la sessione di ripasso di mercoledì a giovedì, perché mercoledì ho un impegno.",
+    "expected_domain": "study",
+    "difficulty": "medium",
+    "test_target": "replan_shift",
+    "previous_plan": {
+      "title": "Ripasso Analisi Matematica 1",
+      "summary": "Piano di ripasso su 5 giorni prima dell'esame.",
+      "days": [
+        {
+          "day_index": 1,
+          "label": "Lunedì - Limiti e continuità",
+          "slots": [
+            {
+              "task": "Ripasso teoria limiti",
+              "start_time": "18:00",
+              "duration_minutes": 60,
+              "category": "ripasso"
+            }
+          ]
+        },
+        {
+          "day_index": 2,
+          "label": "Martedì - Derivate",
+          "slots": [
+            {
+              "task": "Esercizi sulle derivate",
+              "start_time": "18:00",
+              "duration_minutes": 60,
+              "category": "esercizi"
+            }
+          ]
+        },
+        {
+          "day_index": 3,
+          "label": "Mercoledì - Integrali",
+          "slots": [
+            {
+              "task": "Ripasso integrali indefiniti",
+              "start_time": "18:00",
+              "duration_minutes": 60,
+              "category": "ripasso"
+            }
+          ]
+        },
+        {
+          "day_index": 4,
+          "label": "Giovedì - Esercizi misti",
+          "slots": [
+            {
+              "task": "Esercizi misti su tutto il programma",
+              "start_time": "18:00",
+              "duration_minutes": 90,
+              "category": "esercizi"
+            }
+          ]
+        },
+        {
+          "day_index": 5,
+          "label": "Venerdì - Autovalutazione",
+          "slots": [
+            {
+              "task": "Simulazione scritto d'esame",
+              "start_time": "17:00",
+              "duration_minutes": 90,
+              "category": "autovalutazione"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "travel_replan_01",
+    "intent": "replan",
+    "question": "Il secondo giorno mi hanno ridotto il tempo a disposizione, ho solo la mattina libera: aggiorna il piano di conseguenza.",
+    "expected_domain": "travel",
+    "difficulty": "hard",
+    "test_target": "replan_deletion",
+    "previous_plan": {
+      "title": "4 giorni a Kyoto",
+      "summary": "Itinerario rilassato di 4 giorni tra templi, giardini e cucina locale.",
+      "days": [
+        {
+          "day_index": 1,
+          "date": "2026-09-10",
+          "label": "Arrivo e Gion",
+          "slots": [
+            {
+              "task": "Arrivo e check-in in hotel",
+              "start_time": "14:00",
+              "duration_minutes": 60,
+              "category": "trasporto"
+            },
+            {
+              "task": "Passeggiata nel quartiere di Gion",
+              "start_time": "16:00",
+              "duration_minutes": 120,
+              "category": "visita"
+            },
+            {
+              "task": "Cena in un ristorante locale",
+              "start_time": "19:30",
+              "duration_minutes": 90,
+              "category": "pasto"
+            }
+          ]
+        },
+        {
+          "day_index": 2,
+          "date": "2026-09-11",
+          "label": "Templi del nord",
+          "slots": [
+            {
+              "task": "Visita al Kinkaku-ji",
+              "start_time": "09:00",
+              "duration_minutes": 90,
+              "category": "visita"
+            },
+            {
+              "task": "Pranzo vicino al tempio",
+              "start_time": "12:30",
+              "duration_minutes": 60,
+              "category": "pasto"
+            },
+            {
+              "task": "Visita al Ryoan-ji",
+              "start_time": "14:00",
+              "duration_minutes": 90,
+              "category": "visita"
+            }
+          ]
+        },
+        {
+          "day_index": 3,
+          "date": "2026-09-12",
+          "label": "Arashiyama",
+          "slots": [
+            {
+              "task": "Bosco di bambù di Arashiyama",
+              "start_time": "09:00",
+              "duration_minutes": 90,
+              "category": "visita"
+            },
+            {
+              "task": "Pranzo ad Arashiyama",
+              "start_time": "12:00",
+              "duration_minutes": 60,
+              "category": "pasto"
+            },
+            {
+              "task": "Visita al Tenryu-ji",
+              "start_time": "14:00",
+              "duration_minutes": 60,
+              "category": "visita"
+            }
+          ]
+        },
+        {
+          "day_index": 4,
+          "date": "2026-09-13",
+          "label": "Partenza",
+          "slots": [
+            {
+              "task": "Ultimi acquisti souvenir",
+              "start_time": "09:30",
+              "duration_minutes": 90,
+              "category": "altro"
+            },
+            {
+              "task": "Trasferimento in aeroporto",
+              "start_time": "12:00",
+              "duration_minutes": 60,
+              "category": "trasporto"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "unknown_01",
+    "intent": "new_plan",
+    "question": "Consigliami un buon libro di narrativa da leggere quest'estate.",
+    "expected_domain": "unknown",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "unknown_02",
+    "intent": "new_plan",
+    "question": "Puoi spiegarmi come funziona la fotosintesi clorofilliana?",
+    "expected_domain": "unknown",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "study_03",
+    "intent": "new_plan",
+    "question": "Devo preparare Anatomia, Fisiologia e Patologia partendo da zero. Ho solo 3 giorni. Voglio studiare ogni materia per almeno 10 ore al giorno, tutti i giorni.",
+    "expected_domain": "study",
+    "difficulty": "hard",
+    "test_target": "impossible_schedule"
+  },
+  {
+    "id": "study_04",
+    "intent": "new_plan",
+    "question": "Devo ripassare 5 capitoli di Diritto. I miei orari: lunedì 45 min, martedì niente, mercoledì 1h e 15m, giovedì 30 min, venerdì 2 ore. Distribuisci i capitoli tenendo conto che il capitolo 3 richiede il doppio del tempo degli altri.",
+    "expected_domain": "study",
+    "difficulty": "hard",
+    "test_target": "time_math"
+  },
+  {
+    "id": "study_05",
+    "intent": "new_plan",
+    "question": "Pianifica la scrittura della mia tesi in 5 giorni lavorativi. Non ho una struttura, decidi tu come dividere il lavoro per ore, ma voglio terminare di scrivere ogni giorno entro le 14:00.",
+    "expected_domain": "study",
+    "difficulty": "medium",
+    "test_target": "vague_instructions"
+  },
+  {
+    "id": "study_06",
+    "intent": "new_plan",
+    "question": "Organizza il ripasso di Storia Contemporanea su 2 settimane, studiando 1 ora al giorno solo dal martedì al venerdì. L'ultimo venerdì deve esserci esclusivamente un ripasso generale, niente argomenti nuovi.",
+    "expected_domain": "study",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "travel_03",
+    "intent": "new_plan",
+    "question": "Arrivo a Parigi alle 14:00. Voglio visitare il Louvre per 90 minuti, il Musée d'Orsay per 90 minuti, il Centre Pompidou per 60 minuti e la Reggia di Versailles per 120 minuti prima di cena alle 19:30. Inserisci anche 30 minuti di taxi tra ogni singola tappa.",
+    "expected_domain": "travel",
+    "difficulty": "hard",
+    "test_target": "impossible_schedule"
+  },
+  {
+    "id": "travel_04",
+    "intent": "new_plan",
+    "question": "Road trip in California di 5 giorni partendo da San Francisco e arrivando a Los Angeles. Scegli tu le tappe intermedie e i tempi, ma voglio guidare al massimo 3 ore al giorno.",
+    "expected_domain": "travel",
+    "difficulty": "medium",
+    "test_target": "vague_instructions"
+  },
+  {
+    "id": "travel_05",
+    "intent": "new_plan",
+    "question": "Scalo a Londra Heathrow di 5 ore e 45 minuti totali. 90 minuti se ne vanno in taxi andata e ritorno per il centro, 2 ore fisse per i controlli in aeroporto. Col tempo che resta, incastrami un pranzo veloce e una visita breve.",
+    "expected_domain": "travel",
+    "difficulty": "hard",
+    "test_target": "time_math"
+  },
+  {
+    "id": "travel_06",
+    "intent": "new_plan",
+    "question": "Weekend a Venezia. Arrivo a Santa Lucia venerdì alle 16:00. Sabato mattina voglio fare un giro in gondola di 45 minuti, per il resto ritmo molto lento. Partenza domenica alle 11:00.",
+    "expected_domain": "travel",
+    "difficulty": "easy",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "routine_03",
+    "intent": "new_plan",
+    "question": "Turno di notte 23:00-07:00 dal lunedì al venerdì. Dormo dalle 08:00 alle 15:00. Crea la routine inserendo la spesa il mercoledì pomeriggio e 3 pasti in orari compatibili col mio ritmo.",
+    "expected_domain": "routine",
+    "difficulty": "hard",
+    "test_target": "time_math"
+  },
+  {
+    "id": "routine_04",
+    "intent": "new_plan",
+    "question": "Routine solo per il weekend. Sabato: sveglia alle 7:30, corsa di 1 ora, pranzo fuori e pomeriggio libero. Domenica: sveglia senza orario, riposo totale, solo i pasti principali.",
+    "expected_domain": "routine",
+    "difficulty": "medium",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "routine_05",
+    "intent": "new_plan",
+    "question": "Crea una routine quotidiana dove lavoro 12 ore, studio 5 ore, vado in palestra 3 ore, leggo 2 ore e dormo esattamente 8 ore, aggiungendo anche 1 ora dedicata ai pasti.",
+    "expected_domain": "routine",
+    "difficulty": "hard",
+    "test_target": "impossible_schedule"
+  },
+  {
+    "id": "routine_06",
+    "intent": "new_plan",
+    "question": "Lavoro da casa ma sono disorganizzato. Crea una routine di 5 giorni (lun-ven) includendo due blocchi di 'Deep Work' e pause regolari, inventando tu gli orari ma finendo sempre alle 18:00.",
+    "expected_domain": "routine",
+    "difficulty": "medium",
+    "test_target": "vague_instructions"
+  },
+  {
+    "id": "study_replan_02",
+    "intent": "replan",
+    "question": "Un imprevisto mi impedisce di studiare il Giorno 1. Cancella tutte le sue sessioni e spalma il 'Capitolo 1' all'interno del Giorno 2, dimezzando la sua durata originale per farlo entrare.",
+    "expected_domain": "study",
+    "difficulty": "hard",
+    "test_target": "replan_deletion",
+    "previous_plan": {
+      "title": "Preparazione Esame",
+      "summary": "Piano di 2 giorni.",
+      "days": [
+        {
+          "day_index": 1,
+          "label": "Giorno 1",
+          "slots": [
+            {
+              "task": "Capitolo 1",
+              "start_time": "15:00",
+              "duration_minutes": 120,
+              "category": "studio"
+            }
+          ]
+        },
+        {
+          "day_index": 2,
+          "label": "Giorno 2",
+          "slots": [
+            {
+              "task": "Capitolo 2",
+              "start_time": "15:00",
+              "duration_minutes": 120,
+              "category": "studio"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "travel_replan_02",
+    "intent": "replan",
+    "question": "Il volo per New York ha ritardato. Sposta tutte le attività del Giorno 1 in avanti di 3 ore esatte.",
+    "expected_domain": "travel",
+    "difficulty": "hard",
+    "test_target": "replan_shift",
+    "previous_plan": {
+      "title": "New York",
+      "summary": "Primo viaggio.",
+      "days": [
+        {
+          "day_index": 1,
+          "date": "2026-10-10",
+          "label": "Arrivo",
+          "slots": [
+            {
+              "task": "Arrivo in hotel",
+              "start_time": "10:00",
+              "duration_minutes": 60,
+              "category": "trasporto"
+            },
+            {
+              "task": "Passeggiata a Central Park",
+              "start_time": "11:30",
+              "duration_minutes": 90,
+              "category": "visita"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "routine_replan_01",
+    "intent": "replan",
+    "question": "Voglio dormire di più. Sposta l'inizio della routine a partire dalle 08:30 anziché le 07:00. Per farci stare la palestra entro le 09:00, riducila a 30 minuti.",
+    "expected_domain": "routine",
+    "difficulty": "medium",
+    "test_target": "replan_shift",
+    "previous_plan": {
+      "title": "Routine Mattutina",
+      "summary": "Tutti i giorni.",
+      "days": [
+        {
+          "day_index": 1,
+          "label": "Lunedì",
+          "slots": [
+            {
+              "task": "Sveglia e colazione",
+              "start_time": "07:00",
+              "duration_minutes": 45,
+              "category": "pasto"
+            },
+            {
+              "task": "Palestra",
+              "start_time": "08:00",
+              "duration_minutes": 60,
+              "category": "sport"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "travel_replan_03",
+    "intent": "replan",
+    "question": "Piove a dirotto. Annulla sia il Giardino di Boboli che Piazzale Michelangelo. Sostituisci tutto con un unico museo coperto di 3 ore.",
+    "expected_domain": "travel",
+    "difficulty": "medium",
+    "test_target": "replan_deletion",
+    "previous_plan": {
+      "title": "Gita a Firenze",
+      "summary": "Arte e piazze",
+      "days": [
+        {
+          "day_index": 1,
+          "label": "Piazze",
+          "slots": [
+            {
+              "task": "Passeggiata al Giardino di Boboli",
+              "start_time": "10:00",
+              "duration_minutes": 120,
+              "category": "visita"
+            },
+            {
+              "task": "Visita a Piazzale Michelangelo",
+              "start_time": "14:00",
+              "duration_minutes": 90,
+              "category": "visita"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "study_replan_03",
+    "intent": "replan",
+    "question": "Scambia esattamente il blocco di 'Geometria' del lunedì con il blocco 'Riposo e pausa' del martedì, mantenendo inalterati gli orari di inizio.",
+    "expected_domain": "study",
+    "difficulty": "medium",
+    "test_target": "replan_shift",
+    "previous_plan": {
+      "title": "Matematica e Geometria",
+      "summary": "Piano di 2 giorni.",
+      "days": [
+        {
+          "day_index": 1,
+          "label": "Lunedì",
+          "slots": [
+            {
+              "task": "Geometria",
+              "start_time": "15:00",
+              "duration_minutes": 120,
+              "category": "studio"
+            }
+          ]
+        },
+        {
+          "day_index": 2,
+          "label": "Martedì",
+          "slots": [
+            {
+              "task": "Riposo e pausa",
+              "start_time": "15:00",
+              "duration_minutes": 120,
+              "category": "riposo"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "unknown_03",
+    "intent": "new_plan",
+    "question": "Pianificami la dieta settimanale da 1800 kcal: voglio ricette dettagliate per pranzo e cena e la lista della spesa divisa per corsie del supermercato.",
+    "expected_domain": "unknown",
+    "difficulty": "hard",
+    "test_target": "vague_instructions"
+  },
+  {
+    "id": "unknown_04",
+    "intent": "new_plan",
+    "question": "Scrivi uno script in Python che faccia il web scraping dei voli per New York e salvi i prezzi su un file CSV.",
+    "expected_domain": "unknown",
+    "difficulty": "hard",
+    "test_target": "standard_planning"
+  },
+  {
+    "id": "unknown_05",
+    "intent": "new_plan",
+    "question": "Genera uno script per il mio drone DJI: inserisci i waypoint GPS esatti per la mappatura del campo e i comandi per attivare la fotocamera multispettrale.",
+    "expected_domain": "unknown",
+    "difficulty": "hard",
+    "test_target": "time_math"
+  }
+]

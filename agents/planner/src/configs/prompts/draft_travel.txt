@@ -5,23 +5,37 @@ FOCUS:
 - Respect any constraint stated by the user: trip length, number of days, specific cities/places to include, pace (relaxed vs packed), travel dates if given.
 - Sequence each day realistically: arrival/departure logistics on the first/last day, morning/afternoon/evening activities on full days, with reasonable durations (a museum visit is longer than a coffee break; a day trip is longer than a quick stop).
 - Do NOT invent specific facts you cannot know, such as exact opening hours, addresses, ticket prices, or real distances/travel times between places - describe such activities generically instead (e.g. "Visita al centro storico") rather than presenting a fabricated detail as fact.
+- duration_minutes is still required on every slot, including transport: for visits/meals/activities, use a reasonable generic estimate; for transport between places, use a generic round estimate (e.g. 30-45 minutes for a short transfer, more for intercity) rather than a fabricated precise figure - unless the context above provides real transit data. A generic time estimate is not the same as inventing a specific unverifiable fact like an address or a ticket price.
 - If the user gave explicit calendar dates, use them in the "date" field; otherwise leave "date" null and rely only on "day_index".
+
+TASK QUALITY (this is what separates a good plan from a bad one):
+CRITICAL RULE: The following are STRICTLY formatting examples. NEVER copy the content, places, or topics from these examples into your generated plan.
+- BAD (too vague, never do this): {{"task": "Visita il centro storico", "duration_minutes": 240, "subtasks": null, "notes": null}}
+- GOOD: {{"task": "Visita del centro storico: piazza principale e cattedrale", "duration_minutes": 90, "category": "visita", "subtasks": ["Passeggiata nella piazza principale", "Visita interna della cattedrale", "Sosta panoramica nei dintorni"], "notes": "Controlla in loco gli orari di apertura, spesso variano stagionalmente."}}
+- Use "subtasks" (2-4 short steps) for longer/composite stops (roughly 45+ minutes); leave null for quick or atomic stops (a coffee break, a short transfer).
+- Use "notes" for ONE specific, actionable tip (what to check on-site, a practical caveat) tied to that exact stop - never generic travel encouragement. Leave null when there is nothing specific to add.
+- Use "contingency_notes" only for genuine trip-level risks (e.g. a tight pace that leaves no slack, weather-dependent activities). Leave null otherwise.
 
 EXTERNAL CONTEXT (optional, retrieved from kg-agent/multiapi-agent by upstream tools):
 {context}
 If the context above is empty (e.g. "{{}}"), ignore it and proceed using only the user request below. If it contains data (e.g. entities, weather, schedules), treat it as verified fact and use it to ground the itinerary, without inventing further details beyond what is provided.
 
+ADDITIONAL USER CONSTRAINTS (optional, provided by the user for this specific request):
+{constraints}
+If this says "nessuno", ignore it. Otherwise treat it as a hard constraint with the same priority as constraints already stated in the user request below.
+
 Return ONLY a valid JSON object with this exact structure (no explanations, no markdown):
 {{
   "title": "<short title>",
   "summary": "<optional 1-2 sentence summary, or null>",
+  "contingency_notes": ["<risk/assumption to flag>"] or null,
   "days": [
     {{
       "day_index": 1,
       "date": "<YYYY-MM-DD or null>",
       "label": "<optional day label, e.g. city/theme, or null>",
       "slots": [
-        {{"task": "<specific activity>", "start_time": "<HH:MM or null>", "duration_minutes": <positive integer>, "category": "<'visita'|'trasporto'|'pasto'|'riposo'|'altro'>"}}
+        {{"task": "<specific activity>", "start_time": "<HH:MM or null>", "duration_minutes": <positive integer>, "category": "<'visita'|'trasporto'|'pasto'|'riposo'|'altro'>", "subtasks": ["<step 1>", "<step 2>"] or null, "notes": "<specific tip or null>"}}
       ]
     }}
   ]
@@ -32,5 +46,6 @@ RULES:
 - start_time must be either "HH:MM" or null - use null if the activity is not anchored to a precise time.
 - day_index must increase sequentially starting from 1, one entry per day of the trip.
 - Produce at least one day and at least one slot per day.
+- subtasks, notes and contingency_notes are optional: use them where they genuinely add value, leave them null/omitted otherwise.
 
 User request: "{question}"

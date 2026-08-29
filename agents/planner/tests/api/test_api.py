@@ -24,7 +24,6 @@ def test_health():
 
 @pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
 def test_query_study_domain():
-    """esempio 'esame universitario' citato nel todo."""
     res = client.post(
         "/query",
         json={"question": "Devo preparare l'esame di Reti in 3 settimane, studio 2 ore al giorno nei feriali"},
@@ -39,7 +38,6 @@ def test_query_study_domain():
 
 @pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
 def test_query_travel_domain():
-    """esempio 'weekend fuori porta' citato nel todo."""
     res = client.post("/query", json={"question": "Organizzami un weekend fuori porta a Firenze"})
     assert res.status_code == 200
     data = res.json()

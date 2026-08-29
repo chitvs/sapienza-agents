@@ -1,0 +1,312 @@
+"""
+Client LLM del planner: gestisce la comunicazione con i provider.
+
+Si occupa esclusivamente del trasporto della richiesta verso il modello e della
+pulizia iniziale della risposta grezza (estrazione JSON). Non contiene logica
+di business, validazione o retry semantici, i quali sono delegati alla pipeline.
+"""
+
+import json
+import logging
+import re
+from typing import Any
+
+from configs.settings import settings
+from clients.http_client import get_http_client
+
+logger = logging.getLogger("planner_llm_client")
+
+_OPENAI_COMPATIBLE_TIMEOUT: float = 30.0
+
+_JSON_RETRY_PROMPT_TEMPLATE: str = (
+    "{prompt}\n\n"
+    "ATTENZIONE: La tua risposta precedente non era un JSON valido.\n"
+    "Il tuo output errato: {cleaned}\n"
+    "Errore del parser Python: {err}\n"
+    "Correggi la sintassi e restituisci SOLO un oggetto JSON valido, "
+    "senza testo aggiuntivo o nidificazioni errate."
+)
+
+
+class LLMClient:
+    """
+    Gestisce la comunicazione con i provider LLM (Gemini e Ollama), 
+    fornendo metodi per la generazione di testo e l'estrazione di JSON.
+    """
+
+    def __init__(self, verbose: bool = False, provider: str | None = None, model: str | None = None) -> None:
+        """
+        Inizializza la pipeline e il client LLM sottostante tramite risoluzione dinamica.
+
+        Args:
+            verbose (bool): Se True, abilita la stampa a schermo dei log e dei passaggi.
+            provider (str | None): Identificativo del provider, opzionalmente nel formato "provider/modello"
+                (es. "openrouter/nvidia/nemotron").
+            model (str | None): Nome del modello esplicito.
+        """
+        self.verbose: bool = verbose
+        
+        requested_id: str = (provider or settings.llm_provider).strip()
+        
+        # Risoluzione namespace: se contiene "/", estrae provider e modello
+        if "/" in requested_id and requested_id.split("/", 1)[0] in ["gemini", "ollama", "openrouter"]:
+            prov, mod = requested_id.split("/", 1)
+            self.provider = prov
+            self.model = mod
+        else:
+            self.provider = requested_id
+            self.model = model or ""
+
+        # Fallback sui default configurati nel .env se il modello manca
+        if not self.model:
+            if self.provider == "gemini":
+                self.model = settings.gemini_model
+            elif self.provider == "ollama":
+                self.model = settings.ollama_model
+            elif self.provider == "openrouter":
+                self.model = settings.parsed_openrouter_models[0] if settings.parsed_openrouter_models else ""
+
+    def _log(self, msg: str, level: int = logging.INFO) -> None:
+        """
+        Gestisce il logging interno della classe.
+
+        Args:
+            msg (str): Il messaggio da registrare.
+            level (int): Il livello di severità del log (default: logging.INFO).
+        """
+        if self.verbose:
+            # Stampa a schermo per debug rapido se verbose è True
+            print(msg)
+
+        # Usa il livello semantico corretto invece di forzare sempre .info()
+        logger.log(level, msg)
+
+    async def generate(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
+        """
+        Prova il provider configurato; se il provider primario è remoto e fallisce, ripiega su 'ollama'.
+
+        Args:
+            prompt (str): Il testo del prompt da inviare.
+            temperature (float): La temperatura di campionamento (default: 0.0 per determinismo).
+            json_mode (bool): Se True, forza l'output nel formato JSON.
+
+        Returns:
+            str: Il testo generato dal modello LLM.
+        """
+        provider: str = self.provider
+
+        if provider == "ollama":
+            return await self._generate_ollama(prompt, temperature, json_mode)
+
+        try:
+            if provider == "gemini":
+                return await self._generate_gemini(prompt, temperature, json_mode)
+
+            if provider == "openrouter":
+                return await self._generate_openai_compatible(
+                    prompt,
+                    temperature,
+                    json_mode,
+                    base_url=settings.openrouter_base_url,
+                    api_key=settings.openrouter_api_key,
+                )
+                
+            raise ValueError(f"provider '{provider}' non riconosciuto")
+            
+        except Exception as err:
+            if not settings.enable_local_fallback:
+                self._log(
+                    f"  [error] {provider} non disponibile, fallback disattivato. Errore: {err}",
+                    level=logging.ERROR
+                )
+                raise err
+                
+            self._log(
+                f"  [warn] {provider} non disponibile ({err.__class__.__name__}: {err}), fallback su ollama",
+                level=logging.WARNING,
+            )
+            return await self._generate_ollama(prompt, temperature, json_mode)
+
+    async def _generate_gemini(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
+        """
+        Chiama l'API di Google Gemini tramite HTTPX.
+
+        Args:
+            prompt (str): Il testo del prompt da inviare.
+            temperature (float): La temperatura di campionamento.
+            json_mode (bool): Se True, imposta il mime_type su application/json.
+
+        Returns:
+            str: La risposta testuale di Gemini.
+
+        Raises:
+            ValueError: Se la chiave API di Gemini manca.
+            httpx.HTTPError: Se c'è un problema di rete o l'API risponde con un errore.
+        """
+        if not settings.gemini_api_key:
+            raise ValueError("GEMINI_API_KEY non configurata")
+
+        url = f"{settings.gemini_api_base}/models/{self.model}:generateContent"
+        headers = {"x-goog-api-key": settings.gemini_api_key}
+
+        generation_config: dict[str, Any] = {}
+        if json_mode:
+            generation_config["response_mime_type"] = "application/json"
+        
+        generation_config["temperature"] = temperature
+
+        payload: dict[str, Any] = {"contents": [{"parts": [{"text": prompt}]}]}
+        if generation_config:
+            payload["generationConfig"] = generation_config
+
+        client = get_http_client()
+        resp = await client.post(url, headers=headers, json=payload, timeout=settings.gemini_timeout)
+        resp.raise_for_status()
+        data = resp.json()
+
+        candidates = data.get("candidates", [])
+        if not candidates:
+            block_reason = data.get("promptFeedback", {}).get("blockReason")
+            self._log(
+                f"  [warn] gemini: nessuna candidate, blockReason={block_reason!r}",
+                level=logging.WARNING,
+            )
+            return ""
+
+        parts = candidates[0].get("content", {}).get("parts", [])
+        return parts[0].get("text", "").strip() if parts else ""
+    
+    async def _generate_openai_compatible(
+        self,
+        prompt: str,
+        temperature: float,
+        json_mode: bool,
+        base_url: str,
+        api_key: str,
+    ) -> str:
+        """
+        Chiama un endpoint compatibile con l'API chat/completions di OpenAI.
+
+        Args:
+            prompt (str): Il testo del prompt da inviare.
+            temperature (float): La temperatura di campionamento.
+            json_mode (bool): Se True, richiede output JSON via response_format.
+            base_url (str): URL base dell'endpoint.
+            api_key (str): Chiave API per l'autenticazione Bearer.
+
+        Returns:
+            str: La risposta testuale del modello.
+        """
+        if not base_url or not api_key or not self.model:
+            raise ValueError("configurazione provider incompleta: servono base_url, api_key e model")
+
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+        }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+
+        client = get_http_client()
+        resp = await client.post(url, headers=headers, json=payload, timeout=_OPENAI_COMPATIBLE_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+
+        choices = data.get("choices", [])
+        if not choices:
+            self._log("  [warn] openai-compatible: nessuna choice nella risposta", level=logging.WARNING)
+            return ""
+
+        content = choices[0].get("message", {}).get("content")
+        return (content or "").strip()
+
+    async def _generate_ollama(self, prompt: str, temperature: float = 0.0, json_mode: bool = False) -> str:
+        """
+        Chiama l'API locale di Ollama tramite HTTPX.
+
+        Args:
+            prompt (str): Il testo del prompt da inviare.   
+            temperature (float): La temperatura di campionamento.
+            json_mode (bool): Se True, imposta il flag 'format'='json'.
+
+        Returns:
+            str: La risposta testuale di Ollama.
+        """
+        url = f"{settings.ollama_host.rstrip('/')}/api/generate"
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "think": False,
+            "options": {"temperature": temperature},
+        }
+        if json_mode:
+            payload["format"] = "json"
+
+        client = get_http_client()
+        resp = await client.post(url, json=payload, timeout=settings.ollama_timeout)
+        resp.raise_for_status()
+        return resp.json().get("response", "").strip()
+
+    @staticmethod
+    def clean_json(raw: str) -> str:
+        """
+        Pulisce la stringa restituita dal modello rimuovendo markdown in eccesso.
+
+        Args:
+            raw (str): La stringa grezza generata dall'LLM.
+
+        Returns:
+            str: La stringa pulita pronta per json.loads().
+        """
+        if not raw:
+            return ""
+        
+        cleaned: str = raw.strip()
+        if "```" in cleaned:
+            match = re.search(
+                r"```(?:json)?\s*(.*?)\s*```", 
+                cleaned, 
+                flags=re.IGNORECASE | re.DOTALL
+            )
+            if match:
+                return match.group(1).strip()
+                
+        return cleaned
+
+    async def extract_json(self, prompt: str) -> dict[str, Any] | None:
+        """
+        Invia un prompt all'LLM e tenta di effettuare il parsing della risposta come JSON.
+        Se fallisce, richiede automaticamente al modello di correggere la sintassi.
+        """
+        current_prompt = prompt
+        max_retries = settings.max_json_retries
+        
+        for attempt in range(max_retries + 1):
+            raw: str = await self.generate(current_prompt, json_mode=True)
+            cleaned: str = self.clean_json(raw)
+            self._log(f"  -> risposta llm grezza (tent {attempt + 1}): {raw}")
+            
+            try:
+                return json.loads(cleaned)
+            except (json.JSONDecodeError, AttributeError) as err:
+                if attempt < max_retries:
+                    self._log(
+                        f"  [warn] JSON malformato, richiedo correzione sintattica all'LLM. Errore: {err}", 
+                        level=logging.WARNING
+                    )
+                    current_prompt = _JSON_RETRY_PROMPT_TEMPLATE.format(
+                        prompt=prompt,
+                        cleaned=cleaned,
+                        err=err
+                    )
+                else:
+                    self._log(
+                        f"  [warn] impossibile parsare json dopo {max_retries + 1} tentativi: {cleaned}", 
+                        level=logging.WARNING
+                    )
+                    return None

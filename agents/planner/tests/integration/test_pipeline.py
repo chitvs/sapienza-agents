@@ -2,7 +2,7 @@ import asyncio
 
 import httpx
 import pytest
-from pipeline import PlannerPipeline
+from core.pipeline import PlannerPipeline
 from api.schemas import QueryRequest
 from configs.settings import settings
 

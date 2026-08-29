@@ -70,6 +70,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - OPENAI_PROVIDERS=${OPENAI_PROVIDERS}
       - KG_AGENT_URL=http://kg-agent:8000
       - MULTIAPI_AGENT_URL=http://multiapi-agent:8002
     depends_on:
