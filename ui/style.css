@@ -246,9 +246,13 @@ body { max-width: none; padding: 0; overflow: hidden; }
 .settings-title { margin: 0 0 1rem; font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .settings-placeholder { display: none; color: var(--muted); font-size: 0.85rem; }
 .settings-planner { display: none; }
-body.mode-planner .settings-placeholder { display: none; }
-body.mode-planner .settings-planner { display: block; }
-body:not(.mode-planner) .settings-placeholder { display: block; } /* se vuoi che il placeholder appaia quando NON sei nel planner */
+body[data-mode="planner"] .settings-planner { display: block; }
+
+/* il knowledge graph riguarda solo le modalità che lo interrogano; dove non
+   resta nessun controllo si mostra il placeholder, così il pannello non è vuoto */
+body[data-mode="planner"] .settings-kg,
+body[data-mode="multiapi"] .settings-kg { display: none; }
+body[data-mode="multiapi"] .settings-placeholder { display: block; }
 
 .new-chat {
   width: 100%;

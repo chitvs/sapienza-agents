@@ -57,7 +57,10 @@ async def supervisor_node(state: AgentState) -> dict:
     try:
         response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=question)])
         parsed = _parse_json(response.content)
-        selected = parsed.get("selected_agents", [])
+        # il prompt ammette sia l'oggetto sia l'array nudo: qui vanno normalizzati
+        # entrambi, altrimenti sulla lista .get() solleva AttributeError e il
+        # routing finisce silenziosamente a zero agenti
+        selected = parsed if isinstance(parsed, list) else parsed.get("selected_agents", [])
         if not isinstance(selected, list):
             selected = [selected] if isinstance(selected, str) else []
     except Exception as err:

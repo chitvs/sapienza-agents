@@ -73,6 +73,8 @@ services:
       - OPENAI_PROVIDERS=${OPENAI_PROVIDERS}
       - KG_AGENT_URL=http://kg-agent:8000
       - MULTIAPI_AGENT_URL=http://multiapi-agent:8002
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - kg-agent
       - multiapi-agent
@@ -115,7 +117,7 @@ services:
       - PLANNER_AGENT_URL=http://planner-agent:8001
       - MULTIAPI_AGENT_URL=http://multiapi-agent:8002
       - OLLAMA_HOST=http://host.docker.internal:11434
-      - OLLAMA_MODEL=llama3.2
+      - OLLAMA_MODEL=qwen2.5:7b-instruct
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

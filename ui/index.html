@@ -17,7 +17,7 @@
   <main class="main">
     <div class="main-header">
       <h1>sapienza agents</h1>
-      <p class="subtitle">interroga il sistema multi-agente in linguaggio naturale. in modalità orchestratore la domanda può essere in qualsiasi lingua, interrogando il solo agente kg va scritta in inglese.</p>
+      <p class="subtitle">interroga il sistema multi-agente in linguaggio naturale. in modalità orchestratore la domanda può essere in qualsiasi lingua, interrogando direttamente l'agente kg va scritta in inglese.</p>
       <div id="plannerBanner" class="planner-banner" hidden></div>
     </div>
 
@@ -27,8 +27,8 @@
       <input type="text" id="question" placeholder="Who directed The Matrix?" autocomplete="off" required>
       <select id="mode">
         <option value="orchestrator">orchestratore</option>
-        <option value="kg">solo agente kg</option>
-        <option value="multiapi">solo agente multiapi</option>
+        <option value="kg">agente kg</option>
+        <option value="multiapi">agente multiapi</option>
         <option value="planner">agente planner</option>
       </select>
       <button type="submit" id="submit">chiedi</button>
@@ -38,8 +38,8 @@
   <aside id="settingsPanel" class="settings-panel">
     <h2 class="settings-title">impostazioni</h2>
 
-    <div class="settings-section">
-      <label class="adv-field">Knowledge Graph
+    <div class="settings-section settings-kg">
+      <label class="adv-field">knowledge graph
         <select id="kg">
           <option value="wikidata">wikidata</option>
           <option value="dbpedia">dbpedia</option>
@@ -48,44 +48,43 @@
       </label>
     </div>
 
-    <hr class="settings-divider">
-
+    <p class="settings-placeholder">nessuna impostazione per questa modalità.</p>
 
     <div id="settingsPlanner" class="settings-planner">
-      <label class="adv-field">Provider
+      <label class="adv-field">provider
         <select id="advProvider">
-          <option value="">Auto / Tutti</option>
+          <option value="">auto / tutti</option>
         </select>
       </label>
 
-      <label class="adv-field">Modello
-        <select id="advModel"><option value="">Auto</option></select>
+      <label class="adv-field">modello
+        <select id="advModel"><option value="">auto</option></select>
       </label>
 
-      <label class="adv-field">Strategia context
+      <label class="adv-field">context mode
         <select id="advContext">
-          <option value="">Auto</option>
-          <option value="none">None</option>
-          <option value="deterministic">Deterministic</option>
-          <option value="react">ReAct</option>
+          <option value="">auto</option>
+          <option value="none">none</option>
+          <option value="deterministic">deterministic</option>
+          <option value="react">react</option>
         </select>
       </label>
 
-      <label class="adv-field">Dominio
+      <label class="adv-field">dominio
         <select id="advDomain">
-          <option value="">Auto</option>
-          <option value="study">Studio</option>
-          <option value="travel">Viaggio</option>
-          <option value="routine">Routine</option>
+          <option value="">auto</option>
+          <option value="study">studio</option>
+          <option value="travel">viaggio</option>
+          <option value="routine">routine</option>
         </select>
       </label>
 
       <div id="advToolsWrap" class="adv-field" hidden>
-        <span>Fonti consentite</span>
+        <span>fonti consentite</span>
         <div id="advTools" class="adv-tools"></div>
       </div>
 
-      <label class="adv-field">Vincoli aggiuntivi
+      <label class="adv-field">vincoli aggiuntivi
         <textarea id="advConstraints" rows="2" placeholder="es. budget massimo 300 euro"></textarea>
       </label>
     </div>
