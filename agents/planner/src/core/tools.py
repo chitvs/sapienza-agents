@@ -171,7 +171,7 @@ TOOL_DESCRIPTIONS: list[dict[str, Any]] = [
         "name": "multiapi_agent",
         "description": (
             "Interroga API esterne in tempo reale. Usa questo tool ESCLUSIVAMENTE per: "
-            "1) Previsioni meteo. 2) Tassi di cambio. 3) Info geografiche base sui paesi."
+            "1) Previsioni meteo. 2) Tassi di cambio. 3) Info geografiche base sui paesi. 4) Fusi orari."
         ),
         "parameters": {
             "tool_input": "La sotto-domanda specifica e mirata da porre in linguaggio naturale."
