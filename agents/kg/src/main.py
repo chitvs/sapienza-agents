@@ -61,8 +61,8 @@ async def lifespan(app: FastAPI):
     close_pipelines()
 
 app = FastAPI(
-    title="knowledge graph agent api",
-    description="microservizio per interrogare knowledge graph in linguaggio naturale.",
+    title="Knowledge graph Agent",
+    description="Microservizio per interrogare knowledge graph in linguaggio naturale.",
     lifespan=lifespan,
 )
 app.include_router(api_router)
