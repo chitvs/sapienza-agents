@@ -1,5 +1,35 @@
 # Laboratorio di Ingegneria Informatica
 
+Sistema multi-agente che risponde a domande in linguaggio naturale interrogando knowledge graph, api pubbliche, e scomponendo le richieste di pianificazione in piani strutturati. Un progetto nato durante il corso di _Laboratorio di Ingegneria Informatica_ del prof. Roberto Navigli, all'Università degli Studi di Roma "La Sapienza".
+
+## Indice
+
+- [Architettura del sistema](#architettura-del-sistema)
+- [Avvio da zero](#avvio-da-zero)
+  - [Ollama](#ollama)
+  - [Avvio](#avvio)
+  - [Verifica](#verifica)
+  - [Gestione dei container](#gestione-dei-container)
+- [Agente kg](#agente-kg)
+  - [Preparazione](#preparazione)
+  - [Knowledge graph supportati](#knowledge-graph-supportati)
+  - [Lingua](#lingua)
+  - [Modelli](#modelli)
+  - [Struttura del codice](#struttura-del-codice)
+  - [Esecuzione in locale](#esecuzione-in-locale-senza-docker)
+  - [Esecuzione tramite docker compose](#esecuzione-tramite-docker-compose)
+  - [Test](#test)
+  - [Benchmark](#benchmark)
+- [Agente planner](#agente-planner)
+- [Agente multiapi](#agente-multiapi)
+  - [Intenti supportati](#intenti-supportati)
+  - [Configurazione](#configurazione)
+  - [Cache](#cache)
+  - [Struttura del codice](#struttura-del-codice-1)
+  - [Esecuzione in locale](#esecuzione-in-locale-senza-docker-1)
+  - [Test](#test-1)
+- [Autori](#autori)
+
 ## Architettura del sistema
 
 ```text
@@ -15,13 +45,19 @@ sapienza-agents/
 
 ## Avvio da zero
 
+L'agente kg richiede una preparazione una tantum necessaria prima del primo `docker compose up`: è descritta [qui](#preparazione).
+
+> [!NOTE]
+> Per quanto riguarda i comandi `docker`, potrebbe essere necessario lanciarli con `sudo`, qualora l'utente non appartenga al gruppo docker.
+
 ### Ollama
 
-Il sistema usa due modelli locali, da scaricare una volta sola:
+Il sistema usa tre modelli locali, da scaricare una volta sola:
 
 ```bash
 ollama pull qwen2.5-coder:7b
 ollama pull qwen2.5:7b-instruct
+ollama pull llama3.2
 ```
 
 ollama va avviato in ascolto su tutte le interfacce, non solo su localhost:
@@ -30,11 +66,78 @@ ollama va avviato in ascolto su tutte le interfacce, non solo su localhost:
 OLLAMA_HOST=0.0.0.0:11434 ollama serve
 ```
 
-è un passaggio obbligatorio se si usa docker, e va rifatto a ogni riavvio della macchina. i container raggiungono l'host attraverso il gateway della rete docker, mentre ollama di default ascolta solo su `127.0.0.1` e rifiuta quelle connessioni. il sintomo è `connection refused` verso `host.docker.internal` a ogni domanda.
+> [!WARNING]
+> è un passaggio obbligatorio se si usa docker, e va rifatto a ogni riavvio della macchina. I container raggiungono l'host attraverso il gateway della rete docker, mentre ollama di default ascolta solo su `127.0.0.1` e rifiuta quelle connessioni. Il sintomo è `connection refused` verso `host.docker.internal` a ogni domanda.
+
+### Avvio
+
+(se non attivo) avviare docker con:
+
+```bash
+systemctl start docker
+```
+
+Dalla root del repository:
+
+```bash
+docker compose up -d
+```
+
+avvia l'intera catena in ordine: neo4j, poi i tre agenti (kg, planner, multiapi), poi l'orchestratore, infine l'interfaccia.
+
+> [!NOTE]
+> il primo avvio è lento. L'avanzamento si può seguire con `docker compose logs -f`, o `docker compose logs -f <servizio>` per uno solo.
+
+### Verifica
+
+Verificare la salute dei servizi con i seguenti comandi:
+
+```bash
+curl -s -o /dev/null -w "kg-agent %{http_code}\n"       localhost:8000/health
+curl -s -o /dev/null -w "planner-agent %{http_code}\n"  localhost:8001/health
+curl -s -o /dev/null -w "multiapi-agent %{http_code}\n" localhost:8002/health
+curl -s -o /dev/null -w "orchestrator %{http_code}\n"   localhost:8080/health
+curl -s -o /dev/null -w "ui %{http_code}\n"             localhost:3000/
+```
+
+Lanciare una domanda vera lungo tutta la catena, dall'interfaccia fino all'agente che la gestisce:
+
+```bash
+curl -X POST localhost:3000/api/orchestrator/query \
+    -H "Content-Type: application/json" \
+    -d '{"question": "Che tempo fa a Roma?"}'
+```
+
+Visualizzare la web ui: http://localhost:3000.
+
+### Gestione dei container
+
+I container si possono gestire con i seguenti comandi:
+
+| comando | effetto |
+|---|---|
+| `docker compose restart` | riavvia i processi, ignora le modifiche a `docker-compose.yml` |
+| `docker compose up -d` | ricrea solo i servizi la cui immagine o configurazione è cambiata |
+| `docker compose up -d --force-recreate` | ricrea tutti i container, anche quelli invariati |
+| `docker compose up -d --build --force-recreate` | come sopra, ricostruendo anche le immagini |
+| `docker compose down && docker compose up -d` | rimuove container e rete, poi li ricrea da zero |
+
+dopo una modifica al codice serve `--build`. Per intervenire su un solo servizio conviene aggiungere `--no-deps`, altrimenti compose tira su anche le dipendenze e si ripaga a ogni giro il precaricamento dei modelli, ad esempio:
+
+```bash
+docker compose up -d --build --no-deps orchestrator
+```
+
+> [!WARNING]
+> `docker compose down -v` cancella anche i volumi: `neo4j-data`, con il dataset cinema da ricaricare via `scripts/setup_neo4j_movies.py`, e `hf-cache`, con i 2.2 gb di modelli da riscaricare.
+
+## Agente kg
+
+L'agente kg traduce domande in linguaggio naturale in query eseguite su un knowledge graph, tramite llm zero-shot. Supporta tre knowledge graph, selezionabili per richiesta con il campo `target_kg`.
 
 ### Preparazione
 
-Le dipendenze python dell'agente kg si installano una volta sola:
+Installare le dipendeze python:
 
 ```bash
 cd agents/kg
@@ -42,16 +145,14 @@ uv venv
 uv pip install -r requirements.txt
 ```
 
-il passaggio non è facoltativo: `uv venv` crea `agents/kg/.venv`, che tutti i comandi `uv run` successivi useranno da soli. senza, `uv run` esegue con l'ambiente che trova e i comandi qui sotto si fermano su `ModuleNotFoundError`.
-
-gli indici ontologici di wikidata e dbpedia sono artefatti di build e vanno generati:
+generare gli indici ontologici di wikidata e dbpedia:
 
 ```bash
 uv run python scripts/ingest_wikidata.py     # ~3300 proprietà, ~500 classi
 uv run python scripts/ingest_dbpedia.py      # ~3000 proprietà, ~800 classi
 ```
 
-poi si avvia neo4j e si carica il dataset del dominio cinema:
+avviare neo4j e caricare il dataset del dominio cinema:
 
 ```bash
 cd ../..
@@ -62,46 +163,118 @@ uv run python scripts/setup_neo4j_movies.py
 
 il dataset è il movie graph ufficiale di neo4j. Resta nel volume `neo4j-data`, quindi non va ricaricato agli avvii successivi.
 
-### Avvio
+### Knowledge graph supportati
 
-dalla root del repository:
+| target_kg  | linguaggio | dati                                 | prerequisiti                         |
+|------------|------------|--------------------------------------|--------------------------------------|
+| `wikidata` | sparql     | endpoint pubblico query.wikidata.org | indice ontologico (vedi setup)       |
+| `dbpedia`  | sparql     | endpoint pubblico dbpedia.org        | indice ontologico (vedi setup)       |
+| `neo4j`    | cypher     | istanza locale, dominio cinema       | istanza avviata e dataset caricato   |
 
-```bash
-docker compose up -d
+Wikidata e dbpedia hanno ontologie troppo grandi per stare in un prompt, quindi lo schema rilevante viene selezionato con una ricerca semantica su indice faiss. Lo schema di un grafo neo4j è invece piccolo e chiuso e quindi viene letto per intero tramite introspezione, senza indici da costruire.
+
+### Lingua
+
+L'agente kg lavora in inglese. L'entity linking cerca le etichette inglesi dei knowledge graph e il retrieval dello schema usa `bge-small-en-v1.5`, che è monolingue: una domanda in un'altra lingua degrada il linking e il recupero delle proprietà prima ancora di arrivare alla traduzione in query.
+
+La traduzione è quindi responsabilità dell'orchestratore, che normalizza la domanda in inglese prima di interpellare l'agente kg e riporta la risposta finale nella lingua in cui è stata posta. Gli altri agenti continuano a ricevere la domanda originale. Nell'interfaccia web questo vale per la modalità orchestratore; interrogando l'agente kg direttamente, la domanda va scritta in inglese.
+
+### Modelli
+
+L'agente usa due modelli ollama con ruoli distinti:
+
+- `qwen2.5-coder:7b` per la generazione delle query, che è un compito di scrittura di codice
+- `qwen2.5:7b-instruct` per l'entity linking, dove il modello generico disambigua meglio di quello specializzato in codice
+
+Entrambi sono configurabili da `.env` (vedi `.env.example`).
+
+### Struttura del codice
+
+```text
+agents/kg/
+├── Dockerfile
+├── pytest.ini
+├── requirements.txt
+├── scripts/                        # costruzione indici faiss e caricamento dataset
+├── benchmarks/                     # benchmark e esperimenti di ablazione
+├── data/                           # indici faiss generati e report di valutazione
+├── src/
+│   ├── api/                        # endpoint fastapi
+│   ├── cache/                      # cache semantica delle domande
+│   ├── configs/                    # settings e prompt
+│   ├── connectors/                 # accesso ai dati di ciascun kg
+│   ├── correctors/                 # correzione delle query fallite
+│   ├── executors/                  # esecuzione delle query
+│   ├── linkers/                    # entity linking (gliner + llm)
+│   ├── models/                     # accesso ai modelli locali e al client ollama
+│   ├── providers/                  # factory dei componenti per kg
+│   ├── pruners/                    # selezione dello schema da passare all'llm
+│   ├── translators/                # traduzione da linguaggio naturale a query
+│   ├── utils/                      # utilità di analisi testuale delle query
+│   ├── pipeline.py                 # orchestratore della pipeline
+│   └── main.py                     # entrypoint fastapi
+└── tests/                          # pytest
 ```
 
-avvia l'intera catena in ordine: neo4j, poi i tre agenti (kg, planner, multiapi), poi l'orchestratore, infine l'interfaccia. per lavorare sul solo agente kg basta `docker compose up -d kg-agent orchestrator ui`.
+Ogni knowledge graph è un provider che compone i propri connector, translator, executor, pruner e corrector.
 
-il primo avvio è lento. il kg-agent precarica i modelli locali e al primo giro li scarica da huggingface: circa 2.2 gb, di cui 2 gb per il solo gliner, con le richieste non autenticate limitate in banda. finché non ha finito il servizio non risponde all'healthcheck e i servizi che dipendono da lui restano in attesa. per seguirlo:
+### Esecuzione in locale (senza docker)
+
+Avviare il microservizio fastapi del kg agent:
 
 ```bash
-docker compose logs -f kg-agent
+cd agents/kg
+uv run uvicorn main:app --app-dir src --reload --host 0.0.0.0 --port 8000
 ```
 
-quando compare `modelli pronti.` il sistema è utilizzabile. dagli avvii successivi i modelli sono nel volume `hf-cache` e il precaricamento richiede una ventina di secondi.
+in locale ollama può restare in ascolto sul solo `127.0.0.1`: il vincolo su `0.0.0.0` riguarda unicamente l'esecuzione in container.
 
-> [!NOTE]
-> Per quanto riguarda i comandi `docker`, potrebbe essere necessario lanciarli con `sudo`, qualora l'utente non appartenga al gruppo docker.
-
-### Verifica
-
-salute dei servizi:
+interrogare il microservizio:
 
 ```bash
-curl -s -o /dev/null -w "kg-agent %{http_code}\n"     localhost:8000/health
-curl -s -o /dev/null -w "orchestrator %{http_code}\n" localhost:8080/health
-curl -s -o /dev/null -w "ui %{http_code}\n"           localhost:3000/
+curl -X POST "http://localhost:8000/query" \
+    -H "Content-Type: application/json" \
+    -d '{"question": "What is the birth date of Albert Einstein?"}'
 ```
 
-una domanda vera lungo tutta la catena, dall'interfaccia fino al grafo:
+per interrogare un knowledge graph diverso da wikidata:
 
 ```bash
-curl -X POST localhost:3000/api/kg/query \
+curl -X POST "http://localhost:8000/query" \
     -H "Content-Type: application/json" \
     -d '{"question": "Who directed The Matrix?", "target_kg": "neo4j"}'
 ```
 
-poi apri http://localhost:3000.
+### Esecuzione tramite docker compose
+
+Il container non ha accesso alla gpu, quindi installa la variante cpu-only di torch. Gli indici faiss vengono montati come volume da `agents/kg/data`, che deve quindi essere già stato generato.
+
+### Test
+
+Per lanciare:
+
+```bash
+cd agents/kg
+uv run pytest -q
+```
+
+Ulteriori dettagli [qui](agents/kg/tests/README.md).
+
+### Benchmark
+
+La valutazione dell'agente kg si fa su due benchmark pubblici della famiglia QALD, con la macro-F1 e le convenzioni del benchmark: [QALD-10](https://github.com/KGQA/QALD-10) per wikidata e lo split di test di [QALD-9-plus](https://github.com/KGQA/QALD_9_plus) per dbpedia.
+
+```bash
+cd agents/kg
+uv run python benchmarks/evaluate_qald.py --sample 30 --gold executed
+uv run python benchmarks/evaluate_qald.py --benchmark qald9plus --sample 30 --gold executed
+```
+
+accanto al benchmark vero e proprio, `benchmarks/ablations/` contiene gli esperimenti che giustificano le singole scelte di progetto: quale segnale usare nella disambiguazione delle entità, se la chiamata all'llm per il linking ripaghi il suo costo, se la rigenerazione di una query che non ha prodotto righe produca davvero una query diversa. `benchmarks/baselines/` pone invece le stesse domande al modello senza knowledge graph, per distinguere quanto del punteggio venga dal grafo e quanto dalla conoscenza già nei pesi. Ulteriori dettagli, e i risultati delle due run complete, [qui](agents/kg/benchmarks/README.md).
+
+## Agente planner
+
+TODO
 
 ## Agente multiapi
 
@@ -177,135 +350,6 @@ python -m pytest -q
 
 La suite si divide in due famiglie. I test di unità (`test_*_offline.py`, `test_robustezza_llm.py`) usano risposte finte e girano in frazioni di secondo senza rete. I test di integrazione interrogano le api vere e Ollama, e vengono **saltati** quando il servizio non è raggiungibile o la chiave non è configurata: le sonde stanno in `tests/conftest.py`. Questo evita sia i fallimenti offline sia il consumo della quota gratuita di RapidAPI a ogni esecuzione.
 
-## Agente kg
+## Autori
 
-L'agente kg traduce domande in linguaggio naturale in query eseguite su un knowledge graph, tramite llm zero-shot. Supporta tre knowledge graph, selezionabili per richiesta con il campo `target_kg`.
-
-### Knowledge graph supportati
-
-| target_kg  | linguaggio | dati                                 | prerequisiti                         |
-|------------|------------|--------------------------------------|--------------------------------------|
-| `wikidata` | sparql     | endpoint pubblico query.wikidata.org | indice ontologico (vedi setup)       |
-| `dbpedia`  | sparql     | endpoint pubblico dbpedia.org        | indice ontologico (vedi setup)       |
-| `neo4j`    | cypher     | istanza locale, dominio cinema       | istanza avviata e dataset caricato   |
-
-Wikidata e dbpedia hanno ontologie troppo grandi per stare in un prompt, quindi lo schema rilevante viene selezionato con una ricerca semantica su indice faiss. Lo schema di un grafo neo4j è invece piccolo e chiuso: viene letto per intero tramite introspezione, senza indici da costruire.
-
-### Lingua
-
-L'agente kg lavora in inglese. L'entity linking cerca le etichette inglesi dei knowledge graph e il retrieval dello schema usa `bge-small-en-v1.5`, che è monolingue: una domanda in un'altra lingua degrada il linking e il recupero delle proprietà prima ancora di arrivare alla traduzione in query.
-
-La traduzione è quindi responsabilità dell'orchestratore, che normalizza la domanda in inglese prima di interpellare l'agente kg e riporta la risposta finale nella lingua in cui è stata posta. Gli altri agenti continuano a ricevere la domanda originale. Nell'interfaccia web questo vale per la modalità orchestratore; interrogando l'agente kg direttamente, la domanda va scritta in inglese.
-
-### Struttura del codice
-
-```text
-agents/kg/
-├── Dockerfile
-├── pytest.ini
-├── requirements.txt
-├── scripts/                        # costruzione indici faiss e caricamento dataset
-├── benchmarks/                     # benchmark e esperimenti di ablazione
-├── data/                           # indici faiss generati e report di valutazione
-├── src/
-│   ├── api/                        # endpoint fastapi
-│   ├── cache/                      # cache semantica delle domande
-│   ├── configs/                    # settings e prompt
-│   ├── connectors/                 # accesso ai dati di ciascun kg
-│   ├── correctors/                 # correzione delle query fallite
-│   ├── executors/                  # esecuzione delle query
-│   ├── linkers/                    # entity linking (gliner + llm)
-│   ├── models/                     # accesso ai modelli locali e al client ollama
-│   ├── providers/                  # factory dei componenti per kg
-│   ├── pruners/                    # selezione dello schema da passare all'llm
-│   ├── translators/                # traduzione da linguaggio naturale a query
-│   ├── utils/                      # utilità di analisi testuale delle query
-│   ├── pipeline.py                 # orchestratore della pipeline
-│   └── main.py                     # entrypoint fastapi
-└── tests/                          # pytest
-```
-
-Ogni knowledge graph è un provider che compone i propri connector, translator, executor, pruner e corrector.
-
-### Modelli
-
-L'agente usa due modelli ollama con ruoli distinti:
-
-- `qwen2.5-coder:7b` per la generazione delle query, che è un compito di scrittura di codice
-- `qwen2.5:7b-instruct` per l'entity linking, dove il modello generico disambigua meglio di quello specializzato in codice
-
-Entrambi sono configurabili da `.env` (vedi `.env.example`).
-
-### Configurazione VS Code
-
-crea il file `.vscode/settings.json` nella root del repository:
-
-```json
-{
-    "python.defaultInterpreterPath": "./agents/kg/.venv/bin/python",
-    "python.analysis.extraPaths": [
-        "./agents/kg/src",
-        "./shared"
-    ]
-}
-```
-
-### Esecuzione in locale (senza docker)
-
-Avvia il microservizio fastapi del kg agent:
-
-```bash
-cd agents/kg
-uv run uvicorn main:app --app-dir src --reload --host 0.0.0.0 --port 8000
-```
-
-in locale ollama può restare in ascolto sul solo `127.0.0.1`: il vincolo su `0.0.0.0` riguarda unicamente l'esecuzione in container.
-
-interroga il microservizio:
-
-```bash
-curl -X POST "http://localhost:8000/query" \
-    -H "Content-Type: application/json" \
-    -d '{"question": "What is the birth date of Albert Einstein?"}'
-```
-
-per interrogare un knowledge graph diverso da wikidata:
-
-```bash
-curl -X POST "http://localhost:8000/query" \
-    -H "Content-Type: application/json" \
-    -d '{"question": "Who directed The Matrix?", "target_kg": "neo4j"}'
-```
-
-### Esecuzione tramite docker compose
-
-Il container non ha accesso alla gpu, quindi installa la variante cpu-only di torch. gli indici faiss vengono montati come volume da `agents/kg/data`, che deve quindi essere già stato generato.
-
-dopo una modifica al codice serve ricostruire l'immagine:
-
-```bash
-sudo docker compose build kg-agent && sudo docker compose up -d kg-agent
-```
-
-### Test
-
-Per lanciare:
-
-```bash
-cd agents/kg
-uv run pytest -q
-```
-
-Ulteriori dettagli [qui](agents/kg/tests/README.md).
-
-### Benchmark
-
-La valutazione dell'agente kg si fa su due benchmark pubblici della famiglia QALD, con la macro-F1 e le convenzioni del benchmark: [QALD-10](https://github.com/KGQA/QALD-10) per wikidata e lo split di test di [QALD-9-plus](https://github.com/KGQA/QALD_9_plus) per dbpedia.
-
-```bash
-cd agents/kg
-uv run python benchmarks/evaluate_qald.py --sample 30 --gold executed
-uv run python benchmarks/evaluate_qald.py --benchmark qald9plus --sample 30 --gold executed
-```
-
-accanto al benchmark vero e proprio, `benchmarks/ablations/` contiene gli esperimenti che giustificano le singole scelte di progetto: quale segnale usare nella disambiguazione delle entità, se la chiamata all'llm per il linking ripaghi il suo costo, se la rigenerazione di una query che non ha prodotto righe produca davvero una query diversa. `benchmarks/baselines/` pone invece le stesse domande al modello senza knowledge graph, per distinguere quanto del punteggio venga dal grafo e quanto dalla conoscenza già nei pesi. Ulteriori dettagli, e i risultati delle due run complete, [qui](agents/kg/benchmarks/README.md).
+Sviluppato da Alessandro Chitarrini, Matteo Crugliano e Davide Gaglione.
