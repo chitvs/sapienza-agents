@@ -1,19 +1,8 @@
 from fastapi.testclient import TestClient
 from main import app
 import pytest
-import httpx
-from configs.settings import settings
 
 client = TestClient(app)
-
-
-def llm_ready() -> bool:
-    if settings.llm_provider.lower() == "gemini":
-        return bool(settings.gemini_api_key)
-    try:
-        return httpx.get(settings.ollama_host, timeout=1).status_code == 200
-    except Exception:
-        return False
 
 
 def test_health():
@@ -22,7 +11,7 @@ def test_health():
     assert res.json() == {"status": "ok", "service": "planner-agent"}
 
 
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm
 def test_query_study_domain():
     res = client.post(
         "/query",
@@ -36,7 +25,7 @@ def test_query_study_domain():
     assert "execution_time_ms" in data
 
 
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm
 def test_query_travel_domain():
     res = client.post("/query", json={"question": "Organizzami un weekend fuori porta a Firenze"})
     assert res.status_code == 200
@@ -45,7 +34,7 @@ def test_query_travel_domain():
     assert len(data["days"]) > 0
 
 
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm
 def test_query_domain_hint_bypasses_classification():
     """domain_hint deve saltare la classificazione; il drafting resta comunque a carico del llm."""
     res = client.post("/query", json={"question": "Struttura le mie giornate lavorative", "domain_hint": "routine"})

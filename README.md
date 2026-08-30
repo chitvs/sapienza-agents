@@ -274,7 +274,117 @@ accanto al benchmark vero e proprio, `benchmarks/ablations/` contiene gli esperi
 
 ## Agente planner
 
-TODO
+L'agente planner è un microservizio specializzato nello scomporre richieste in linguaggio naturale in piani temporali strutturati (formato JSON). Quando l'orchestratore rileva un intento di pianificazione, delega l'intera esecuzione a questo agente. Il planner dispone di un proprio modulo di context gathering che decide se e come interrogare `kg_agent` e `multiapi_agent` per arricchire il piano con dati reali (es. meteo, entità) prima di procedere alla generazione, attraverso una modalità ReAct, deterministica oppure disabilitata.
+
+### Domini supportati
+
+L'agente classifica internamente le richieste in uno dei seguenti domini:
+
+| dominio | scopo | esempi |
+|---|---|---|
+| `study` | Preparazione esami, piani di studio, obiettivi didattici. | "Devo preparare Reti in 3 settimane" |
+| `travel` | Itinerari di viaggio, vacanze, visite strutturate. | "Organizzami un weekend a Firenze" |
+| `routine` | Abitudini giornaliere/settimanali e ritmi lavorativi. | "Struttura le mie giornate lavorative" |
+
+Il dominio `unknown` viene usato per isolare e respingere le richieste fuori scope (es. "Che tempo fa domani?"). Oltre a generare piani da zero, il sistema supporta l'intento di *replanning*, elaborando aggiornamenti mirati su un piano già esistente.
+
+### Context gathering
+
+Prima di generare il piano, il planner decide se e come recuperare dati reali da `kg_agent` e `multiapi_agent` (es. meteo, entità) tramite tre modalità, selezionabili con `context_gathering_mode`:
+
+- **`react`** (default): il modello decide autonomamente, passo per passo, quali tool chiamare, fino a un massimo di `max_react_steps` iterazioni.
+
+- **`deterministic`**: i tool da interrogare sono determinati esplicitamente dalla richiesta tramite `allowed_tools`; il modello viene utilizzato solo per formulare le sotto-domande necessarie, non per decidere quali tool chiamare.
+
+- **`none`**: nessun context gathering, il piano viene generato solo dalla richiesta dell'utente.
+
+Il default globale è `react` con `max_react_steps=3`.
+La modalità può essere modificata globalmente tramite `settings.py`
+oppure sovrascritta per singola richiesta tramite `context_mode`.
+
+### Resilienza
+
+Il planner è progettato per non fallire mai in modo silenzioso quando il context gathering esterno va storto (kg-agent o multiapi-agent non raggiungibili, timeout, tool inesistente, ecc.): ogni fallimento viene registrato esplicitamente in `contingency_notes` invece di essere ignorato, e la `confidence` del piano ha un floor configurabile (`confidence_floor`, default `0.5`, anch'esso solo in `settings.py`) così un problema esterno non la fa mai scendere a zero.
+
+
+### Configurazione
+
+L'agente planner supporta l'esecuzione tramite modelli locali (Ollama) o provider cloud (Gemini, OpenRouter). 
+
+Copiare `.env.example` in `.env` per configurare l'ambiente.
+
+L'engine attivo viene stabilito dalla variabile `LLM_PROVIDER` (valori ammessi: `ollama`, `gemini`, `openrouter` o un ID specifico). A seconda della scelta, valorizzare le relative chiavi nel file `.env`:
+
+- **Ollama**: Non richiede chiavi API, ma il servizio deve essere raggiungibile all'indirizzo configurato in `OLLAMA_HOST`.
+- **Gemini**: Richiede una `GEMINI_API_KEY` valida. Ottenibile gratuitamente su [Google AI Studio](https://aistudio.google.com/app/apikey).
+- **OpenRouter**: Richiede una `OPENROUTER_API_KEY` valida. Creabile su [OpenRouter](https://openrouter.ai/keys).
+
+> **Attenzione:** Nell'impostare la lista dei modelli per `OPENROUTER_MODELS`, i valori devono essere separati da virgole, senza spazi intermedi e rigorosamente su una singola riga (es. `"openai/gpt-oss-20b:free,nvidia/nemotron-3.5-lightning:free"`).
+
+Se il provider selezionato è Gemini o OpenRouter e la relativa chiave manca (o la chiamata fallisce), il client ripiega automaticamente su Ollama, loggando solo un warning — comportamento regolato da `ENABLE_LOCAL_FALLBACK` (default `true`). Con `ENABLE_LOCAL_FALLBACK=false` la richiesta fallisce invece di ripiegare silenziosamente.
+
+#### Auto-discovery dei modelli
+
+Il microservizio espone un endpoint di *discovery* non bloccante (`/models`) progettato per fornire alla UI un elenco dinamico dei modelli pronti all'uso:
+- Contatta il demone **Ollama** per elencare i modelli attualmente scaricati sulla macchina.
+- Interroga le API di **Google** per elencare i modelli Gemini attivi, escludendo automaticamente le varianti sperimentali, audio o vision (non adatte alla generazione JSON).
+- Aggiunge la lista statica di modelli configurata per **OpenRouter** nel file `.env`. Non è stato scelto appositamente di aggiungere la discovery automatica dei modelli anche per OpenRouter data la mole di modelli disponibili che avrebbe appesantito la chiamata.
+
+Per verificare i modelli rilevati:
+
+```bash
+curl -s localhost:8001/models
+```
+
+### Struttura del codice 
+
+```text
+agents/planner/
+├── Dockerfile
+├── pytest.ini
+├── requirements.txt
+├── .env.example
+├── benchmarks/                     # suite di valutazione (dataset, metriche, report)
+│   ├── data/                       # golden dataset e risultati dei test (json/md)
+│   └── metrics/                    # moduli di analisi, calcolo metriche e rendering report
+├── src/
+│   ├── api/                        # endpoint fastapi, schemi pydantic e server-sent events
+│   ├── clients/                    # client http condiviso e wrapper llm
+│   ├── configs/                    # settings e prompt testuali (drafting, replan, react)
+│   ├── core/                       # logica: pipeline, context gathering, tools, validatori
+│   ├── utils/                      # utilità di logging ed eventi
+│   └── main.py                     # entrypoint fastapi
+└── tests/                          # test unitari e di integrazione (pytest)
+    ├── api/                        # test sugli endpoint http
+    ├── integration/                # test di flusso end-to-end della pipeline
+    ├── pipeline/                   # test sui singoli step (classificazione, contesto, finalizzazione)
+    ├── tools/                      # test di resilienza e mocking dei tool esterni
+    └── validators/                 # test sul validatore logico e strutturale dei piani
+```    
+
+### Esecuzione in locale (senza docker)
+
+```bash
+cd agents/planner/src
+python main.py
+```
+
+```bash
+curl -X POST localhost:8001/query -H "Content-Type: application/json" -d '{"question": "Devo preparare l'\''esame di Reti in 3 settimane, studio 2 ore al giorno nei feriali"}'
+```
+
+### Test
+
+```bash
+cd agents/planner
+python -m pytest -q
+```
+
+La maggior parte dei test (`tests/pipeline`, `tests/tools`, `tests/validators`, `tests/configs`) mocka pipeline e client llm e gira offline in frazioni di secondo. I test su `tests/api` e `tests/integration` invocano invece la pipeline reale end-to-end: richiedono un provider llm raggiungibile (Ollama in ascolto, oppure `GEMINI_API_KEY` valorizzata) e vengono **saltati** altrimenti tramite il marker `@pytest.mark.requires_llm`. Ulteriori dettagli [agents/planner/tests/README.md](agents/planner/tests/README.md).
+
+### Benchmark
+
+Il planner ha una suite di benchmark separata dai test: dataset golden multi-dominio, valutazione su più provider/modelli e report di affidabilità e struttura in markdown. Metodologia, dataset e risultati completi in [agents/planner/benchmarks/README.md](agents/planner/benchmarks/README.md).
 
 ## Agente multiapi
 

@@ -1,22 +1,10 @@
 import asyncio
 
-import httpx
 import pytest
 from core.pipeline import PlannerPipeline
 from api.schemas import QueryRequest
-from configs.settings import settings
 
-
-def llm_ready() -> bool:
-    if settings.llm_provider.lower() == "gemini":
-        return bool(settings.gemini_api_key)
-    try:
-        return httpx.get(settings.ollama_host, timeout=1).status_code == 200
-    except Exception:
-        return False
-
-
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm
 def test_esame_universitario():
     pipeline = PlannerPipeline(verbose=True)
     response = asyncio.run(
@@ -27,7 +15,7 @@ def test_esame_universitario():
     assert response.confidence > 0
 
 
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm
 def test_weekend_fuori_porta():
     pipeline = PlannerPipeline(verbose=True)
     response = asyncio.run(pipeline.run(QueryRequest(question="Organizzami un weekend fuori porta a Firenze")))
@@ -36,7 +24,7 @@ def test_weekend_fuori_porta():
     assert response.confidence > 0
 
 
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm
 def test_weekend_fuori_porta_con_contesto_recuperato():
     """dominio 'travel': verifica il nuovo step di context gathering (Step 5). kg-agent e
     multiapi-agent possono non essere in esecuzione in locale: la pipeline non deve MAI
@@ -58,7 +46,7 @@ def test_weekend_fuori_porta_con_contesto_recuperato():
         assert response.contingency_notes
 
 
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm
 def test_routine_lavorativa():
     pipeline = PlannerPipeline(verbose=True)
     response = asyncio.run(pipeline.run(QueryRequest(question="Voglio strutturare meglio le mie giornate lavorative")))
@@ -66,7 +54,7 @@ def test_routine_lavorativa():
     assert len(response.days) == 7
 
 
-@pytest.mark.skipif(not llm_ready(), reason="Provider LLM (gemini/ollama) non disponibile")
+@pytest.mark.requires_llm   
 def test_domanda_fuori_scope():
     """esempio del prompt di classificazione: non deve produrre un piano forzato."""
     pipeline = PlannerPipeline(verbose=True)
