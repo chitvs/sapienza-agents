@@ -116,15 +116,24 @@ async def synthesizer_node(state: AgentState) -> dict:
     agent_results = state.get("agent_results", {})
     
     evidences = []
+    errori: list[tuple[str, str]] = []
     for agent in selected_agents:
         res = agent_results.get(agent)
-        if res and "error" not in res:
+        if not res:
+            continue
+        if "error" in res:
+            errori.append((agent, str(res["error"])))
+        else:
             evidences.append(f"--- Risultati da {agent} ---\n{json.dumps(res, ensure_ascii=False)}")
-        elif res and "error" in res:
-            evidences.append(f"--- Fallimento da {agent} ---\nL'agente ha riportato un errore: {res['error']}")
-            
+
     if not evidences:
-        return {"final_response": "Mi dispiace, si è verificato un errore o gli agenti non hanno restituito dati."}
+        messaggio = "Non sono riuscito a recuperare i dati necessari per rispondere."
+        for agent, errore in errori:
+            messaggio += f"\n- {agent}: {errore}"
+        return {"final_response": messaggio}
+
+    for agent, errore in errori:
+        evidences.append(f"--- Fallimento da {agent} ---\nL'agente ha riportato un errore: {errore}")
 
     context_str = "\n\n".join(evidences)
     language = state.get("language") or "italiano"
@@ -139,6 +148,8 @@ async def synthesizer_node(state: AgentState) -> dict:
         "su dati in tempo reale o su giorni futuri: riportale come fatti accertati. "
         "Non mostrare JSON grezzi, markdown tecnici o strutture dati. "
         "Non premettere che non puoi conoscere queste informazioni e non invitare a verificarle altrove.\n"
+        "Se un'evidenza segnala un fallimento, dichiara che quel dato non è stato recuperato: "
+        "non stimarlo, non dedurlo e non riportare alcun valore tuo al suo posto.\n"
         f"Le evidenze possono essere in inglese: scrivi comunque la risposta in {language}."
     )
     

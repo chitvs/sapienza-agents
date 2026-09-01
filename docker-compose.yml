@@ -93,6 +93,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_MODEL=qwen2.5:7b-instruct
       - TIMEAPI_API_KEY=${TIMEAPI_API_KEY}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health', timeout=3)"]
