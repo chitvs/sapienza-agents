@@ -333,7 +333,8 @@ L'engine attivo viene stabilito dalla variabile `LLM_PROVIDER` (valori ammessi: 
 - **Gemini**: Richiede una `GEMINI_API_KEY` valida. Ottenibile gratuitamente su [Google AI Studio](https://aistudio.google.com/app/apikey).
 - **OpenRouter**: Richiede una `OPENROUTER_API_KEY` valida. Creabile su [OpenRouter](https://openrouter.ai/keys).
 
-> **Attenzione:** Nell'impostare la lista dei modelli per `OPENROUTER_MODELS`, i valori devono essere separati da virgole, senza spazi intermedi e rigorosamente su una singola riga (es. `"openai/gpt-oss-20b:free,nvidia/nemotron-3.5-lightning:free"`).
+> [!WARNING]
+> Nell'impostare la lista dei modelli per `OPENROUTER_MODELS`, i valori devono essere separati da virgole, senza spazi intermedi e rigorosamente su una singola riga (es. `"openai/gpt-oss-20b:free,nvidia/nemotron-3.5-lightning:free"`).
 
 Se il provider selezionato è Gemini o OpenRouter e la relativa chiave manca (o la chiamata fallisce), il client ripiega automaticamente su Ollama, loggando solo un warning — comportamento regolato da `ENABLE_LOCAL_FALLBACK` (default `true`). Con `ENABLE_LOCAL_FALLBACK=false` la richiesta fallisce invece di ripiegare silenziosamente.
 
