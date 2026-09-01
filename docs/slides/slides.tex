@@ -1,0 +1,171 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+
+\usetheme{Madrid}
+\setbeamertemplate{navigation symbols}{}
+
+% footline a una sola casella, colore uniforme
+% autori a sinistra, pagina a destra
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+  \begin{beamercolorbox}[wd=\paperwidth,ht=2.25ex,dp=1ex,leftskip=2ex,rightskip=2ex]{author in head/foot}%
+    \usebeamerfont{author in head/foot}\insertshortauthor%
+    \hfill%
+    \usebeamerfont{page number in head/foot}\usebeamertemplate{page number in head/foot}%
+  \end{beamercolorbox}}%
+  \vskip0pt%
+}
+
+\definecolor{granata}{HTML}{8A2836}
+\definecolor{acqua}{HTML}{10585D}
+\definecolor{grigio}{HTML}{5C636C}
+\usecolortheme[named=granata]{structure}
+
+\tikzset{
+  stage/.style={draw=granata!55, fill=granata!7, rounded corners=2pt,
+                inner sep=3pt, minimum height=7.5mm, text width=17mm,
+                align=center, font=\scriptsize\bfseries},
+  nodo/.style={draw=acqua!60, fill=acqua!7, rounded corners=2pt,
+               inner sep=3pt, minimum height=7mm, text width=20mm,
+               align=center, font=\scriptsize\bfseries},
+  term/.style={draw=grigio!60, fill=black!4, rounded corners=2pt,
+               inner sep=3pt, minimum height=7mm, text width=16mm,
+               align=center, font=\scriptsize},
+  sub/.style={font=\tiny, text=grigio, align=center, text width=19mm},
+  nota/.style={font=\tiny\itshape, text=acqua, align=center},
+  fl/.style={-{Stealth[length=4pt]}, draw=grigio, semithick},
+  loop/.style={-{Stealth[length=4pt]}, draw=acqua, semithick, dashed},
+  scrivi/.style={-{Stealth[length=4pt]}, draw=granata, semithick, dotted},
+}
+
+\title[Sapienza Agents]{Sapienza Agents}
+\subtitle{Un sistema multi-agente per domande in linguaggio naturale}
+\author[Alessandro Chitarrini, Matteo Crugliano, Davide Gaglione]{%
+  \begin{tabular}{@{}ccc@{}}
+    Alessandro Chitarrini & Matteo Crugliano & Davide Gaglione \\[0.15em]
+    {\tiny\texttt{chitarrini.2129549@studenti.uniroma1.it}} &
+    {\tiny\texttt{crugliano.2127105@studenti.uniroma1.it}} &
+    {\tiny\texttt{gaglione.2150498@studenti.uniroma1.it}}
+  \end{tabular}%
+}
+\institute[]{Laboratorio di Ingegneria Informatica \\ Sapienza Università di Roma}
+\date{2 settembre 2026}
+
+\begin{document}
+
+% ---------------------------------------------------------------- titolo
+\begin{frame}[plain]
+  \titlepage
+\end{frame}
+
+% ---------------------------------------------------------------- orchestratore
+\begin{frame}{Orchestratore}
+\centering
+
+\begin{tikzpicture}
+
+\node[term] (dom) at (0,0) {Domanda};
+\node[nodo] (sup) at (3.0,0) {Supervisor};
+\node[nodo] (kg) at (6.3,1.15) {Agente kg};
+\node[nodo] (pl) at (6.3,0) {Agente planner};
+\node[nodo] (ma) at (6.3,-1.15) {Agente multiapi};
+\node[nodo] (syn) at (9.5,0) {Synthesizer};
+\node[term] (out) at (12.1,0) {Risposta};
+
+\draw[fl] (dom) -- (sup);
+\draw[fl] (sup) -- (kg);
+\draw[fl] (sup) -- (pl);
+\draw[fl] (sup) -- (ma);
+\draw[fl] (kg) -- (syn);
+\draw[fl] (pl) -- (syn);
+\draw[fl] (ma) -- (syn);
+\draw[fl] (syn) -- (out);
+
+\end{tikzpicture}
+
+\end{frame}
+
+% ---------------------------------------------------------------- agente kg
+\begin{frame}{Agente knowledge graph}
+\centering
+\begin{tikzpicture}[node distance=3.2mm]
+
+\node[stage] (cache) {Cache\\semantica};
+\node[stage, right=of cache] (link) {Entity\\linking};
+\node[stage, right=of link] (schema) {Schema\\retrieval};
+\node[stage, right=of schema] (trad) {Traduzione\\text2query};
+\node[stage, right=of trad] (exec) {Esecuzione};
+\node[stage, right=of exec] (ground) {Grounding};
+
+\foreach \a/\b in {cache/link, link/schema, schema/trad, trad/exec, exec/ground}
+  \draw[fl] (\a) -- (\b);
+
+\draw[loop] ([xshift=4mm]exec.north) .. controls +(0,17mm) and +(0,17mm) .. ([xshift=-4mm]trad.north)
+  node[midway, above=0.6mm, font=\tiny, text=acqua, fill=white, inner sep=1pt]
+  {zero righe $\rightarrow$ rigenerazione ReAct};
+
+\draw[loop] ([xshift=-2mm]exec.north) .. controls +(0,8mm) and +(0,8mm) .. ([xshift=2mm]trad.north)
+  node[midway, above=0.6mm, font=\tiny, text=acqua, fill=white, inner sep=1pt]
+  {errore $\rightarrow$ riscrivi la query};
+
+\coordinate (dx) at ([xshift=6mm]ground.east);
+\coordinate (sx) at ([xshift=-6mm]cache.west);
+\coordinate (giu) at ([yshift=-6mm]cache.south);
+\draw[scrivi, rounded corners=3pt]
+  (ground.east) -- (dx) -- (dx |- giu) -- (sx |- giu) -- (sx) -- (cache.west);
+\node[font=\tiny, text=granata, below=0.4mm] at ($(sx |- giu)!0.5!(dx |- giu)$)
+  {scrittura in cache, solo se ci sono risultati};
+
+\end{tikzpicture}
+
+\vspace{1.2em}
+
+\begin{columns}[t,onlytextwidth]
+\begin{column}{0.44\textwidth}
+\scriptsize
+\vspace{-5.1em}
+\begin{itemize}\setlength\itemsep{1pt}
+  \item tre grafi (Wikidata, DBpedia, Neo4j) supportati
+  \item zero-shot: nessun fine-tuning
+  \item QALD-10: macro-F1 \textbf{0.377} contro \textbf{0.284} senza grafo
+  \item lavora in inglese per costruzione
+\end{itemize}
+\end{column}
+\begin{column}{0.52\textwidth}
+\centering\scriptsize\renewcommand{\arraystretch}{0.95}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{modello} & \textbf{dove} \\
+\midrule
+all-MiniLM-L6-v2 & cache semantica \\
+GLiNER & estrazione delle menzioni \\
+bge-small-en-v1.5 & schema retrieval, candidati \\
+qwen2.5:7b-instruct & filtro e disambiguazione entità \\
+qwen2.5-coder:7b & generazione e correzione query \\
+\bottomrule
+\end{tabular}
+\end{column}
+\end{columns}
+\end{frame}
+
+% ----------------------------------------------------------------  multiapi
+\begin{frame}{Agente multiapi}
+\centering
+todo
+\end{frame}
+
+% ---------------------------------------------------------------- planner
+\begin{frame}{Agente planner}
+\centering
+todo
+\end{frame}
+
+\end{document}

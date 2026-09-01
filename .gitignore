@@ -1,7 +1,18 @@
 # personal files
 todo.md
 .vscode
-docs/
+
+# slides, report
+docs/*
+!docs/report/
+!docs/slides/
+docs/report/*
+docs/slides/*
+!docs/report/*.tex
+!docs/report/*.pdf
+!docs/report/*.sty
+!docs/slides/*.tex
+!docs/slides/*.pdf
 
 # python stuff
 __pycache__/
