@@ -172,7 +172,7 @@ qwen2.5-coder:7b & generazione e correzione query \\
 \begin{tikzpicture}[node distance=3.2mm]
 
 \node[stage] (cache) {Cache};
-\node[stage, right=of cache] (cls) {Classificazione\\intento};
+\node[stage, right=of cache] (cls) {Classificazione\\intenti};
 \node[stage, right=of cls] (est) {Estrazione\\parametri};
 \node[stage, right=of est] (api) {Chiamata\\api};
 \node[stage, right=of api] (sint) {Sintesi};
@@ -181,14 +181,12 @@ qwen2.5-coder:7b & generazione e correzione query \\
   \draw[fl] (\a) -- (\b);
 
 \node[sub, below=1.2mm of cache] {chiave\\normalizzata};
-\node[sub, below=1.2mm of cls]   {intento principale\\e secondari};
+\node[sub, below=1.2mm of cls]   {intento principale\\e secondario};
 \node[sub, below=1.2mm of est]   {città, valute,\\importo, giorno};
 \node[sub, below=1.2mm of api]   {un provider\\per intento};
 \node[sub, below=1.2mm of sint]  {riga in linguaggio\\naturale};
 
-\draw[loop] ([xshift=4mm]est.north) .. controls +(0,7mm) and +(0,7mm) .. ([xshift=-4mm]est.north)
-  node[midway, above=0.6mm, font=\tiny, text=acqua, fill=white, inner sep=1pt]
-  {json non utilizzabile};
+
 
 \coordinate (dx) at ([xshift=6mm]sint.east);
 \coordinate (sx) at ([xshift=-6mm]cache.west);
