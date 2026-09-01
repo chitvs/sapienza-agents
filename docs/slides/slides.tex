@@ -117,17 +117,19 @@
 \foreach \a/\b in {cache/link, link/schema, schema/trad, trad/exec, exec/ground}
   \draw[fl] (\a) -- (\b);
 
-\draw[loop] ([xshift=4mm]exec.north) .. controls +(0,17mm) and +(0,17mm) .. ([xshift=-4mm]trad.north)
-  node[midway, above=0.6mm, font=\tiny, text=acqua, fill=white, inner sep=1pt]
-  {zero righe $\rightarrow$ rigenerazione ReAct};
+\node[sub, below=1.2mm of cache]  {analisi similarità\\};
+\node[sub, below=1.2mm of link]   {estrazione menzioni\\filtro LLM\\disambiguazione\\ranking};
+\node[sub, below=1.2mm of trad]   {Text2SPARQL\\Text2Cypher};
+\node[sub, below=1.2mm of schema] {ricerca FAISS};
+\node[sub, below=1.2mm of ground] {risultato\\leggibile};
 
 \draw[loop] ([xshift=-2mm]exec.north) .. controls +(0,8mm) and +(0,8mm) .. ([xshift=2mm]trad.north)
   node[midway, above=0.6mm, font=\tiny, text=acqua, fill=white, inner sep=1pt]
-  {errore $\rightarrow$ riscrivi la query};
+  {errore o risultato vuoto};
 
 \coordinate (dx) at ([xshift=6mm]ground.east);
 \coordinate (sx) at ([xshift=-6mm]cache.west);
-\coordinate (giu) at ([yshift=-6mm]cache.south);
+\coordinate (giu) at ([yshift=-13mm]cache.south);
 \draw[scrivi, rounded corners=3pt]
   (ground.east) -- (dx) -- (dx |- giu) -- (sx |- giu) -- (sx) -- (cache.west);
 \node[font=\tiny, text=granata, below=0.4mm] at ($(sx |- giu)!0.5!(dx |- giu)$)
@@ -142,17 +144,16 @@
 \scriptsize
 \vspace{-5.1em}
 \begin{itemize}\setlength\itemsep{1pt}
-  \item tre grafi (Wikidata, DBpedia, Neo4j) supportati
-  \item zero-shot: nessun fine-tuning
+  \item Wikidata, DBpedia e Neo4j supportati
   \item QALD-10: macro-F1 \textbf{0.377} contro \textbf{0.284} senza grafo
-  \item lavora in inglese per costruzione
+  \item Lavora in inglese per costruzione
 \end{itemize}
 \end{column}
 \begin{column}{0.52\textwidth}
 \centering\scriptsize\renewcommand{\arraystretch}{0.95}
 \begin{tabular}{@{}ll@{}}
 \toprule
-\textbf{modello} & \textbf{dove} \\
+\textbf{modello usato} & \textbf{dove} \\
 \midrule
 all-MiniLM-L6-v2 & cache semantica \\
 GLiNER & estrazione delle menzioni \\
