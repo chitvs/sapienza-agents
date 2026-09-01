@@ -2,6 +2,8 @@
 
 Sistema multi-agente che risponde a domande in linguaggio naturale interrogando knowledge graph, api pubbliche, e scomponendo le richieste di pianificazione in piani strutturati. Un progetto nato durante il corso di _Laboratorio di Ingegneria Informatica_ del prof. Roberto Navigli, all'Università degli Studi di Roma "La Sapienza".
 
+Documenti: [slide](docs/slides/slides.pdf), [report](docs/report/report.pdf).
+
 ## Indice
 
 - [Architettura del sistema](#architettura-del-sistema)
