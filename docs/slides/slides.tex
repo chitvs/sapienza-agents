@@ -169,7 +169,63 @@ qwen2.5-coder:7b & generazione e correzione query \\
 % ----------------------------------------------------------------  multiapi
 \begin{frame}{Agente multiapi}
 \centering
-todo
+\begin{tikzpicture}[node distance=3.2mm]
+
+\node[stage] (cache) {Cache};
+\node[stage, right=of cache] (cls) {Classificazione\\intento};
+\node[stage, right=of cls] (est) {Estrazione\\parametri};
+\node[stage, right=of est] (api) {Chiamata\\api};
+\node[stage, right=of api] (sint) {Sintesi};
+
+\foreach \a/\b in {cache/cls, cls/est, est/api, api/sint}
+  \draw[fl] (\a) -- (\b);
+
+\node[sub, below=1.2mm of cache] {chiave\\normalizzata};
+\node[sub, below=1.2mm of cls]   {intento principale\\e secondari};
+\node[sub, below=1.2mm of est]   {città, valute,\\importo, giorno};
+\node[sub, below=1.2mm of api]   {un provider\\per intento};
+\node[sub, below=1.2mm of sint]  {riga in linguaggio\\naturale};
+
+\draw[loop] ([xshift=4mm]est.north) .. controls +(0,7mm) and +(0,7mm) .. ([xshift=-4mm]est.north)
+  node[midway, above=0.6mm, font=\tiny, text=acqua, fill=white, inner sep=1pt]
+  {json non utilizzabile};
+
+\coordinate (dx) at ([xshift=6mm]sint.east);
+\coordinate (sx) at ([xshift=-6mm]cache.west);
+\coordinate (giu) at ([yshift=-14mm]cache.south);
+\draw[scrivi, rounded corners=3pt]
+  (sint.east) -- (dx) -- (dx |- giu) -- (sx |- giu) -- (sx) -- (cache.west);
+\node[font=\tiny, text=granata, below=0.4mm] at ($(sx |- giu)!0.5!(dx |- giu)$)
+  {scrittura in cache, con la durata più breve fra gli intenti serviti};
+
+\end{tikzpicture}
+
+\vspace{1.2em}
+
+\begin{columns}[t,onlytextwidth]
+\begin{column}{0.44\textwidth}
+\scriptsize
+\vspace{-3.5em}
+\begin{itemize}\setlength\itemsep{1pt}
+  \item Il modello classifica ed estrae, non scrive mai la risposta
+  \item Una domanda che cita due temi riceve un risultato per ciascuno
+  \item 139 test; l'integrazione si salta se il servizio non risponde
+\end{itemize}
+\end{column}
+\begin{column}{0.52\textwidth}
+\centering\scriptsize\renewcommand{\arraystretch}{0.95}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{intento} & \textbf{api} & \textbf{cache} \\
+\midrule
+\texttt{weather} & Open-Meteo & 10 min \\
+\texttt{exchange\_rate} & Frankfurter & 1 ora \\
+\texttt{country\_info} & countries.dev & 24 ore \\
+\texttt{time\_info} & world-time-api3 & mai \\
+\bottomrule
+\end{tabular}
+\end{column}
+\end{columns}
 \end{frame}
 
 % ---------------------------------------------------------------- planner
