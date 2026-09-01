@@ -32,6 +32,9 @@ Sistema multi-agente che risponde a domande in linguaggio naturale interrogando 
   - [Benchmark](#benchmark-1)
 - [Agente multiapi](#agente-multiapi)
   - [Intenti supportati](#intenti-supportati)
+  - [Come funziona una richiesta](#come-funziona-una-richiesta)
+  - [Domande che citano due temi](#domande-che-citano-due-temi)
+  - [Formato della risposta](#formato-della-risposta)
   - [Configurazione](#configurazione-1)
   - [Cache](#cache)
   - [Struttura del codice](#struttura-del-codice-2)
@@ -397,7 +400,9 @@ Il planner ha una suite di benchmark separata dai test: dataset golden multi-dom
 
 ## Agente multiapi
 
-L'agente multiapi risponde a domande in linguaggio naturale interrogando api pubbliche. Un llm classifica l'intento della domanda, un secondo prompt ne estrae i parametri, e il provider corrispondente chiama l'api. A differenza dell'agente kg lavora direttamente in italiano: non ha bisogno della traduzione dell'orchestratore.
+L'agente multiapi risponde a domande in linguaggio naturale interrogando api pubbliche. Un llm classifica l'intento della domanda, un secondo prompt ne estrae i parametri, e il provider corrispondente chiama l'api. A differenza dell'agente kg lavora direttamente in italiano: l'orchestratore gli inoltra la domanda originale, senza passare dalla traduzione in inglese.
+
+Il modello non produce mai la risposta finale, ma solo la classificazione e i parametri: i dati arrivano sempre dall'api.
 
 ### Intenti supportati
 
@@ -408,11 +413,77 @@ L'agente multiapi risponde a domande in linguaggio naturale interrogando api pub
 | `country_info` | [countries.dev](https://countries.dev) | no | "Quanti abitanti ha il Giappone?" |
 | `time_info` | world-time-api3 su RapidAPI | **sì** | "Che ore sono a Tokyo?" |
 
-Il meteo distingue le condizioni correnti dalle previsioni: `days_ahead` viene estratto dalla domanda (`null` = adesso, `0` = oggi, `1` = domani, fino a 6 giorni). Il cambio valuta converte un importo e accetta una data passata; nei giorni senza fixing usa l'ultimo disponibile e lo dichiara nel campo `requested_date`.
+Una domanda che non ricade in nessuno di questi casi viene classificata `unknown` e produce un errore esplicito, invece di una risposta inventata.
+
+**Meteo.** Il provider distingue le condizioni correnti dalle previsioni in base al parametro `days_ahead`, estratto dalla domanda insieme alla città: `null` significa "adesso", `0` oggi, `1` domani, fino a un massimo di 6 giorni. Al prompt viene passata anche la data odierna, perché il modello da solo non può tradurre "dopodomani" in un numero di giorni.
+
+**Cambio valuta.** Oltre al tasso, converte un importo (`"quanto sono 100 dollari in euro?"`) e accetta una data passata (`"quanto valeva il cambio yen dollaro all 3 marzo 2020?"`). Frankfurter pubblica i tassi di riferimento BCE a partire dal 1999: una data precedente viene scartata e si ricade sul tasso corrente. Nei giorni senza fixing, come i fine settimana, l'api risponde con l'ultimo pubblicato: in quel caso la risposta riporta la data effettivamente usata e conserva quella richiesta nel campo `requested_date`, così lo scarto non sembra un errore.
+
+
+### Come funziona una richiesta
+
+```text
+domanda
+   │
+   ├─ 0. cache: se la stessa domanda è già stata servita e non è scaduta, si risponde subito
+   ├─ 1. classificazione dell'intento (llm)
+   ├─ 2. per ciascun intento riconosciuto:
+   │        estrazione dei parametri (llm)  →  chiamata all'api  →  sintesi leggibile
+   └─ 3. memorizzazione in cache
+```
+
+I passi 1 e 2 sono le uniche chiamate al modello: una per la classificazione e una per ogni intento servito. Entrambe usano `format: "json"` di Ollama, che vincola la decodifica a produrre json sintatticamente valido.
+
+### Domande che citano due temi
+
+Il classificatore riconosce anche i temi secondari, e la pipeline serve un ramo per ciascuno fino al limite di `max_intents_per_question` (2 di default, perché ogni intento in più costa una chiamata al modello e una all'api). Una domanda come *"Che tempo fa a Roma e che ore sono?"* produce due risultati, ognuno con il proprio campo `intent`, che l'interfaccia mostra in due schede separate.
+
+I temi riconosciuti ma non serviti, perché eccedono il limite, finiscono in `ignored_intents`: l'interfaccia lo usa per avvisare che la risposta copre solo parte della domanda, invece di lasciarla passare per completa.
+
+### Formato della risposta
+
+`POST /query` accetta `{"question": "..."}` e restituisce:
+
+| campo | significato |
+|---|---|
+| `question` | la domanda ricevuta, così com'è |
+| `intent` | l'intento principale riconosciuto |
+| `results` | un elemento per intento servito |
+| `count` | numero di elementi in `results` |
+| `confidence` | frazione di risultati validi: `1.0` se tutti riusciti, `0.5` se metà, `0.0` se nessuno |
+| `execution_time_ms` | durata della richiesta |
+| `cached` | `true` se la risposta è stata riusata dalla cache invece di interrogare le api |
+| `ignored_intents` | temi riconosciuti ma lasciati senza risposta |
+| `error` | presente **solo** quando nessun risultato è utilizzabile |
+
+`error` è assente, e non nullo, quando la richiesta è andata a buon fine: i chiamanti ne verificano la presenza con `if "error" in result`
+
+Ogni elemento di `results` porta i campi grezzi dell'api, il proprio `intent` e un campo `summary` in linguaggio naturale. Quest'ultimo esiste perché i risultati non finiscono solo nell'interfaccia: orchestratore e planner li passano a un llm come evidenze, e una frase è più difficile da fraintendere di un dizionario di campi tecnici.
+
+```json
+{
+  "provider": "open-meteo",
+  "kind": "forecast",
+  "city": "Roma",
+  "country": "Italia",
+  "country_code": "IT",
+  "days_ahead": 1,
+  "date": "2026-09-02",
+  "temperature_min_c": 21.2,
+  "temperature_max_c": 35.0,
+  "precipitation_probability_percent": 0,
+  "condition": "Coperto",
+  "weather_code": 3,
+  "sunrise": "06:36",
+  "sunset": "19:42",
+  "intent": "weather",
+  "summary": "Previsione meteo per Roma (Italia) domani (2 settembre 2026): coperto, temperatura fra 21.2°C e 35.0°C, probabilità di pioggia 0%, alba alle 06:36, tramonto alle 19:42."
+}
+```
 
 ### Configurazione
 
-Il solo provider che richiede una chiave è quello dell'ora locale. Copiare `.env.example` in `.env` e inserire la chiave RapidAPI **senza virgolette**: nella sintassi a lista di `docker-compose` le virgolette entrerebbero nel valore e RapidAPI risponderebbe `403`.
+Il solo provider che richiede una chiave è quello dell'ora locale. Copiare `.env.example` in `.env` e inserire la chiave RapidAPI **senza virgolette**: nella sintassi a lista di `docker-compose` le virgolette entrerebbero nel valore, e RapidAPI risponderebbe `403`.
 
 ```bash
 cd agents/multiapi
@@ -421,15 +492,29 @@ cp .env.example .env
 
 In alternativa si può valorizzare `TIMEAPI_API_KEY` nel `.env` alla root, che `docker compose` carica da solo.
 
-`/health` riporta lo stato di ciascun provider: senza chiave, `time_info` segnala `TIMEAPI_API_KEY mancante` mentre il servizio resta `ok`, perché gli altri tre continuano a funzionare.
+`/health` riporta lo stato di ciascun provider: senza chiave, `time_info` segnala `TIMEAPI_API_KEY mancante` mentre il servizio resta `ok`, perché gli altri tre continuano a funzionare e far fallire l'healthcheck bloccherebbe l'avvio dell'orchestratore.
 
 ```bash
 curl -s localhost:8002/health
 ```
 
+Le altre impostazioni stanno in `src/configs/settings.py` e si possono sovrascrivere da `.env` o da variabili d'ambiente: modello e timeout di Ollama, url dei provider, capienza e durate della cache, numero massimo di intenti per domanda, tentativi del corrector e log passo-passo della pipeline (`VERBOSE_PIPELINE`, spento di default).
+
 ### Cache
 
-Le risposte sono memorizzate con una scadenza per intento, proporzionata a quanto invecchia il dato: `time_info` non viene mai messo in cache (un orario riusato è per definizione sbagliato), il meteo dura 10 minuti, il cambio valuta un'ora, i dati di un paese un giorno. Il campo `cached` nella risposta dice se il risultato è stato riusato.
+Le risposte sono memorizzate in memoria, con la domanda normalizzata come chiave: minuscolo, senza punteggiatura, spazi multipli collassati. "Che tempo fa a Roma?" e "che tempo fa a roma" sono quindi la stessa voce. La capienza è di 100 voci e, quando è piena, viene rimossa la più vecchia inserita.
+
+Ogni voce ha una scadenza proporzionata a quanto invecchia il dato:
+
+| intento | durata | perché |
+|---|---|---|
+| `time_info` | mai in cache | è un orologio: una risposta riusata è per definizione sbagliata |
+| `weather` | 10 minuti | Open-Meteo aggiorna il dato corrente circa ogni 15 minuti |
+| `exchange_rate` | 1 ora | Frankfurter pubblica un fixing al giorno |
+| `country_info` | 24 ore | capitale, superficie e lingue non cambiano |
+
+Quando una domanda ne serve due, vale la durata **più breve** fra gli intenti coinvolti: la risposta è una sola e scade tutta insieme, quindi conta il dato che invecchia prima. Una domanda su meteo e ora, di conseguenza, non viene mai memorizzata. Il campo `cached` nella risposta dice se il risultato è stato riusato.
+
 
 ### Struttura del codice
 
@@ -439,15 +524,22 @@ agents/multiapi/
 ├── pytest.ini
 ├── requirements.txt
 ├── .env.example
-└── src/
-    ├── api/                        # endpoint fastapi e schemi di richiesta/risposta
-    ├── cache/                      # cache delle risposte con scadenza per intento
-    ├── configs/                    # settings e prompt
-    ├── correctors/                 # riprova quando il llm non produce json valido
-    ├── providers/                  # un modulo per api esterna
-    ├── pipeline.py                 # classificazione, estrazione, instradamento
-    └── main.py                     # entrypoint fastapi
+├── src/
+│   ├── api/                        # endpoint fastapi e schemi di richiesta/risposta
+│   ├── cache/                      # cache delle risposte con scadenza per intento
+│   ├── configs/                    # settings e prompt
+│   ├── correctors/                 # riprova quando il llm non produce json utilizzabile
+│   ├── providers/                  # un modulo per api esterna
+│   ├── pipeline.py                 # classificazione, estrazione, instradamento
+│   ├── summaries.py                # sintesi in linguaggio naturale dei risultati
+│   └── main.py                     # entrypoint fastapi
+└── tests/
+    ├── conftest.py                 # sonde dei servizi esterni e risposte finte
+    ├── api/  cache/  configs/  correctors/  integration/  providers/
+    └── test_summaries.py
 ```
+
+I quattro provider seguono tutti la stessa forma: un metodo `fetch` che riceve i parametri estratti e restituisce un dizionario con i dati, oppure con una chiave `error`. Aggiungere un intento richiede però di toccare più punti, tutti brevi: il provider e il suo prompt di estrazione, una voce in `classify_intent.txt` e in `SUPPORTED_INTENTS`, una nella tabella dei rami della pipeline, una durata in `cache_ttl_by_intent`, una funzione in `summaries.PER_INTENT` e una scheda in `CARD_BY_INTENT` lato interfaccia.
 
 ### Esecuzione in locale (senza docker)
 
@@ -460,6 +552,12 @@ uvicorn main:app --app-dir src --reload --host 0.0.0.0 --port 8002
 curl -X POST localhost:8002/query -H "Content-Type: application/json" -d '{"question": "Che tempo fa a Roma?"}'
 ```
 
+```bash
+curl -X POST localhost:8002/query -H "Content-Type: application/json" -d '{"question": "Quanto sono 100 dollari in euro?"}'
+```
+
+Serve Ollama attivo: senza, la classificazione dell'intento non può essere eseguita.
+
 ### Test
 
 ```bash
@@ -467,7 +565,15 @@ cd agents/multiapi
 python -m pytest -q
 ```
 
-La suite si divide in due famiglie. I test di unità (`test_*_offline.py`, `test_robustezza_llm.py`) usano risposte finte e girano in frazioni di secondo senza rete. I test di integrazione interrogano le api vere e Ollama, e vengono **saltati** quando il servizio non è raggiungibile o la chiave non è configurata: le sonde stanno in `tests/conftest.py`. Questo evita sia i fallimenti offline sia il consumo della quota gratuita di RapidAPI a ogni esecuzione.
+139 test, divisi in due famiglie con costi molto diversi.
+
+I **test di unità** sostituiscono le risposte delle api e del modello con valori fissi, non toccano la rete e girano in frazioni di secondo: `test_weather_offline.py` e `test_exchange_offline.py` per il parsing dei provider, `test_robustezza_llm.py` per le risposte malformate del modello, `test_multi_intent.py` per le domande su più temi, `test_summaries.py` per le sintesi, più cache e configurazione.
+
+I **test di integrazione** interrogano davvero le api esterne e Ollama. Vengono **saltati**, non fatti fallire, quando il servizio non risponde o la chiave non è configurata: le sonde stanno in `tests/conftest.py`, una per provider, e il loro esito è messo in cache per l'intera esecuzione. Questo evita sia i fallimenti offline sia il consumo della quota gratuita di RapidAPI a ogni run.
+
+```bash
+python -m pytest tests/providers/test_weather_offline.py tests/integration/test_robustezza_llm.py -q
+```
 
 ## Autori
 

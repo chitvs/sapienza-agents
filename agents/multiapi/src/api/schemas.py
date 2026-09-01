@@ -21,8 +21,8 @@ class QueryResponse(BaseModel):
     ignored_intents: list[str] = Field(
         default_factory=list,
         description=(
-            "temi presenti nella domanda a cui non è stata data risposta. La "
-            "pipeline gestisce un intent per volta: questo campo permette al "
+            "temi riconosciuti nella domanda ma lasciati senza risposta, perché "
+            "eccedono il numero di intent servibili per richiesta. Permette al "
             "chiamante di segnalare che la risposta copre solo parte della domanda."
         ),
     )

@@ -94,3 +94,28 @@ def test_cache_stores_results():
     cached = pipeline.cache.get("Che tempo fa a Londra?")
     assert cached is not None
     assert cached["intent"] == "weather"
+
+
+def test_llm_generate_chiede_output_json(monkeypatch):
+    """ollama vincola la decodifica a json valido solo se il payload lo richiede."""
+    import pipeline as modulo
+
+    inviato = {}
+
+    class RispostaOllama:
+        def raise_for_status(self): pass
+        def json(self): return {"response": '{"intent": "weather"}'}
+
+    def finta_post(url, json=None, timeout=None):
+        inviato["url"] = url
+        inviato["payload"] = json
+        return RispostaOllama()
+
+    monkeypatch.setattr(modulo.requests, "post", finta_post)
+
+    testo = MultiApiPipeline()._llm_generate("un prompt qualsiasi")
+
+    assert testo == '{"intent": "weather"}'
+    assert inviato["payload"]["format"] == "json"
+    assert inviato["payload"]["stream"] is False
+    assert inviato["payload"]["options"]["temperature"] == 0.0

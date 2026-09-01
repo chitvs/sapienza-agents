@@ -54,6 +54,10 @@ class MultiApiPipeline:
             "prompt": prompt,
             "stream": False,  # aspetta la risposta completa e non stampa token per token
             "options": {"temperature": temperature},  # temperatura llm 0 per risposte deterministiche
+            # vincola la decodifica a produrre json sintatticamente valido: tutti
+            # i prompt di questo agente ne chiedono uno. I controlli a valle
+            # restano, perché il formato garantisce la sintassi, non le chiavi
+            "format": "json",
         }
         resp = requests.post(url, json=payload, timeout=settings.ollama_timeout)
         resp.raise_for_status()
