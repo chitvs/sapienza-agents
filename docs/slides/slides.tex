@@ -229,7 +229,56 @@ qwen2.5-coder:7b & generazione e correzione query \\
 % ---------------------------------------------------------------- planner
 \begin{frame}{Agente planner}
 \centering
-todo
+\begin{tikzpicture}[node distance=3.2mm]
+
+\node[stage, text width=19mm] (dominio) {Classificazione\\dominio};
+\node[stage, text width=19mm, right=of dominio] (ctx) {Context\\gathering};
+\node[stage, text width=19mm, right=of ctx] (draft) {Drafting\\del piano};
+\node[stage, text width=19mm, right=of draft] (val) {Validazione};
+\node[stage, text width=19mm, right=of val] (out) {Piano\\strutturato};
+
+\foreach \a/\b in {dominio/ctx, ctx/draft, draft/val, val/out}
+  \draw[fl] (\a) -- (\b);
+
+\node[sub, below=1.2mm of dominio] {study, travel,\\routine};
+\node[sub, below=1.2mm of ctx] {react, deterministic\\oppure none};
+\node[sub, below=1.2mm of val] {schema e vincoli};
+\node[sub, below=1.2mm of out] {json};
+
+\node[nodo, above=7mm of ctx, text width=30mm] (tool) {agente kg\\agente multiapi};
+\draw[{Stealth[length=4pt]}-{Stealth[length=4pt]}, draw=grigio, semithick] (ctx) -- (tool);
+
+\draw[loop] ([xshift=-2mm]val.north) .. controls +(0,9mm) and +(0,9mm) .. ([xshift=2mm]draft.north)
+  node[midway, above=0.6mm, font=\tiny, text=acqua, fill=white, inner sep=1pt]
+  {draft non valido $\rightarrow$ correggi};
+
+\end{tikzpicture}
+
+\vspace{1.2em}
+
+\begin{columns}[t,onlytextwidth]
+\begin{column}{0.44\textwidth}
+\scriptsize
+\vspace{-5.1em}
+\begin{itemize}\setlength\itemsep{1pt}
+  \item tre domini; \emph{unknown} respinge le richieste fuori scope
+  \item supporta anche il \emph{replanning} su un piano esistente
+  \item i fallimenti esterni finiscono in \texttt{contingency\_notes}
+\end{itemize}
+\end{column}
+\begin{column}{0.52\textwidth}
+\centering\scriptsize\renewcommand{\arraystretch}{0.95}
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{context gathering} & \textbf{chi decide i tool} \\
+\midrule
+\texttt{react} (default) & il modello, passo per passo \\
+\texttt{deterministic} & la richiesta, via \texttt{allowed\_tools} \\
+\texttt{none} & nessun recupero esterno \\
+\bottomrule
+\end{tabular}
+\end{column}
+\end{columns}
 \end{frame}
 
 \end{document}
