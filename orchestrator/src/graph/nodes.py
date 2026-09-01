@@ -44,13 +44,18 @@ async def supervisor_node(state: AgentState) -> dict:
     system_prompt = (
         "Sei il supervisor di un sistema multi-agente. Analizza la domanda e decidi quali agenti attivare.\n"
         "Agenti disponibili:\n"
-        "- 'kg_agent': per domande su entità, relazioni strutturate, fatti e conoscenze.\n"
-        
-        "- 'planner_agent': per attività di pianificazione, scomposizione o piani complessi, quali creare un piano, un itinerario, una routine, un programma di studio.\n"
-        "- 'multiapi_agent': per dati in tempo reale che richiedono un'api esterna: "
-        "meteo e temperatura attuali di una città, tasso di cambio fra due valute, "
-        "ora locale corrente in una città o fuso orario e le informazioni su un paese: capitale, popolazione, superficie, lingue, valuta, confini.\n"
-        "REGOLA IMPORTANTE: Se decidi di attivare il 'planner_agent', NON attivare 'kg_agent' o 'multiapi_agent', poiché il planner è autonomo nel recuperare il contesto di cui ha bisogno.\n"
+        f"{descriptions}\n"
+        "REGOLE DI SELEZIONE:\n"
+        "1. Attiva il numero minimo di agenti sufficiente a rispondere: quasi sempre uno solo.\n"
+        "2. Se attivi 'planner_agent', non attivare nessun altro agente: è autonomo nel recuperare il contesto.\n"
+        "3. Se la domanda riguarda meteo, cambio o conversione fra valute, ora locale o dati di un paese, "
+        "attiva SOLO 'multiapi_agent': il 'kg_agent' non conosce dati che cambiano nel tempo.\n"
+        "4. Attiva 'kg_agent' solo se serve un fatto enciclopedico statico su un'entità nominata.\n"
+        "Esempi:\n"
+        "Domanda: 'Quanto valgono 15 euro in franchi svizzeri?' -> {\"selected_agents\": [\"multiapi_agent\"]}\n"
+        "Domanda: 'Che tempo fa a Roma?' -> {\"selected_agents\": [\"multiapi_agent\"]}\n"
+        "Domanda: 'Chi ha diretto Inception?' -> {\"selected_agents\": [\"kg_agent\"]}\n"
+        "Domanda: 'Organizzami un weekend a Berlino' -> {\"selected_agents\": [\"planner_agent\"]}\n"
         "Rispondi esclusivamente con un JSON in formato oggetto (es. {\"selected_agents\": [\"planner_agent\"]}) oppure un array (es. [\"planner_agent\"])."
     )
 
