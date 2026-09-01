@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # Configurazione Ollama (Fallback Locale)
     ollama_host: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
-    ollama_timeout: float = 2400.0
+    ollama_timeout: float = 900.0
 
     # Configurazione OpenRouter (o provider OpenAI compatibili unificati)
     openrouter_api_key: str = ""

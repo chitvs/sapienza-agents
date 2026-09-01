@@ -1,10 +1,8 @@
 # Valutazione dell'agente Planner
 
-> **Data Generazione:** `2026-09-01T19:18:46.948922+00:00`  
-> **Test Totali:** `230`  
-> **Modelli Valutati:** `13`  
-> **Modelli Completi:** `gemini-3.5-flash-lite`, `gemini-3.6-flash`, `laguna-s-2.1`, `llama3.2`, `nemotron-3-ultra-550b-a55b`  
-> **Modelli Parziali:** `dots-3-note-preview`, `gemma4:e2b-it-qat`, `gpt-oss-20b`, `ministral-3:3b`, `nemotron-3.5-lightning`, `phi4-mini`, `qwen3:1.7b`, `qwen3:4b`
+> **Data Generazione:** `2026-08-29T15:34:17.098770+00:00`  
+> **Test Totali:** `110`  
+> **Modelli Valutati:** `11`
 
 ## Indice dei contenuti
 - [1. Sintesi Esecutiva & Insights](#1-sintesi-esecutiva--insights)
@@ -23,31 +21,31 @@
 > ### Sintesi dei risultati
 > 
 > - **Top Performer (Successo):** `qwen3:1.7b` con il **100.00%** di Supported Success.
-> - **Miglior Qualità Semantica:** `gemini-3.6-flash` con uno score complessivo di **4.80 / 5**.
+> - **Miglior Qualità Semantica:** `gemini-3.6-flash` con uno score complessivo di **5.00 / 5**.
 > - **Esecuzione più Fluida:** `qwen3:1.7b` (Zero-shot: 100.00%, Validation Rate: 0.00%).
-> - **Collo di Bottiglia Principale:** L'errore di validazione più ricorrente è `duration_minutes_non_valido` (122 occorrenze).
-> - **Spreco Computazionale:** Il **30.95%** dei cicli di auto-correzione fallisce (Correction Failure Rate).
+> - **Collo di Bottiglia Principale:** L'errore di validazione più ricorrente è `sovrapposizione_orari` (99 occorrenze).
+> - **Spreco Computazionale:** Il **20.00%** dei cicli di auto-correzione fallisce (Correction Failure Rate).
 
 <details>
 <summary><strong>Visualizza metriche globali (KPI e Diagnostica)</strong></summary>
 
 ### KPI Globali
-- Supported Success Rate: `88.89%`
-- Domain Accuracy: `90.87%`
-- Semantic Overall Score: `4.34 / 5`
-- System Crash Rate: `3.48%`
+- Supported Success Rate: `95.45%`
+- Domain Accuracy: `96.36%`
+- Semantic Overall Score: `4.39 / 5`
+- System Crash Rate: `0.00%`
 
 ### Metriche Diagnostiche
-- Zero-shot Rate: `73.54%`
-- Recovery Rate: `69.05%`
-- Correction Failure Rate: `30.95%`
-- Validation Attempt Rate: `22.22%`
-- Mean Validation Attempts (sui corretti): `1.76`
+- Zero-shot Rate: `77.27%`
+- Recovery Rate: `80.00%`
+- Correction Failure Rate: `20.00%`
+- Validation Attempt Rate: `22.73%`
+- Mean Validation Attempts (sui corretti): `1.45`
 - Context Errors (media): `0.00`
 - External Resilience: `0.00%`
-- Non-empty Plan Rate: `89.95%`
-- Unknown Domain Accuracy: `68.29%`
-- Overconfidence Rate: `23.53%`
+- Non-empty Plan Rate: `95.45%`
+- Unknown Domain Accuracy: `81.82%`
+- Overconfidence Rate: `37.50%`
 
 </details>
 
@@ -55,36 +53,26 @@
 
 ## 2. Confronto tra modelli
 
-### KPI Principali
-
 > **Spiegazione delle metriche (KPI):**
 > - **Successo Supportato**: percentuale di test superati nei domini supportati (esclude i casi 'unknown' fuori scope).
 > - **Accuratezza Dominio**: correttezza della classificazione del dominio (es. 'study' riconosciuto come 'study').
 > - **Score Semantico**: valutazione qualitativa da LLM-as-a-judge, su una scala da 1 a 5 (più alto è meglio).
 > - **Tasso Crash**: test terminati con eccezioni o errori di sistema.
 
-#### Valutazione completa
-| Modello | Test | Successo Supportato | Accuratezza Dominio | Score Semantico | Tasso Crash |
-|:---|---:|---:|---:|---:|---:|
-| `gemini-3.5-flash-lite` | 30 | 100.00% | 100.00% | 4.63 | 0.00% |
-| `gemini-3.6-flash` | 30 | 100.00% | 100.00% | 4.80 | 0.00% |
-| `laguna-s-2.1` | 30 | 80.00% | 73.33% | 4.38 | 23.33% |
-| `llama3.2` | 30 | 80.00% | 86.67% | 3.56 | 3.33% |
-| `nemotron-3-ultra-550b-a55b` | 30 | 92.00% | 90.00% | 4.65 | 0.00% |
-
-#### Analisi parziale
+### KPI Principali
 | Modello | Test | Successo Supportato | Accuratezza Dominio | Score Semantico | Tasso Crash |
 |:---|---:|---:|---:|---:|---:|
 | `dots-3-note-preview` | 10 | 100.00% | 100.00% | 4.72 | 0.00% |
-| `gemma4:e2b-it-qat` | 10 | 87.50% | 90.00% | 4.41 | 0.00% |
+| `gemini-3.5-flash-lite` | 10 | 100.00% | 100.00% | 4.82 | 0.00% |
+| `gemini-3.6-flash` | 10 | 100.00% | 100.00% | 5.00 | 0.00% |
 | `gpt-oss-20b` | 10 | 87.50% | 100.00% | 4.51 | 0.00% |
+| `laguna-s-2.1` | 10 | 100.00% | 90.00% | 4.51 | 0.00% |
+| `llama3.2` | 10 | 100.00% | 100.00% | 4.07 | 0.00% |
 | `ministral-3:3b` | 10 | 87.50% | 80.00% | 4.11 | 0.00% |
+| `nemotron-3-ultra-550b-a55b` | 10 | 100.00% | 100.00% | 4.72 | 0.00% |
 | `nemotron-3.5-lightning` | 10 | 100.00% | 90.00% | 4.66 | 0.00% |
-| `phi4-mini` | 10 | 50.00% | 80.00% | 3.67 | 0.00% |
 | `qwen3:1.7b` | 10 | 100.00% | 100.00% | 3.17 | 0.00% |
 | `qwen3:4b` | 10 | 75.00% | 100.00% | 3.88 | 0.00% |
-
-### Metriche Diagnostiche
 
 > **Spiegazione delle metriche (Diagnostiche):**
 > - **Zero-shot**: test superati al primo tentativo, senza bisogno di correzioni (massima efficienza).
@@ -95,24 +83,18 @@
 > - **Errori Contesto**: numero medio di fallimenti nelle chiamate a servizi esterni (API, KG, ecc.).
 > - **Overconfidence**: percentuale di test falliti in cui l'agente aveva comunque una confidenza ≥ 0.8 (segnale di allucinazione).
 
-#### Valutazione completa
-| Modello | Zero-shot | Recovery | Fallimento Correzione | Tasso Validazione | Media Validazioni | Errori Contesto | Overconfidence |
-|:---|---:|---:|---:|---:|---:|---:|---:|
-| `gemini-3.5-flash-lite` | 80.00% | 100.00% | 0.00% | 20.00% | 1.00 | 0.00 | 0.00% |
-| `gemini-3.6-flash` | 88.00% | 100.00% | 0.00% | 12.00% | 1.00 | 0.00 | 0.00% |
-| `laguna-s-2.1` | 64.00% | 100.00% | 0.00% | 16.00% | 1.25 | 0.00 | 12.50% |
-| `llama3.2` | 64.00% | 50.00% | 50.00% | 32.00% | 2.12 | 0.00 | 25.00% |
-| `nemotron-3-ultra-550b-a55b` | 76.00% | 100.00% | 0.00% | 16.00% | 1.50 | 0.00 | 0.00% |
-
-#### Analisi parziale
+### Metriche Diagnostiche
 | Modello | Zero-shot | Recovery | Fallimento Correzione | Tasso Validazione | Media Validazioni | Errori Contesto | Overconfidence |
 |:---|---:|---:|---:|---:|---:|---:|---:|
 | `dots-3-note-preview` | 75.00% | 100.00% | 0.00% | 25.00% | 1.00 | 0.00 | 0.00% |
-| `gemma4:e2b-it-qat` | 75.00% | 50.00% | 50.00% | 25.00% | 2.50 | 0.00 | 50.00% |
+| `gemini-3.5-flash-lite` | 75.00% | 100.00% | 0.00% | 25.00% | 1.00 | 0.00 | 0.00% |
+| `gemini-3.6-flash` | 87.50% | 100.00% | 0.00% | 12.50% | 1.00 | 0.00 | 0.00% |
 | `gpt-oss-20b` | 75.00% | 50.00% | 50.00% | 25.00% | 2.00 | 0.00 | 0.00% |
+| `laguna-s-2.1` | 75.00% | 100.00% | 0.00% | 25.00% | 1.00 | 0.00 | 100.00% |
+| `llama3.2` | 75.00% | 100.00% | 0.00% | 25.00% | 1.00 | 0.00 | 0.00% |
 | `ministral-3:3b` | 75.00% | 50.00% | 50.00% | 25.00% | 2.00 | 0.00 | 33.33% |
+| `nemotron-3-ultra-550b-a55b` | 87.50% | 100.00% | 0.00% | 12.50% | 1.00 | 0.00 | 0.00% |
 | `nemotron-3.5-lightning` | 87.50% | 100.00% | 0.00% | 12.50% | 1.00 | 0.00 | 100.00% |
-| `phi4-mini` | 50.00% | 0.00% | 100.00% | 50.00% | 3.00 | 0.00 | 33.33% |
 | `qwen3:1.7b` | 100.00% | 0.00% | 0.00% | 0.00% | 0.00 | 0.00 | 0.00% |
 | `qwen3:4b` | 37.50% | 60.00% | 40.00% | 62.50% | 2.00 | 0.00 | 0.00% |
 
@@ -129,24 +111,17 @@
 > - **Overall**: media aritmetica delle dimensioni valutate (solo se almeno 3 dimensioni sono disponibili).
 > - **Copertura**: percentuale di test eleggibili che sono stati effettivamente valutati semanticamente.
 
-### Valutazione completa
-| Modello | Groundedness | Aderenza | Fattibilità Umana | Granularità | Replanning | Overall | Copertura | Parziali | Non Validi |
-|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `gemini-3.5-flash-lite` | 4.92 | 4.08 | 4.76 | 4.84 | 4.17 | **4.63** | 100.00% | 19 | 0 |
-| `gemini-3.6-flash` | 5.00 | 4.44 | 4.84 | 4.92 | 4.86 | **4.80** | 100.00% | 18 | 0 |
-| `laguna-s-2.1` | 4.80 | 3.75 | 4.25 | 4.80 | 4.20 | **4.38** | 100.00% | 15 | 0 |
-| `llama3.2` | 4.09 | 2.95 | 3.95 | 3.57 | 2.33 | **3.56** | 100.00% | 15 | 0 |
-| `nemotron-3-ultra-550b-a55b` | 4.91 | 4.26 | 4.57 | 4.87 | 4.29 | **4.65** | 100.00% | 16 | 0 |
-
-### Analisi parziale
 | Modello | Groundedness | Aderenza | Fattibilità Umana | Granularità | Replanning | Overall | Copertura | Parziali | Non Validi |
 |:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | `dots-3-note-preview` | 4.75 | 4.62 | 4.62 | 5.00 | 3.50 | **4.72** | 100.00% | 6 | 0 |
-| `gemma4:e2b-it-qat` | 4.86 | 3.43 | 4.86 | 4.71 | 3.50 | **4.41** | 100.00% | 5 | 0 |
+| `gemini-3.5-flash-lite` | 5.00 | 4.62 | 5.00 | 4.88 | 3.50 | **4.82** | 100.00% | 6 | 0 |
+| `gemini-3.6-flash` | 5.00 | 5.00 | 5.00 | 5.00 | 5.00 | **5.00** | 100.00% | 6 | 0 |
 | `gpt-oss-20b` | 4.43 | 4.57 | 4.57 | 4.71 | 1.00 | **4.51** | 100.00% | 6 | 0 |
+| `laguna-s-2.1` | 5.00 | 4.12 | 4.25 | 4.88 | 3.00 | **4.51** | 100.00% | 6 | 0 |
+| `llama3.2` | 4.50 | 3.62 | 4.75 | 3.75 | 2.50 | **4.07** | 100.00% | 6 | 0 |
 | `ministral-3:3b` | 3.86 | 4.43 | 3.86 | 4.71 | 3.00 | **4.11** | 100.00% | 5 | 0 |
+| `nemotron-3-ultra-550b-a55b` | 4.75 | 4.25 | 5.00 | 5.00 | 3.50 | **4.72** | 100.00% | 6 | 0 |
 | `nemotron-3.5-lightning` | 4.88 | 4.62 | 5.00 | 4.25 | 4.00 | **4.66** | 100.00% | 6 | 0 |
-| `phi4-mini` | 3.60 | 3.40 | 4.60 | 4.00 | 1.50 | **3.67** | 100.00% | 3 | 0 |
 | `qwen3:1.7b` | 3.62 | 2.88 | 3.50 | 3.25 | 1.00 | **3.17** | 100.00% | 6 | 0 |
 | `qwen3:4b` | 4.50 | 3.00 | 4.50 | 4.33 | 1.00 | **3.88** | 100.00% | 4 | 0 |
 
@@ -157,21 +132,12 @@
 > I dati sono aggregati per dominio atteso (`study`, `travel`, `routine`, `unknown`). 
 > Questo permette di capire se l'agente performa meglio su alcune tipologie di richieste.
 
-### Valutazione completa
 | Gruppo | Test | Successo Supportato | Accuratezza Dominio | Score Semantico | Tasso Crash |
 |:---|---:|---:|---:|---:|---:|
-| `routine` | 35 | 77.14% | 88.57% | 4.58 | 8.57% |
-| `study` | 45 | 95.56% | 95.56% | 4.41 | 2.22% |
-| `travel` | 45 | 95.56% | 95.56% | 4.36 | 4.44% |
-| `unknown` | 25 | 0.00% | 72.00% | - | 8.00% |
-
-### Analisi parziale
-| Gruppo | Test | Successo Supportato | Accuratezza Dominio | Score Semantico | Tasso Crash |
-|:---|---:|---:|---:|---:|---:|
-| `routine` | 16 | 68.75% | 100.00% | 4.27 | 0.00% |
-| `study` | 24 | 91.67% | 100.00% | 4.30 | 0.00% |
-| `travel` | 24 | 91.67% | 100.00% | 3.97 | 0.00% |
-| `unknown` | 16 | 0.00% | 62.50% | - | 0.00% |
+| `routine` | 22 | 90.91% | 100.00% | 4.51 | 0.00% |
+| `study` | 33 | 96.97% | 100.00% | 4.48 | 0.00% |
+| `travel` | 33 | 96.97% | 100.00% | 4.24 | 0.00% |
+| `unknown` | 22 | 0.00% | 81.82% | - | 0.00% |
 
 ---
 
@@ -181,39 +147,19 @@
 > `impossible_schedule` (richieste irrealizzabili) e `replan_deletion` (modifiche strutturali).
 > Le celle mostrano: **Supported Success Rate** e, tra parentesi, il numero di test in quel gruppo.
 
-### Valutazione completa
-### Supported Success Rate per Modello e Difficoltà
-
-| Modello | easy | hard | medium |
-|:---|---:|---:|---:|
-| `gemini-3.5-flash-lite` | 100.00% (8) | 100.00% (12) | 100.00% (10) |
-| `gemini-3.6-flash` | 100.00% (8) | 100.00% (12) | 100.00% (10) |
-| `laguna-s-2.1` | 83.33% (8) | 55.56% (12) | 100.00% (10) |
-| `llama3.2` | 100.00% (8) | 77.78% (12) | 70.00% (10) |
-| `nemotron-3-ultra-550b-a55b` | 83.33% (8) | 88.89% (12) | 100.00% (10) |
-
-### Supported Success Rate per Modello e Test Target
-
-| Modello | impossible_schedule | replan_deletion | replan_shift | standard_planning | time_math | vague_instructions |
-|:---|---:|---:|---:|---:|---:|---:|
-| `gemini-3.5-flash-lite` | 100.00% (3) | 100.00% (3) | 100.00% (4) | 100.00% (10) | 100.00% (4) | 100.00% (6) |
-| `gemini-3.6-flash` | 100.00% (3) | 100.00% (3) | 100.00% (4) | 100.00% (10) | 100.00% (4) | 100.00% (6) |
-| `laguna-s-2.1` | 66.67% (3) | 66.67% (3) | 75.00% (4) | 85.71% (10) | 66.67% (4) | 100.00% (6) |
-| `llama3.2` | 66.67% (3) | 100.00% (3) | 75.00% (4) | 85.71% (10) | 66.67% (4) | 80.00% (6) |
-| `nemotron-3-ultra-550b-a55b` | 66.67% (3) | 100.00% (3) | 100.00% (4) | 85.71% (10) | 100.00% (4) | 100.00% (6) |
-
-
-### Analisi parziale
 ### Supported Success Rate per Modello e Difficoltà
 
 | Modello | easy | hard | medium |
 |:---|---:|---:|---:|
 | `dots-3-note-preview` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
-| `gemma4:e2b-it-qat` | 75.00% (6) | 100.00% (1) | 100.00% (3) |
+| `gemini-3.5-flash-lite` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
+| `gemini-3.6-flash` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
 | `gpt-oss-20b` | 100.00% (6) | 100.00% (1) | 66.67% (3) |
+| `laguna-s-2.1` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
+| `llama3.2` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
 | `ministral-3:3b` | 75.00% (6) | 100.00% (1) | 100.00% (3) |
+| `nemotron-3-ultra-550b-a55b` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
 | `nemotron-3.5-lightning` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
-| `phi4-mini` | 25.00% (6) | 100.00% (1) | 66.67% (3) |
 | `qwen3:1.7b` | 100.00% (6) | 100.00% (1) | 100.00% (3) |
 | `qwen3:4b` | 50.00% (6) | 100.00% (1) | 100.00% (3) |
 
@@ -222,18 +168,21 @@
 | Modello | replan_deletion | replan_shift | standard_planning | vague_instructions |
 |:---|---:|---:|---:|---:|
 | `dots-3-note-preview` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
-| `gemma4:e2b-it-qat` | 100.00% (1) | 100.00% (1) | 75.00% (6) | 100.00% (2) |
+| `gemini-3.5-flash-lite` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
+| `gemini-3.6-flash` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
 | `gpt-oss-20b` | 100.00% (1) | 0.00% (1) | 100.00% (6) | 100.00% (2) |
+| `laguna-s-2.1` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
+| `llama3.2` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
 | `ministral-3:3b` | 100.00% (1) | 100.00% (1) | 75.00% (6) | 100.00% (2) |
+| `nemotron-3-ultra-550b-a55b` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
 | `nemotron-3.5-lightning` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
-| `phi4-mini` | 100.00% (1) | 0.00% (1) | 25.00% (6) | 100.00% (2) |
 | `qwen3:1.7b` | 100.00% (1) | 100.00% (1) | 100.00% (6) | 100.00% (2) |
 | `qwen3:4b` | 100.00% (1) | 100.00% (1) | 50.00% (6) | 100.00% (2) |
 
 
 ---
 
-## 6. Context Gathering
+## 6. Context gathering
 
 > **Modalità testate:**
 > - `deterministic`: usa una lista fissa di tool (es. kg_agent, multiapi_agent) definita a priori.
@@ -244,12 +193,12 @@
 
 ### Modalità: `none`
 
-- Test valutati: **230**
-- Supported Success Rate: **88.89%**
-- Domain Accuracy: **90.87%**
-- Semantic score: **4.34 / 5**
+- Test valutati: **110**
+- Supported Success Rate: **95.45%**
+- Domain Accuracy: **96.36%**
+- Semantic score: **4.39 / 5**
 - External resilience: **0.00%**
-- Crash rate: **3.48%**
+- Crash rate: **0.00%**
 
 ---
 
@@ -288,25 +237,20 @@
 > | `replan_non_effettuato` | Nel caso di `replan`, il piano finale è identico a quello precedente. |
 > | `altro` | Categoria di errore non riconosciuta dalle regex del validatore. |
 
-- **Test con almeno un errore di validazione:** 20
-- **Occorrenze complessive:** 479
+- **Test con almeno un errore di validazione:** 9
+- **Occorrenze complessive:** 225
 
 | Categoria | Occorrenze | Test coinvolti | Recuperati |
 |:---|---:|---:|---:|
-| `duration_minutes_non_valido` | 122 | 10 | 6 |
-| `sovrapposizione_orari` | 216 | 9 | 10 |
-| `draft_vuoto_o_non_json` | 6 | 5 | 3 |
-| `day_index_non_valido` | 6 | 5 | 3 |
+| `sovrapposizione_orari` | 99 | 4 | 4 |
 | `formato_orario_invalido` | 55 | 4 | 3 |
-| `routine_giorni_incompleti` | 11 | 4 | 1 |
-| `days_mancante_o_vuoto` | 3 | 3 | 0 |
-| `formato_data_invalido` | 21 | 2 | 1 |
-| `slots_mancanti_o_invalidi` | 16 | 2 | 10 |
-| `day_index_non_contiguo` | 2 | 2 | 2 |
-| `campo_title_mancante` | 2 | 2 | 0 |
-| `campo_task_mancante` | 9 | 1 | 0 |
-| `durata_totale_giornaliera_eccessiva` | 7 | 1 | 1 |
-| `campo_contingency_notes_tipo_errato` | 3 | 1 | 0 |
+| `duration_minutes_non_valido` | 54 | 4 | 4 |
+| `day_index_non_valido` | 5 | 4 | 2 |
+| `draft_vuoto_o_non_json` | 2 | 2 | 1 |
+| `slots_mancanti_o_invalidi` | 7 | 1 | 5 |
+| `day_index_non_contiguo` | 1 | 1 | 1 |
+| `routine_giorni_incompleti` | 1 | 1 | 0 |
+| `days_mancante_o_vuoto` | 1 | 1 | 0 |
 
 </details>
 
@@ -356,74 +300,24 @@
 | `unknown_02` | easy | standard_planning | **dots-3-note-preview** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **gemini-3.5-flash-lite** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `routine_02` | easy | standard_planning | **gemini-3.5-flash-lite** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 5.00 |
-| `routine_03` | hard | time_math | **gemini-3.5-flash-lite** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `routine_04` | medium | standard_planning | **gemini-3.5-flash-lite** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 5.00 |
-| `routine_05` | hard | impossible_schedule | **gemini-3.5-flash-lite** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 4.00 |
-| `routine_06` | medium | vague_instructions | **gemini-3.5-flash-lite** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `routine_replan_01` | medium | replan_shift | **gemini-3.5-flash-lite** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.60 |
 | `study_01` | easy | standard_planning | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `study_02` | medium | vague_instructions | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_03` | hard | impossible_schedule | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 3.75 |
-| `study_04` | hard | time_math | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `study_05` | medium | vague_instructions | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_06` | easy | standard_planning | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `study_replan_01` | medium | replan_shift | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 0.75 | 1 | 0 | 3.80 |
-| `study_replan_02` | hard | replan_deletion | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 0.75 | 1 | 0 | 3.60 |
-| `study_replan_03` | medium | replan_shift | **gemini-3.5-flash-lite** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_01` | easy | standard_planning | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.75 |
 | `travel_02` | medium | vague_instructions | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_03` | hard | impossible_schedule | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.25 |
-| `travel_04` | medium | vague_instructions | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.25 |
-| `travel_05` | hard | time_math | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_06` | easy | standard_planning | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_replan_01` | hard | replan_deletion | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_replan_02` | hard | replan_shift | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_replan_03` | medium | replan_deletion | **gemini-3.5-flash-lite** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.80 |
 | `unknown_01` | easy | standard_planning | **gemini-3.5-flash-lite** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `unknown_02` | easy | standard_planning | **gemini-3.5-flash-lite** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_03` | hard | vague_instructions | **gemini-3.5-flash-lite** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_04` | hard | standard_planning | **gemini-3.5-flash-lite** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_05` | hard | time_math | **gemini-3.5-flash-lite** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **gemini-3.6-flash** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `routine_02` | easy | standard_planning | **gemini-3.6-flash** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `routine_03` | hard | time_math | **gemini-3.6-flash** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `routine_04` | medium | standard_planning | **gemini-3.6-flash** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `routine_05` | hard | impossible_schedule | **gemini-3.6-flash** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.25 |
-| `routine_06` | medium | vague_instructions | **gemini-3.6-flash** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `routine_replan_01` | medium | replan_shift | **gemini-3.6-flash** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.20 |
 | `study_01` | easy | standard_planning | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `study_02` | medium | vague_instructions | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_03` | hard | impossible_schedule | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 3.75 |
-| `study_04` | hard | time_math | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.75 |
-| `study_05` | medium | vague_instructions | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_06` | easy | standard_planning | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `study_replan_01` | medium | replan_shift | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 0.75 | 1 | 0 | 5.00 |
-| `study_replan_02` | hard | replan_deletion | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 0.75 | 1 | 0 | 4.60 |
-| `study_replan_03` | medium | replan_shift | **gemini-3.6-flash** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_01` | easy | standard_planning | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_02` | medium | vague_instructions | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_03` | hard | impossible_schedule | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.25 |
-| `travel_04` | medium | vague_instructions | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_05` | hard | time_math | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `travel_06` | easy | standard_planning | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_replan_01` | hard | replan_deletion | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_replan_02` | hard | replan_shift | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_replan_03` | medium | replan_deletion | **gemini-3.6-flash** | none | travel | travel | ✓ | ✓ | 0.75 | 1 | 0 | 4.80 |
 | `unknown_01` | easy | standard_planning | **gemini-3.6-flash** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `unknown_02` | easy | standard_planning | **gemini-3.6-flash** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_03` | hard | vague_instructions | **gemini-3.6-flash** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_04` | hard | standard_planning | **gemini-3.6-flash** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_05` | hard | time_math | **gemini-3.6-flash** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `routine_01` | easy | standard_planning | **gemma4:e2b-it-qat** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 3.75 |
-| `routine_02` | easy | standard_planning | **gemma4:e2b-it-qat** | none | routine | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `study_01` | easy | standard_planning | **gemma4:e2b-it-qat** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.25 |
-| `study_02` | medium | vague_instructions | **gemma4:e2b-it-qat** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_replan_01` | medium | replan_shift | **gemma4:e2b-it-qat** | none | study | study | ✓ | ✓ | 0.50 | 2 | 0 | 3.60 |
-| `travel_01` | easy | standard_planning | **gemma4:e2b-it-qat** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.25 |
-| `travel_02` | medium | vague_instructions | **gemma4:e2b-it-qat** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_replan_01` | hard | replan_deletion | **gemma4:e2b-it-qat** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `unknown_01` | easy | standard_planning | **gemma4:e2b-it-qat** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_02` | easy | standard_planning | **gemma4:e2b-it-qat** | none | unknown | study | ✗ | ✓ | 1.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **gpt-oss-20b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `routine_02` | easy | standard_planning | **gpt-oss-20b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `study_01` | easy | standard_planning | **gpt-oss-20b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
@@ -436,64 +330,24 @@
 | `unknown_02` | easy | standard_planning | **gpt-oss-20b** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **laguna-s-2.1** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 5.00 |
 | `routine_02` | easy | standard_planning | **laguna-s-2.1** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 4.50 |
-| `routine_03` | hard | time_math | **laguna-s-2.1** | none | routine | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
-| `routine_04` | medium | standard_planning | **laguna-s-2.1** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `routine_05` | hard | impossible_schedule | **laguna-s-2.1** | none | routine | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
-| `routine_06` | medium | vague_instructions | **laguna-s-2.1** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `routine_replan_01` | medium | replan_shift | **laguna-s-2.1** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 5.00 |
 | `study_01` | easy | standard_planning | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
 | `study_02` | medium | vague_instructions | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_03` | hard | impossible_schedule | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.00 |
-| `study_04` | hard | time_math | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.00 |
-| `study_05` | medium | vague_instructions | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_06` | easy | standard_planning | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
 | `study_replan_01` | medium | replan_shift | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.20 |
-| `study_replan_02` | hard | replan_deletion | **laguna-s-2.1** | none | study | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
-| `study_replan_03` | medium | replan_shift | **laguna-s-2.1** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_01` | easy | standard_planning | **laguna-s-2.1** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_02` | medium | vague_instructions | **laguna-s-2.1** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `travel_03` | hard | impossible_schedule | **laguna-s-2.1** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.50 |
-| `travel_04` | medium | vague_instructions | **laguna-s-2.1** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.50 |
-| `travel_05` | hard | time_math | **laguna-s-2.1** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.50 |
-| `travel_06` | easy | standard_planning | **laguna-s-2.1** | none | travel | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
 | `travel_replan_01` | hard | replan_deletion | **laguna-s-2.1** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.40 |
-| `travel_replan_02` | hard | replan_shift | **laguna-s-2.1** | none | travel | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
-| `travel_replan_03` | medium | replan_deletion | **laguna-s-2.1** | none | travel | travel | ✓ | ✓ | 0.50 | 2 | 0 | 4.60 |
 | `unknown_01` | easy | standard_planning | **laguna-s-2.1** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `unknown_02` | easy | standard_planning | **laguna-s-2.1** | none | unknown | study | ✗ | ✓ | 1.00 | 0 | 0 | - |
-| `unknown_03` | hard | vague_instructions | **laguna-s-2.1** | none | unknown | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_04` | hard | standard_planning | **laguna-s-2.1** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_05` | hard | time_math | **laguna-s-2.1** | none | unknown | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **llama3.2** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 3.50 |
 | `routine_02` | easy | standard_planning | **llama3.2** | none | routine | routine | ✓ | ✓ | 0.75 | 1 | 0 | 4.00 |
-| `routine_03` | hard | time_math | **llama3.2** | none | routine | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `routine_04` | medium | standard_planning | **llama3.2** | none | routine | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `routine_05` | hard | impossible_schedule | **llama3.2** | none | routine | None | ✗ | ✗ | 0.00 | 0 | 0 | - |
-| `routine_06` | medium | vague_instructions | **llama3.2** | none | routine | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `routine_replan_01` | medium | replan_shift | **llama3.2** | none | routine | routine | ✗ | ✓ | 0.50 | 3 | 0 | 3.20 |
 | `study_01` | easy | standard_planning | **llama3.2** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 3.50 |
 | `study_02` | medium | vague_instructions | **llama3.2** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.75 |
-| `study_03` | hard | impossible_schedule | **llama3.2** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 3.25 |
-| `study_04` | hard | time_math | **llama3.2** | none | study | study | ✓ | ✓ | 0.75 | 1 | 0 | 2.25 |
-| `study_05` | medium | vague_instructions | **llama3.2** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 3.50 |
-| `study_06` | easy | standard_planning | **llama3.2** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.00 |
 | `study_replan_01` | medium | replan_shift | **llama3.2** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 3.40 |
-| `study_replan_02` | hard | replan_deletion | **llama3.2** | none | study | study | ✓ | ✓ | 0.50 | 2 | 0 | 2.00 |
-| `study_replan_03` | medium | replan_shift | **llama3.2** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_01` | easy | standard_planning | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.75 |
 | `travel_02` | medium | vague_instructions | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.25 |
-| `travel_03` | hard | impossible_schedule | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 2.50 |
-| `travel_04` | medium | vague_instructions | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 2.50 |
-| `travel_05` | hard | time_math | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 2.00 |
-| `travel_06` | easy | standard_planning | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.00 |
 | `travel_replan_01` | hard | replan_deletion | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.40 |
-| `travel_replan_02` | hard | replan_shift | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.20 |
-| `travel_replan_03` | medium | replan_deletion | **llama3.2** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.80 |
 | `unknown_01` | easy | standard_planning | **llama3.2** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `unknown_02` | easy | standard_planning | **llama3.2** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_03` | hard | vague_instructions | **llama3.2** | none | unknown | routine | ✗ | ✓ | 1.00 | 0 | 0 | - |
-| `unknown_04` | hard | standard_planning | **llama3.2** | none | unknown | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `unknown_05` | hard | time_math | **llama3.2** | none | unknown | travel | ✗ | ✓ | 1.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **ministral-3:3b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.00 |
 | `routine_02` | easy | standard_planning | **ministral-3:3b** | none | routine | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
 | `study_01` | easy | standard_planning | **ministral-3:3b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
@@ -506,34 +360,14 @@
 | `unknown_02` | easy | standard_planning | **ministral-3:3b** | none | unknown | study | ✗ | ✓ | 1.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `routine_02` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `routine_03` | hard | time_math | **nemotron-3-ultra-550b-a55b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 4.75 |
-| `routine_04` | medium | standard_planning | **nemotron-3-ultra-550b-a55b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `routine_05` | hard | impossible_schedule | **nemotron-3-ultra-550b-a55b** | none | routine | unknown | ✗ | ✗ | 0.00 | 0 | 0 | - |
-| `routine_06` | medium | vague_instructions | **nemotron-3-ultra-550b-a55b** | none | routine | routine | ✓ | ✓ | 0.50 | 2 | 0 | 4.50 |
-| `routine_replan_01` | medium | replan_shift | **nemotron-3-ultra-550b-a55b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 3.20 |
 | `study_01` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `study_02` | medium | vague_instructions | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_03` | hard | impossible_schedule | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `study_04` | hard | time_math | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `study_05` | medium | vague_instructions | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 0.75 | 1 | 0 | 5.00 |
-| `study_06` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | study | unknown | ✗ | ✗ | 0.00 | 0 | 0 | - |
 | `study_replan_01` | medium | replan_shift | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 0.75 | 1 | 0 | 3.60 |
-| `study_replan_02` | hard | replan_deletion | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 0.50 | 2 | 0 | 4.80 |
-| `study_replan_03` | medium | replan_shift | **nemotron-3-ultra-550b-a55b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_01` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_02` | medium | vague_instructions | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_03` | hard | impossible_schedule | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.50 |
-| `travel_04` | medium | vague_instructions | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `travel_05` | hard | time_math | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.50 |
-| `travel_06` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `travel_replan_01` | hard | replan_deletion | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.20 |
-| `travel_replan_02` | hard | replan_shift | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
-| `travel_replan_03` | medium | replan_deletion | **nemotron-3-ultra-550b-a55b** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.80 |
 | `unknown_01` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `unknown_02` | easy | standard_planning | **nemotron-3-ultra-550b-a55b** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_03` | hard | vague_instructions | **nemotron-3-ultra-550b-a55b** | none | unknown | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `unknown_04` | hard | standard_planning | **nemotron-3-ultra-550b-a55b** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
-| `unknown_05` | hard | time_math | **nemotron-3-ultra-550b-a55b** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **nemotron-3.5-lightning** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `routine_02` | easy | standard_planning | **nemotron-3.5-lightning** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `study_01` | easy | standard_planning | **nemotron-3.5-lightning** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
@@ -544,16 +378,6 @@
 | `travel_replan_01` | hard | replan_deletion | **nemotron-3.5-lightning** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 5.00 |
 | `unknown_01` | easy | standard_planning | **nemotron-3.5-lightning** | none | unknown | unknown | ✓ | ✗ | 0.00 | 0 | 0 | - |
 | `unknown_02` | easy | standard_planning | **nemotron-3.5-lightning** | none | unknown | study | ✗ | ✓ | 1.00 | 0 | 0 | - |
-| `routine_01` | easy | standard_planning | **phi4-mini** | none | routine | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `routine_02` | easy | standard_planning | **phi4-mini** | none | routine | routine | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `study_01` | easy | standard_planning | **phi4-mini** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.00 |
-| `study_02` | medium | vague_instructions | **phi4-mini** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 3.25 |
-| `study_replan_01` | medium | replan_shift | **phi4-mini** | none | study | study | ✗ | ✓ | 0.50 | 3 | 0 | 3.40 |
-| `travel_01` | easy | standard_planning | **phi4-mini** | none | travel | travel | ✗ | ✗ | 0.00 | 3 | 0 | - |
-| `travel_02` | medium | vague_instructions | **phi4-mini** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 3.50 |
-| `travel_replan_01` | hard | replan_deletion | **phi4-mini** | none | travel | travel | ✓ | ✓ | 1.00 | 0 | 0 | 4.20 |
-| `unknown_01` | easy | standard_planning | **phi4-mini** | none | unknown | study | ✗ | ✓ | 1.00 | 0 | 0 | - |
-| `unknown_02` | easy | standard_planning | **phi4-mini** | none | unknown | study | ✗ | ✓ | 1.00 | 0 | 0 | - |
 | `routine_01` | easy | standard_planning | **qwen3:1.7b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 1.75 |
 | `routine_02` | easy | standard_planning | **qwen3:1.7b** | none | routine | routine | ✓ | ✓ | 1.00 | 0 | 0 | 2.75 |
 | `study_01` | easy | standard_planning | **qwen3:1.7b** | none | study | study | ✓ | ✓ | 1.00 | 0 | 0 | 4.00 |

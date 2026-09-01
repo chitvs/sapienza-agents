@@ -395,11 +395,11 @@ cd agents/planner
 python -m pytest -q
 ```
 
-La maggior parte dei test (`tests/pipeline`, `tests/tools`, `tests/validators`, `tests/configs`) mocka pipeline e client llm e gira offline in frazioni di secondo. I test su `tests/api` e `tests/integration` invocano invece la pipeline reale end-to-end: richiedono un provider llm raggiungibile (Ollama in ascolto, oppure `GEMINI_API_KEY` valorizzata) e vengono **saltati** altrimenti tramite il marker `@pytest.mark.requires_llm`. Ulteriori dettagli [agents/planner/tests/README.md](agents/planner/tests/README.md).
+La maggior parte dei test (`tests/pipeline`, `tests/tools`, `tests/validators`, `tests/configs`) mocka pipeline e client llm e gira offline in frazioni di secondo. I test su `tests/api` e `tests/integration` invocano invece la pipeline reale end-to-end: richiedono un provider llm raggiungibile (Ollama in ascolto, oppure `GEMINI_API_KEY` valorizzata) e vengono **saltati** altrimenti tramite il marker `@pytest.mark.requires_llm`.
 
 ### Benchmark
 
-Il planner ha una suite di benchmark separata dai test: dataset golden multi-dominio, valutazione su più provider/modelli e report di affidabilità e struttura in markdown. Metodologia, dataset e risultati completi in [agents/planner/benchmarks/README.md](agents/planner/benchmarks/README.md).
+Il planner ha una suite di benchmark separata dai test: dataset golden multi-dominio, valutazione su più provider/modelli e report di affidabilità e struttura in markdown. Metodologia, dataset e risultati completi [qui](agents/planner/benchmarks/README.md).
 
 ## Agente multiapi
 

@@ -160,21 +160,25 @@ TOOL_DESCRIPTIONS: list[dict[str, Any]] = [
     {
         "name": "kg_agent",
         "description": (
-            "Interroga il Knowledge Graph per ottenere fatti e informazioni strutturate "
-            "su entità specifiche (es. luoghi storici, persone, monumenti, concetti accademici)."
+            "Interroga un Knowledge Graph (Wikidata, DBpedia o un grafo Neo4j sul cinema) "
+            "per estrarre fatti atomici e dati strutturati su entità specifiche. "
+            "ATTENZIONE: Questo agente lavora ESCLUSIVAMENTE in lingua inglese. "
+            "Qualsiasi input in altre lingue o query troppo discorsive farà fallire la ricerca."
         ),
         "parameters": {
-            "tool_input": "La sotto-domanda specifica e mirata da porre in linguaggio naturale."
+            "tool_input": "La sotto-domanda specifica. DEVE essere secca, diretta e obbligatoriamente tradotta in INGLESE. Evita frasi discorsive o contestuali (Usa 'What is the birth date of Albert Einstein?' e NON 'Can you tell me the birth date...')."
         }
     },
     {
         "name": "multiapi_agent",
         "description": (
-            "Interroga API esterne in tempo reale. Usa questo tool ESCLUSIVAMENTE per: "
-            "1) Previsioni meteo. 2) Tassi di cambio. 3) Info geografiche base sui paesi. 4) Fusi orari."
+            "Interroga API pubbliche in tempo reale. Lavora in italiano. "
+            "Supporta ESCLUSIVAMENTE 4 intenti: 1) Previsioni meteo, 2) Tassi di cambio e conversioni valuta, "
+            "3) Info geografiche sulle nazioni, 4) Ora locale/fusi orari. "
+            "Qualsiasi richiesta fuori da questi 4 temi produrrà un errore esplicito."
         ),
         "parameters": {
-            "tool_input": "La sotto-domanda specifica e mirata da porre in linguaggio naturale."
+            "tool_input": "La sotto-domanda specifica in italiano (es. 'Che tempo fa a Roma domani?', 'Quanto sono 100 dollari in euro?')."
         }
     }
 ]

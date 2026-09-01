@@ -200,6 +200,73 @@ def _nested_group_by(
     
     return result
 
+def _split_outcomes_by_model_coverage(
+    outcomes: list[TestOutcome],
+    dataset_size: int | None,
+) -> tuple[list[TestOutcome], list[TestOutcome], list[str], list[str]]:
+    """
+    Divide gli outcome in base alla copertura del dataset per modello.
+
+    Un modello è considerato completo se ha eseguito tutte le query del dataset.
+    In caso contrario viene classificato come parziale.
+
+    Args:
+        outcomes: Lista completa dei risultati normalizzati.
+        dataset_size: Numero totale di test presenti nel golden dataset.
+
+    Returns:
+        tuple[list[TestOutcome], list[TestOutcome], list[str], list[str]]:
+            Outcome completi, outcome parziali, modelli completi e modelli parziali.
+    """
+    models = sorted({outcome.model_name for outcome in outcomes})
+
+    if dataset_size is None:
+        complete_models = models
+        partial_models: list[str] = []
+    else:
+        model_coverage = {
+            model_name: len({
+                outcome.test_id
+                for outcome in outcomes
+                if outcome.model_name == model_name
+            })
+            for model_name in models
+        }
+
+        complete_models = [
+            model_name
+            for model_name in models
+            if model_coverage[model_name] >= dataset_size
+        ]
+
+        partial_models = [
+            model_name
+            for model_name in models
+            if model_coverage[model_name] < dataset_size
+        ]
+
+    complete_model_set = set(complete_models)
+    partial_model_set = set(partial_models)
+
+    complete_outcomes = [
+        outcome
+        for outcome in outcomes
+        if outcome.model_name in complete_model_set
+    ]
+
+    partial_outcomes = [
+        outcome
+        for outcome in outcomes
+        if outcome.model_name in partial_model_set
+    ]
+
+    return (
+        complete_outcomes,
+        partial_outcomes,
+        complete_models,
+        partial_models,
+    )
+
 
 def build_report(
     records: list[dict[str, Any]],
@@ -215,28 +282,90 @@ def build_report(
         for record in records
     ]
 
+    dataset_size = len(dataset) if dataset is not None else None
+
+    complete_outcomes, partial_outcomes, complete_models, partial_models = (
+        _split_outcomes_by_model_coverage(outcomes, dataset_size)
+    )
+
     global_metrics = _aggregate_outcomes(outcomes)
     by_model_metrics = _aggregate_groups(outcomes, "model_name")
-    by_model_and_difficulty = _nested_group_by(outcomes, "model_name", "difficulty")
-    by_model_and_test_target = _nested_group_by(outcomes, "model_name", "test_target")
+
+    by_model_complete = _aggregate_groups(
+        complete_outcomes,
+        "model_name",
+    )
+    by_model_partial = _aggregate_groups(
+        partial_outcomes,
+        "model_name",
+    )
+
+    by_domain_complete = _aggregate_groups(
+        complete_outcomes,
+        "expected_domain",
+    )
+    by_domain_partial = _aggregate_groups(
+        partial_outcomes,
+        "expected_domain",
+    )
+
+    by_model_and_difficulty_complete = _nested_group_by(
+        complete_outcomes,
+        "model_name",
+        "difficulty",
+    )
+    by_model_and_difficulty_partial = _nested_group_by(
+        partial_outcomes,
+        "model_name",
+        "difficulty",
+    )
+
+    by_model_and_test_target_complete = _nested_group_by(
+        complete_outcomes,
+        "model_name",
+        "test_target",
+    )
+    by_model_and_test_target_partial = _nested_group_by(
+        partial_outcomes,
+        "model_name",
+        "test_target",
+    )
 
     report = {
         "metadata": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "dataset_tests": len(dataset) if dataset is not None else None,
+            "dataset_tests": dataset_size,
             "benchmark_records": len(records),
             "models": sorted({outcome.model_name for outcome in outcomes}),
+            "complete_models": complete_models,
+            "partial_models": partial_models,
             "context_modes": sorted({outcome.context_mode for outcome in outcomes}),
             "intents": sorted({outcome.expected_intent for outcome in outcomes}),
             "domains": sorted({outcome.expected_domain for outcome in outcomes}),
         },
-        "insights": _generate_insights(global_metrics, by_model_metrics), 
+        "insights": _generate_insights(global_metrics, by_model_metrics),
         "global": global_metrics,
         "by_model": by_model_metrics,
+        "by_model_complete": by_model_complete,
+        "by_model_partial": by_model_partial,
         "by_context_mode": _aggregate_groups(outcomes, "context_mode"),
         "by_domain": _aggregate_groups(outcomes, "expected_domain"),
-        "by_model_and_difficulty": by_model_and_difficulty,
-        "by_model_and_test_target": by_model_and_test_target,
+        "by_domain_complete": by_domain_complete,
+        "by_domain_partial": by_domain_partial,
+        "by_model_and_difficulty": _nested_group_by(
+            outcomes,
+            "model_name",
+            "difficulty",
+        ),
+        "by_model_and_difficulty_complete": by_model_and_difficulty_complete,
+        "by_model_and_difficulty_partial": by_model_and_difficulty_partial,
+        "by_model_and_test_target": _nested_group_by(
+            outcomes,
+            "model_name",
+            "test_target",
+        ),
+        "by_model_and_test_target_complete": by_model_and_test_target_complete,
+        "by_model_and_test_target_partial": by_model_and_test_target_partial,
         "tests": [
             _test_detail(outcome)
             for outcome in sorted(

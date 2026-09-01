@@ -1032,7 +1032,9 @@ function renderOrchestrator(data) {
   if (details.kg_results) {
     html += "<h2>agente kg</h2>" + renderKg(details.kg_results);
   }
-  html += renderRaw("agente planner", details.planner_results);
+  if (details.planner_results) {
+    html += "<h2>agente planner</h2>" + renderPlanner(details.planner_results);
+  }
   if (details.multiapi_results) {
     html += "<h2>agente multiapi</h2>" + renderMultiapi(details.multiapi_results);
   }

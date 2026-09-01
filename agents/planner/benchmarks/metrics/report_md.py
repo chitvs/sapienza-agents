@@ -27,13 +27,16 @@ def _fmt_pct(value: float | None) -> str:
     return f"{value:.2f}%"
 
 
-def _markdown_kpi_table(report: dict[str, Any]) -> str:
+def _markdown_kpi_table(
+    report: dict[str, Any],
+    model_key: str = "by_model",
+) -> str:
     """Genera la tabella Markdown dei KPI principali per modello."""
     rows = [
         "| Modello | Test | Successo Supportato | Accuratezza Dominio | Score Semantico | Tasso Crash |",
         "|:---|---:|---:|---:|---:|---:|",
     ]
-    for model_name, metrics in report["by_model"].items():
+    for model_name, metrics in report.get(model_key, {}).items():
         rows.append(
             f"| `{model_name}` | {metrics['n_test']} | {_fmt_pct(metrics['supported_success_rate'])} | "
             f"{_fmt_pct(metrics['domain_accuracy'])} | {_fmt(metrics['semantic']['overall_score'])} | "
@@ -42,13 +45,16 @@ def _markdown_kpi_table(report: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
-def _markdown_diagnostic_table(report: dict[str, Any]) -> str:
+def _markdown_diagnostic_table(
+    report: dict[str, Any],
+    model_key: str = "by_model",
+) -> str:
     """Genera la tabella Markdown delle metriche diagnostiche e comportamentali."""
     rows = [
         "| Modello | Zero-shot | Recovery | Fallimento Correzione | Tasso Validazione | Media Validazioni | Errori Contesto | Overconfidence |",
         "|:---|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for model_name, metrics in report["by_model"].items():
+    for model_name, metrics in report.get(model_key, {}).items():
         rows.append(
             f"| `{model_name}` | {_fmt_pct(metrics['zero_shot_rate'])} | {_fmt_pct(metrics['self_correction_recovery_rate'])} | "
             f"{_fmt_pct(metrics['correction_failure_rate'])} | {_fmt_pct(metrics['validation_attempt_rate'])} | "
@@ -58,13 +64,16 @@ def _markdown_diagnostic_table(report: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
-def _markdown_semantic_table(report: dict[str, Any]) -> str:
+def _markdown_semantic_table(
+    report: dict[str, Any],
+    model_key: str = "by_model",
+) -> str:
     """Genera la tabella Markdown di dettaglio per la valutazione semantica."""
     rows = [
         "| Modello | Groundedness | Aderenza | Fattibilità Umana | Granularità | Replanning | Overall | Copertura | Parziali | Non Validi |",
         "|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for model_name, metrics in report["by_model"].items():
+    for model_name, metrics in report.get(model_key, {}).items():
         sem = metrics["semantic"]
         dim = sem["dimensions"]
         rows.append(
@@ -76,7 +85,9 @@ def _markdown_semantic_table(report: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
-def _markdown_simple_table(groups: dict[str, Any]) -> str:
+def _markdown_simple_table(
+    groups: dict[str, Any],
+) -> str:
     """Genera una tabella di aggregazione semplice (es. per dominio)."""
     rows = [
         "| Gruppo | Test | Successo Supportato | Accuratezza Dominio | Score Semantico | Tasso Crash |",
@@ -91,37 +102,50 @@ def _markdown_simple_table(groups: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
-def _markdown_model_cross_table(report: dict[str, Any], cross_key: str, title: str) -> str:
+def _markdown_model_cross_table(
+    report: dict[str, Any],
+    cross_key: str,
+    title: str,
+) -> str:
     """Genera una tabella incrociata tra modelli e categorie (difficoltà o target)."""
     data = report.get(cross_key, {})
     if not data:
         return f"*Nessun dato disponibile per {title}.*\n"
-    
+
     all_groups = set()
     for model_data in data.values():
         all_groups.update(model_data.keys())
-    all_groups = sorted([g for g in all_groups if g is not None and g != "none"])
-    
+
+    all_groups = sorted([
+        group
+        for group in all_groups
+        if group is not None and group != "none"
+    ])
+
     if not all_groups:
         return f"*Nessun gruppo definito per {title}.*\n"
-    
+
     lines = [
         f"### {title}",
         "",
         f"| Modello | {' | '.join(all_groups)} |",
-        "|:---|" + "|".join(["---:"] * len(all_groups)) + "|"
+        "|:---|" + "|".join(["---:"] * len(all_groups)) + "|",
     ]
-    
+
     for model in sorted(data.keys()):
         row = [f"`{model}`"]
+
         for group in all_groups:
             if group in data[model]:
                 metrics = data[model][group]
-                row.append(f"{_fmt_pct(metrics['supported_success_rate'])} ({metrics['n_test']})")
+                row.append(
+                    f"{_fmt_pct(metrics['supported_success_rate'])} ({metrics['n_test']})"
+                )
             else:
                 row.append("-")
+
         lines.append("| " + " | ".join(row) + " |")
-    
+
     lines.append("")
     return "\n".join(lines)
 
@@ -133,13 +157,17 @@ def generate_markdown(report: dict[str, Any]) -> str:
     """
     global_metrics = report["global"]
     insights = report.get("insights", {})
+    complete_models = report["metadata"].get("complete_models", [])
+    partial_models = report["metadata"].get("partial_models", [])
 
     lines = [
         "# Valutazione dell'agente Planner",
         "",
         f"> **Data Generazione:** `{report['metadata']['generated_at']}`  ",
         f"> **Test Totali:** `{global_metrics['n_test']}`  ",
-        f"> **Modelli Valutati:** `{len(report['metadata']['models'])}`",
+        f"> **Modelli Valutati:** `{len(report['metadata']['models'])}`  ",
+        f"> **Modelli Completi:** {', '.join(f'`{m}`' for m in complete_models) if complete_models else '*Nessuno*'}  ",
+        f"> **Modelli Parziali:** {', '.join(f'`{m}`' for m in partial_models) if partial_models else '*Nessuno*'}",
         "",
         "## Indice dei contenuti",
         "- [1. Sintesi Esecutiva & Insights](#1-sintesi-esecutiva--insights)",
@@ -202,14 +230,21 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "",
         "## 2. Confronto tra modelli",
         "",
+        "### KPI Principali",
+        "",
         "> **Spiegazione delle metriche (KPI):**",
         "> - **Successo Supportato**: percentuale di test superati nei domini supportati (esclude i casi 'unknown' fuori scope).",
         "> - **Accuratezza Dominio**: correttezza della classificazione del dominio (es. 'study' riconosciuto come 'study').",
         "> - **Score Semantico**: valutazione qualitativa da LLM-as-a-judge, su una scala da 1 a 5 (più alto è meglio).",
         "> - **Tasso Crash**: test terminati con eccezioni o errori di sistema.",
         "",
-        "### KPI Principali",
-        _markdown_kpi_table(report),
+        "#### Valutazione completa",
+        _markdown_kpi_table(report, "by_model_complete"),
+        "",
+        "#### Analisi parziale",
+        _markdown_kpi_table(report, "by_model_partial"),
+        "",
+        "### Metriche Diagnostiche",
         "",
         "> **Spiegazione delle metriche (Diagnostiche):**",
         "> - **Zero-shot**: test superati al primo tentativo, senza bisogno di correzioni (massima efficienza).",
@@ -220,8 +255,11 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "> - **Errori Contesto**: numero medio di fallimenti nelle chiamate a servizi esterni (API, KG, ecc.).",
         "> - **Overconfidence**: percentuale di test falliti in cui l'agente aveva comunque una confidenza ≥ 0.8 (segnale di allucinazione).",
         "",
-        "### Metriche Diagnostiche",
-        _markdown_diagnostic_table(report),
+        "#### Valutazione completa",
+        _markdown_diagnostic_table(report, "by_model_complete"),
+        "",
+        "#### Analisi parziale",
+        _markdown_diagnostic_table(report, "by_model_partial"),
         "",
         "---",
         "",
@@ -236,7 +274,11 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "> - **Overall**: media aritmetica delle dimensioni valutate (solo se almeno 3 dimensioni sono disponibili).",
         "> - **Copertura**: percentuale di test eleggibili che sono stati effettivamente valutati semanticamente.",
         "",
-        _markdown_semantic_table(report),
+        "### Valutazione completa",
+        _markdown_semantic_table(report, "by_model_complete"),
+        "",
+        "### Analisi parziale",
+        _markdown_semantic_table(report, "by_model_partial"),
         "",
         "---",
         "",
@@ -245,7 +287,11 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "> I dati sono aggregati per dominio atteso (`study`, `travel`, `routine`, `unknown`). ",
         "> Questo permette di capire se l'agente performa meglio su alcune tipologie di richieste.",
         "",
-        _markdown_simple_table(report["by_domain"]),
+        "### Valutazione completa",
+        _markdown_simple_table(report.get("by_domain_complete", {})),
+        "",
+        "### Analisi parziale",
+        _markdown_simple_table(report.get("by_domain_partial", {})),
         "",
         "---",
         "",
@@ -255,12 +301,33 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "> `impossible_schedule` (richieste irrealizzabili) e `replan_deletion` (modifiche strutturali).",
         "> Le celle mostrano: **Supported Success Rate** e, tra parentesi, il numero di test in quel gruppo.",
         "",
-        _markdown_model_cross_table(report, "by_model_and_difficulty", "Supported Success Rate per Modello e Difficoltà"),
-        _markdown_model_cross_table(report, "by_model_and_test_target", "Supported Success Rate per Modello e Test Target"),
+        "### Valutazione completa",
+        _markdown_model_cross_table(
+            report,
+            "by_model_and_difficulty_complete",
+            "Supported Success Rate per Modello e Difficoltà",
+        ),
+        _markdown_model_cross_table(
+            report,
+            "by_model_and_test_target_complete",
+            "Supported Success Rate per Modello e Test Target",
+        ),
+        "",
+        "### Analisi parziale",
+        _markdown_model_cross_table(
+            report,
+            "by_model_and_difficulty_partial",
+            "Supported Success Rate per Modello e Difficoltà",
+        ),
+        _markdown_model_cross_table(
+            report,
+            "by_model_and_test_target_partial",
+            "Supported Success Rate per Modello e Test Target",
+        ),
         "",
         "---",
         "",
-        "## 6. Context gathering",
+        "## 6. Context Gathering",
         "",
         "> **Modalità testate:**",
         "> - `deterministic`: usa una lista fissa di tool (es. kg_agent, multiapi_agent) definita a priori.",
@@ -271,7 +338,7 @@ def generate_markdown(report: dict[str, Any]) -> str:
         "",
     ])
 
-    for context_mode, metrics in report["by_context_mode"].items():
+    for context_mode, metrics in report.get("by_context_mode", {}).items():
         lines.extend([
             f"### Modalità: `{context_mode}`",
             "",
@@ -334,7 +401,7 @@ def generate_markdown(report: dict[str, Any]) -> str:
             )
         lines.extend(["", "</details>", ""])
 
-    ext_failures = global_metrics['external_failures']
+    ext_failures = global_metrics["external_failures"]
     lines.extend([
         "<details>",
         "<summary><strong>Dettaglio fallimenti contesto esterno</strong></summary>",

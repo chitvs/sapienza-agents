@@ -53,19 +53,20 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 # ]
 
 MODELS_TO_TEST = [
-    ("gemini", "gemini-3.5-flash-lite"),
-    ("gemini", "gemini-3.6-flash"),
-    ("ollama", "llama3.2"),
-    ("ollama", "ministral-3:3b"),
-    ("ollama", "qwen3:1.7b"),
-    ("ollama", "qwen3:4b"),
-    ("ollama", "phi4-mini"),
-    #("openrouter", "openai/gpt-oss-20b:free"),
-    #("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"),
-    #("openrouter", "nvidia/nemotron-3.5-lightning:free"),
-    #("openrouter", "nvidia/nemotron-3.5-lightning:free"),
-    #("openrouter", "poolside/laguna-s-2.1:free"),
-    #("openrouter", "z-ai/glm-5.2:free"),
+    # ("gemini", "gemini-3.5-flash-lite"),
+    # ("gemini", "gemini-3.6-flash"),
+    # ("ollama", "llama3.2"),
+    # ("ollama", "ministral-3:3b"),
+    # ("ollama", "qwen3:1.7b"),
+    # ("ollama", "qwen3:4b"),
+    # ("ollama", "gemma4:e2b-it-qat"),
+    # ("ollama", "phi4-mini"),
+    # ("openrouter", "openai/gpt-oss-20b:free"), #NON è PIù FREE :(
+    # ("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"),
+    # ("openrouter", "nvidia/nemotron-3.5-lightning:free"), 10 query
+    # ("openrouter", "dots-studio/dots-3-note-preview:free,"), 10 query
+    # ("openrouter", "poolside/laguna-s-2.1:free"),
+    # ("openrouter", "z-ai/glm-5.2:free"), mai testato
 ]
 
 CONTEXT_MODES_TO_TEST: list[Literal["deterministic", "react", "none"]] = ["none"]
@@ -82,7 +83,7 @@ BENCHMARK_DIR: Path = Path(__file__).resolve().parent
 DATASET_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_dataset.json"
 RESULTS_PATH: Path = BENCHMARK_DIR / "data" / "benchmark_results.json"
 
-RATE_LIMIT_DELAY_SECONDS: float = 15
+RATE_LIMIT_DELAY_SECONDS: float = 10
 
 
 # --- UTILITY DI PERSISTENZA ---

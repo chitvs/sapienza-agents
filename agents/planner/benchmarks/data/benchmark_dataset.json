@@ -440,6 +440,114 @@
               "category": "sport"
             }
           ]
+        },
+        {
+          "day_index": 2,
+          "label": "Martedì",
+          "slots": [
+            {
+              "task": "Sveglia e colazione",
+              "start_time": "07:00",
+              "duration_minutes": 45,
+              "category": "pasto"
+            },
+            {
+              "task": "Palestra",
+              "start_time": "08:00",
+              "duration_minutes": 60,
+              "category": "sport"
+            }
+          ]
+        },
+        {
+          "day_index": 3,
+          "label": "Mercoledì",
+          "slots": [
+            {
+              "task": "Sveglia e colazione",
+              "start_time": "07:00",
+              "duration_minutes": 45,
+              "category": "pasto"
+            },
+            {
+              "task": "Palestra",
+              "start_time": "08:00",
+              "duration_minutes": 60,
+              "category": "sport"
+            }
+          ]
+        },
+        {
+          "day_index": 4,
+          "label": "Giovedì",
+          "slots": [
+            {
+              "task": "Sveglia e colazione",
+              "start_time": "07:00",
+              "duration_minutes": 45,
+              "category": "pasto"
+            },
+            {
+              "task": "Palestra",
+              "start_time": "08:00",
+              "duration_minutes": 60,
+              "category": "sport"
+            }
+          ]
+        },
+        {
+          "day_index": 5,
+          "label": "Venerdì",
+          "slots": [
+            {
+              "task": "Sveglia e colazione",
+              "start_time": "07:00",
+              "duration_minutes": 45,
+              "category": "pasto"
+            },
+            {
+              "task": "Palestra",
+              "start_time": "08:00",
+              "duration_minutes": 60,
+              "category": "sport"
+            }
+          ]
+        },
+        {
+          "day_index": 6,
+          "label": "Sabato",
+          "slots": [
+            {
+              "task": "Sveglia e colazione",
+              "start_time": "07:00",
+              "duration_minutes": 45,
+              "category": "pasto"
+            },
+            {
+              "task": "Palestra",
+              "start_time": "08:00",
+              "duration_minutes": 60,
+              "category": "sport"
+            }
+          ]
+        },
+        {
+          "day_index": 7,
+          "label": "Domenica",
+          "slots": [
+            {
+              "task": "Sveglia e colazione",
+              "start_time": "07:00",
+              "duration_minutes": 45,
+              "category": "pasto"
+            },
+            {
+              "task": "Palestra",
+              "start_time": "08:00",
+              "duration_minutes": 60,
+              "category": "sport"
+            }
+          ]
         }
       ]
     }

@@ -1,7 +1,6 @@
 \documentclass[11pt]{article}
 
 \usepackage{acl}
-\usepackage{times}
 \usepackage{latexsym}
 \usepackage[italian]{babel}
 \usepackage[T1]{fontenc}
@@ -65,7 +64,11 @@ L'architettura è organizzata per \textit{provider}: ogni knowledge graph compon
 
 \subsection{Agente planner}
 
-L'agente planner scompone una richiesta in un piano temporale strutturato in formato JSON. Classifica la richiesta in uno di tre domini (\texttt{study}, \texttt{travel}, \texttt{routine}) e usa un dominio \texttt{unknown} per respingere le richieste fuori scope; oltre a generare un piano da zero, sa aggiornarne uno esistente. Prima di generare, un modulo di \textit{context gathering} può arricchire il piano con dati reali interrogando gli altri due agenti, in modo autonomo oppure secondo una configurazione fissa. Un validatore controlla poi il piano prodotto e, in caso di errore, ne innesca la correzione. È l'unico agente a supportare anche provider cloud oltre a Ollama, con ripiego automatico sul modello locale quando la chiave manca o la chiamata fallisce.
+L'agente planner è un microservizio specializzato nello scomporre richieste in linguaggio naturale in piani temporali strutturati (formato JSON). Classifica la richiesta in uno di tre domini operativi (\texttt{study}, \texttt{travel}, \texttt{routine}) e delega a un dominio \texttt{unknown} il compito di respingere le richieste fuori scope; oltre a generare un piano da zero, supporta l'intento di \textit{replanning} per eseguire aggiornamenti mirati su agende esistenti.
+
+Prima della generazione, un modulo di \textit{context gathering} decide se e come arricchire il piano con dati reali interrogando gli altri due agenti. Questo processo può avvenire tramite configurazione deterministica oppure in modalità \textit{ReAct}, dove il modello decide autonomamente, passo per passo, quali tool chiamare. Il sistema è progettato per garantire resilienza: i fallimenti dei servizi esterni (es. timeout o tool non raggiungibili) non interrompono l'esecuzione, ma vengono registrati esplicitamente all'interno di apposite \texttt{contingency\_notes}, mitigando eventuali allucinazioni senza far scendere a zero la \textit{confidence} del piano.
+
+L'output generato viene sottoposto a un rigoroso validatore logico e strutturale che verifica il rispetto dello schema e l'assenza di violazioni temporali (es. durate negative o sovrapposizioni di orari), innescando cicli iterativi di autocorrezione in caso di errore. Infine, il planner dispone di una funzionalità di \textit{auto-discovery} per elencare dinamicamente i modelli disponibili. È l'unico agente della catena a supportare, oltre ai modelli locali (Ollama), anche provider cloud (Gemini, OpenRouter), garantendo un ripiego automatico (\textit{fallback}) in locale qualora le chiavi API manchino o le chiamate esterne falliscano.
 
 \subsection{Agente multiapi}
 
@@ -115,33 +118,35 @@ Abbiamo infine condotto alcuni esperimenti di ablazione per giustificare singole
 
 \subsection{Agente planner}
 
-Il planner è valutato su un \textit{golden dataset} multi-dominio di 10 casi, ripetuto su 11 modelli fra locali e cloud per un totale di 110 esecuzioni. Alle metriche strutturali, cioè la percentuale di test superati nei domini supportati, la correttezza della classificazione del dominio e la quota di test risolti al primo tentativo senza correzioni (\textit{zero-shot}), si affianca una valutazione qualitativa con la tecnica \textit{llm-as-a-judge}, su scala da 1 a 5, che giudica aderenza alla richiesta, ancoraggio al contesto, fattibilità e granularità del piano.
+L'agente planner è valutato su un \textit{golden dataset} multi-dominio, inizialmente composto da 10 casi base e successivamente espanso a 30 casi per testare a fondo i modelli più promettenti. I 20 test aggiuntivi introducono vincoli stringenti come calcoli temporali complessi (\texttt{time\_math}) e agende irrealizzabili (\texttt{impossible\_schedule}), per misurare la robustezza dell'agente. In totale, la nuova suite conta 230 esecuzioni su 13 modelli (5 valutati sulla suite completa, 8 su quella ridotta).
+
+Alle metriche strutturali (percentuale di successo nei domini supportati, correttezza di classificazione e tasso \textit{zero-shot}) si affianca la valutazione qualitativa \textit{llm-as-a-judge} su scala da 1 a 5, che giudica l'aderenza alla richiesta, l'ancoraggio al contesto, la fattibilità e la granularità. Come giudice è stato utilizzato \texttt{gemma-4-31b} in cloud, poichè è stato considerato come il modello più "potente" e con meno possibilità di crash dovuti dalla mole di controlli da eseguire.
 
 \begin{table}[h]
 \centering
 \small
 \setlength{\tabcolsep}{3pt}
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccc}
 \toprule
-Modello & Succ. & Dom. & Sem. & 0-shot \\
+Modello & Test & Succ. & Dom. & Sem. & 0-shot \\
 \midrule
-gemini-3.6-flash   & 1.00 & 1.00 & 5.00 & 0.88 \\
-gemini-3.5-f.-lite & 1.00 & 1.00 & 4.82 & 0.75 \\
-dots-3-note-prev.  & 1.00 & 1.00 & 4.72 & 0.75 \\
-nemotron-3-ultra   & 1.00 & 1.00 & 4.72 & 0.88 \\
-nemotron-3.5-light & 1.00 & 0.90 & 4.66 & 0.88 \\
-gpt-oss-20b        & 0.88 & 1.00 & 4.51 & 0.75 \\
-laguna-s-2.1       & 1.00 & 0.90 & 4.51 & 0.75 \\
-ministral-3:3b     & 0.88 & 0.80 & 4.11 & 0.75 \\
-llama3.2           & 1.00 & 1.00 & 4.07 & 0.75 \\
-qwen3:4b           & 0.75 & 1.00 & 3.88 & 0.38 \\
-qwen3:1.7b         & 1.00 & 1.00 & 3.17 & 1.00 \\
+gemini-3.6-flash   & 30 & 1.00 & 1.00 & 4.80 & 0.88 \\
+gemini-3.5-f.-lite & 30 & 1.00 & 1.00 & 4.63 & 0.80 \\
+nemotron-3-ultra   & 30 & 0.92 & 0.90 & 4.65 & 0.76 \\
+laguna-s-2.1       & 30 & 0.80 & 0.73 & 4.38 & 0.64 \\
+llama3.2           & 30 & 0.80 & 0.87 & 3.56 & 0.64 \\
+\midrule
+dots-3-note-prev.* & 10 & 1.00 & 1.00 & 4.72 & 0.75 \\
+qwen3:1.7b*        & 10 & 1.00 & 1.00 & 3.17 & 1.00 \\
 \bottomrule
 \end{tabular}
-\caption*{\footnotesize Succ. = successo nei domini supportati, Dom. = accuratezza di dominio, Sem. = score semantico (1-5), 0-shot = tasso zero-shot}
+\caption*{\footnotesize Succ. = successo nei domini supportati, Dom. = accuratezza di dominio, Sem. = score semantico (1-5), 0-shot = tasso zero-shot. *Valutati solo sui 10 test base.}
 \end{table}
 
-Sull'intera suite il sistema non è mai andato in crash, con un'accuratezza di dominio del 96.36\% e uno score semantico medio di 4.39 su 5. Il confronto fra modelli mostra che le due metriche non vanno di pari passo: \texttt{qwen3:1.7b} è il solo a superare tutti i test al primo tentativo, ma è anche ultimo per qualità semantica, cioè produce piani sempre validi e sempre poveri. I modelli cloud dominano la valutazione qualitativa, mentre fra i locali \texttt{llama3.2} offre il compromesso migliore ed è per questo il default del sistema.
+L'introduzione dei casi complessi ha evidenziato in modo chiaro i limiti di alcune architetture. Mentre sui test base il sistema non andava mai in crash (0\%), la maggiore difficoltà ha innalzato il tasso di crash generale al 3.48\%, trainato dai cedimenti di \texttt{laguna-s-2.1} (23.33\% di crash rate sui nuovi casi, dovuti unicamente a fallimenti delle chiamate all'API del provider e non all'incapacità del modello di risolvere l'intento) e dai timeout di esecuzione che hanno colpito \texttt{llama3.2} nei casi più complessi. Inoltre, l'errore di validazione più comune è cambiato: non più la sovrapposizione degli orari, ma il calcolo errato delle durate (\texttt{duration\_minutes\_non\_valido}), a dimostrazione delle crescenti difficoltà nel ragionamento aritmetico. Di conseguenza, il tasso di fallimento dei cicli di autocorrezione è salito dal 20\% al quasi 31\%.
+
+Il confronto fra modelli evidenzia come i provider \textit{cloud} (\texttt{gemini-3.6-flash} e \texttt{gemini-3.5-flash-lite}) mantengano un tasso di successo del 100\% assorbendo bene la maggiore complessità, registrando solo una lieve, fisiologica flessione nello score semantico complessivo (da 5.00 a 4.80 per il modello top di gamma) per via dei vincoli più severi.
+Al contrario, \texttt{llama3.2}, che sui test base risultava il miglior compromesso in locale, ha mostrato forti incertezze sui casi difficili: il successo è sceso all'80\% e la qualità semantica è crollata a 3.56, con un tasso di validazione salito al 32\%. Modelli locali estremamente compatti come \texttt{qwen3:1.7b}, pur riuscendo a superare infallibilmente i test più semplici in modalità \textit{zero-shot}, lo fanno a scapito di una semantica molto povera e schematica (3.17).
 
 \subsection{Agente multiapi}
 
