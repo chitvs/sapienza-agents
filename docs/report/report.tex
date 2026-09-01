@@ -29,5 +29,125 @@
 
 \begin{document}
 \maketitle
+\section{Obiettivo del progetto}
+Il progetto mira a realizzare un sistema multi-agente che risponde a domande in linguaggio naturale attraverso l'uso di varie tecnologie come: Python, FastAPI, LangGraph, Ollama, Neo4j e Docker. Un orchestratore centrale interpreta la domanda e la delega a tre agenti specializzati: uno interroga knowledge graph, uno interroga api pubbliche per i dati in tempo reale e uno scompone le richieste di pianificazione in piani strutturati. Tutti i modelli sono eseguiti in locale tramite Ollama, senza dipendere da servizi a pagamento.
 
+\section{Organizzazione del codice}
+\subsection{Setup}
+
+Dopo aver stabilito gli obiettivi generali e aver installato le librerie necessarie abbiamo inizializzato una repository Git per garantire una fluida collaborazione. Ogni agente è un microservizio autonomo, con il proprio \texttt{Dockerfile}, le proprie dipendenze e la propria suite di test, così da poter essere sviluppato in parallelo. La struttura finale è la seguente:
+\smallskip
+\dirtree{%
+.1 sapienza-agents/.
+.2 shared/ .
+.2 ui/ .
+.2 orchestrator/ .
+.2 agents/.
+.3 kg/ .
+.3 planner/ .
+.3 multiapi/ .
+.2 docker-compose.yml.
+}
+
+\subsection{Orchestratore}
+
+L'orchestratore è realizzato con LangGraph ed è il punto di ingresso del sistema. Un nodo \texttt{supervisor} classifica la domanda e sceglie quali agenti attivare; quelli selezionati vengono interrogati in parallelo e i loro risultati confluiscono in un nodo \texttt{synthesizer}, che li integra in un'unica risposta in linguaggio naturale. Le domande fuori scope vengono deviate su un nodo dedicato, senza sprecare chiamate agli agenti.
+
+I nodi sono generati a partire da un registro in configurazione, quindi aggiungere un agente non richiede modifiche al grafo. Il fallimento di un agente non interrompe l'esecuzione: l'errore viene registrato e passato comunque al sintetizzatore. L'orchestratore si occupa infine della lingua, perché l'agente kg lavora in inglese: la domanda viene tradotta prima di essergli inoltrata e la risposta finale viene riportata nella lingua originale.
+
+\subsection{Agente kg}
+
+L'agente kg traduce una domanda in linguaggio naturale in una query da eseguire su un knowledge graph. La pipeline si articola in cinque passi: \textit{entity linking}, recupero dello schema, traduzione, esecuzione e \textit{grounding} dei risultati.
+
+Le menzioni vengono estratte con GLiNER e associate alle entità del grafo. Serve poi lo schema, cioè l'elenco delle proprietà utilizzabili: quelle di Wikidata e DBpedia sono migliaia e non entrano in un prompt, quindi le più rilevanti vengono selezionate con una ricerca semantica su indice FAISS. Lo schema di un grafo Neo4j è invece piccolo e chiuso, e viene letto per intero senza costruire alcun indice. Se la query solleva un errore il modello la rigenera leggendo il messaggio dell'endpoint; se invece è valida ma non restituisce risultati, un secondo tentativo rilassa i filtri superflui e riformula la domanda.
+
+L'architettura è organizzata per \textit{provider}: ogni knowledge graph compone i propri componenti dietro interfacce comuni e si seleziona per singola richiesta. Sono supportati Wikidata e DBpedia in SPARQL e un'istanza locale Neo4j in Cypher sul dominio cinema. Le generazioni sono affidate a due modelli distinti: \texttt{qwen2.5-coder:7b} per la scrittura della query, che è un compito di programmazione, e \texttt{qwen2.5:7b-instruct} per il linking, dove il modello generico disambigua meglio.
+
+\subsection{Agente planner}
+
+L'agente planner scompone una richiesta in un piano temporale strutturato in formato JSON. Classifica la richiesta in uno di tre domini (\texttt{study}, \texttt{travel}, \texttt{routine}) e usa un dominio \texttt{unknown} per respingere le richieste fuori scope; oltre a generare un piano da zero, sa aggiornarne uno esistente. Prima di generare, un modulo di \textit{context gathering} può arricchire il piano con dati reali interrogando gli altri due agenti, in modo autonomo oppure secondo una configurazione fissa. Un validatore controlla poi il piano prodotto e, in caso di errore, ne innesca la correzione. È l'unico agente a supportare anche provider cloud oltre a Ollama, con ripiego automatico sul modello locale quando la chiave manca o la chiamata fallisce.
+
+\subsection{Agente multiapi}
+
+L'agente multiapi risponde interrogando api pubbliche. Un primo prompt classifica l'intento della domanda, un secondo ne estrae i parametri e il provider corrispondente effettua la chiamata; il modello non scrive mai la risposta, che è ricavata dai soli dati restituiti dall'api. Gli intenti supportati sono quattro: \texttt{weather} (Open-Meteo, con distinzione fra condizioni correnti e previsioni fino a sei giorni), \texttt{exchange\_rate} (Frankfurter, con dati storici fino al 1999), \texttt{country\_info} (countries.dev) e \texttt{time\_info} (world-time-api3); una domanda che non vi ricade è classificata \texttt{unknown} e produce un errore esplicito invece di una risposta inventata. Il classificatore riconosce anche i temi secondari, quindi una domanda che ne cita due riceve un risultato per ciascuno, fino a un massimo di due, mostrati in schede separate. Ogni risultato affianca ai campi grezzi dell'api una sintesi in linguaggio naturale, che orchestratore e planner usano come evidenza al posto del dizionario di campi tecnici. Le risposte sono messe in cache con una scadenza proporzionata a quanto invecchia il dato: l'ora locale non viene mai riusata, perché un orario in cache è per definizione sbagliato, mentre il meteo dura dieci minuti e i dati di un paese un giorno.
+
+\subsection{Web UI e containerizzazione}
+
+L'interfaccia web è una pagina statica servita da nginx, dalla quale si può interrogare l'orchestratore oppure un singolo agente. Oltre alla risposta finale mostra le evidenze intermedie: la query generata, i risultati grezzi e la confidenza. Il sistema è diviso in sei container orchestrati da \texttt{docker-compose.yml}: Neo4j, i tre agenti sulle porte \texttt{8000}, \texttt{8001} e \texttt{8002}, l'orchestratore sulla \texttt{8080} e l'interfaccia sulla \texttt{3000}. L'avvio è ordinato tramite dipendenze e controlli di salute, i container comunicano su una rete interna dedicata e raggiungono Ollama sull'host, mentre indici e cache dei modelli sono montati come volumi per non essere ricostruiti ad ogni riavvio.
+
+\section{Valutazione}
+
+Ogni agente è valutato con una metodologia adatta al proprio compito: l'agente kg su benchmark pubblici, il planner su un \textit{golden dataset} personalizzato.
+
+\subsection{Agente kg}
+
+La valutazione usa due benchmark pubblici della famiglia QALD: QALD-10 su Wikidata (394 domande) e lo split di test di QALD-9-plus su DBpedia (150 domande). La metrica è la \textbf{macro-F1} con le convenzioni QALD, che confronta l'insieme delle risposte prodotte con quello delle risposte attese. Il punteggio è riportato anche per tipo di domanda: booleane (\texttt{ask}), conteggi (\texttt{count}), domande risolvibili con un solo predicato (\texttt{single}) e domande che ne richiedono più di uno (\texttt{multi}).
+
+Le risposte di riferimento non sono quelle registrate nel dataset ma vengono rigenerate eseguendo le query \textit{gold} al momento della valutazione, perché i dataset sono invecchiati: su QALD-9-plus 35 domande su 150 non hanno più alcuna risposta registrata, e su un riferimento vuoto la convenzione QALD assegnerebbe il punteggio pieno anche a una pipeline fallita. Le domande prive di riferimento vengono escluse, ed è per questo che i totali valutati sono inferiori a quelli nominali.
+
+Per capire se il knowledge graph aggiunga accuratezza o soltanto verificabilità, abbiamo posto le stesse domande allo stesso modello senza alcun accesso al grafo (\textit{closed-book}).
+\begin{table}[h]
+\centering
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{QALD-10} & \multicolumn{2}{c}{QALD-9-plus} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+ & pipe & c-b & pipe & c-b \\
+\midrule
+domande & \multicolumn{2}{c}{378/394} & \multicolumn{2}{c}{104/150} \\
+\midrule
+\textbf{macro-F1} & \textbf{0.377} & \textbf{0.284} & \textbf{0.205} & \textbf{0.224} \\
+ask    & 0.426 & 0.623 & 0.750 & 0.250 \\
+count  & 0.218 & 0.126 & 0.250 & 0.250 \\
+single & 0.590 & 0.217 & 0.253 & 0.261 \\
+multi  & 0.225 & 0.297 & 0.117 & 0.187 \\
+\bottomrule
+\end{tabular}
+\caption*{\footnotesize pipe = pipeline completa, c-b = baseline closed-book}
+\end{table}
+
+Su Wikidata il grafo guadagna un terzo di macro-F1 rispetto al modello nudo, ma quasi tutto il vantaggio viene dalle domande a un solo predicato. Su DBpedia il confronto si ribalta e il grafo aggiunge soltanto verificabilità: il valore del \textit{grounding} dipende quindi dal grafo interrogato, non dall'architettura.
+
+Il punteggio complessivo è basso ma il sistema è accurato quando risponde: su QALD-10 solo 197 query su 378 restituiscono righe, e su quelle il F1 medio è 0.621. Il problema non è quindi la qualità della traduzione ma il fatto che in metà dei casi la query, pur essendo valida, non trova nulla. Analizzando questi fallimenti la proprietà scelta è sbagliata nel 79\% dei casi e l'entità solo nel 67\%: il collo di bottiglia è la scelta del predicato, non l'entity linking.
+
+Abbiamo infine condotto alcuni esperimenti di ablazione per giustificare singole scelte di progetto. Il più significativo riguarda la disambiguazione delle entità: interpellare l'llm su ogni menzione non compra accuratezza rispetto a un semplice ranking di segnali ($0.883$ contro $0.890$), e costa una chiamata in più per menzione.
+
+\subsection{Agente planner}
+
+Il planner è valutato su un \textit{golden dataset} multi-dominio di 10 casi, ripetuto su 11 modelli fra locali e cloud per un totale di 110 esecuzioni. Alle metriche strutturali, cioè la percentuale di test superati nei domini supportati, la correttezza della classificazione del dominio e la quota di test risolti al primo tentativo senza correzioni (\textit{zero-shot}), si affianca una valutazione qualitativa con la tecnica \textit{llm-as-a-judge}, su scala da 1 a 5, che giudica aderenza alla richiesta, ancoraggio al contesto, fattibilità e granularità del piano.
+
+\begin{table}[h]
+\centering
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lcccc}
+\toprule
+Modello & Succ. & Dom. & Sem. & 0-shot \\
+\midrule
+gemini-3.6-flash   & 1.00 & 1.00 & 5.00 & 0.88 \\
+gemini-3.5-f.-lite & 1.00 & 1.00 & 4.82 & 0.75 \\
+dots-3-note-prev.  & 1.00 & 1.00 & 4.72 & 0.75 \\
+nemotron-3-ultra   & 1.00 & 1.00 & 4.72 & 0.88 \\
+nemotron-3.5-light & 1.00 & 0.90 & 4.66 & 0.88 \\
+gpt-oss-20b        & 0.88 & 1.00 & 4.51 & 0.75 \\
+laguna-s-2.1       & 1.00 & 0.90 & 4.51 & 0.75 \\
+ministral-3:3b     & 0.88 & 0.80 & 4.11 & 0.75 \\
+llama3.2           & 1.00 & 1.00 & 4.07 & 0.75 \\
+qwen3:4b           & 0.75 & 1.00 & 3.88 & 0.38 \\
+qwen3:1.7b         & 1.00 & 1.00 & 3.17 & 1.00 \\
+\bottomrule
+\end{tabular}
+\caption*{\footnotesize Succ. = successo nei domini supportati, Dom. = accuratezza di dominio, Sem. = score semantico (1-5), 0-shot = tasso zero-shot}
+\end{table}
+
+Sull'intera suite il sistema non è mai andato in crash, con un'accuratezza di dominio del 96.36\% e uno score semantico medio di 4.39 su 5. Il confronto fra modelli mostra che le due metriche non vanno di pari passo: \texttt{qwen3:1.7b} è il solo a superare tutti i test al primo tentativo, ma è anche ultimo per qualità semantica, cioè produce piani sempre validi e sempre poveri. I modelli cloud dominano la valutazione qualitativa, mentre fra i locali \texttt{llama3.2} offre il compromesso migliore ed è per questo il default del sistema.
+
+\subsection{Agente multiapi}
+
+L'agente multiapi non ha un benchmark quantitativo: una volta classificato l'intento ed estratti i parametri, il suo compito si riduce a una chiamata http il cui esito dipende dall'api esterna. La verifica è quindi affidata alla suite di test, 139 in tutto, divisa in test di unità che girano senza rete su risposte finte, sia delle api sia del modello, e test di integrazione che interrogano le api reali e vengono saltati automaticamente quando il servizio non è raggiungibile o la chiave non è configurata.
+
+\section{Conclusioni}
+
+Il sistema integra tre agenti eterogenei dietro un unico orchestratore, e la valutazione mostra che i limiti si concentrano nell'agente kg, dove tradurre una domanda in una query su un'ontologia di migliaia di proprietà resta il compito più difficile. Le misure indicano però con precisione dove intervenire: la traduzione è accurata quando produce una risposta, e il punteggio è limitato dai casi in cui la query è valida ma sceglie il predicato sbagliato.
 \end{document}
