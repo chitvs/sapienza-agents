@@ -8,9 +8,19 @@ class Settings:
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 
     agent_descriptions: dict[str, str] = {
-        "kg_agent": "per domande su entità, relazioni strutturate, fatti e conoscenze.",
-        "planner_agent": "per attività di pianificazione, scomposizione o piani complessi (piano di studio, itinerario, routine). È autonomo nel recuperare qualsiasi contesto aggiuntivo di cui ha bisogno.",
-        "multiapi_agent": "per ottenere dati in tempo reale su: previsioni meteo, tassi di cambio valute, fusi orari e informazioni geografiche sui paesi.",
+        "kg_agent": (
+            "fatti enciclopedici statici su entità nominate (persone, luoghi, opere, organizzazioni) "
+            "e sulle relazioni fra di esse. NON per dati che cambiano nel tempo."
+        ),
+        "planner_agent": (
+            "pianificazione e scomposizione di attività complesse (piano di studio, itinerario, routine). "
+            "È autonomo nel recuperare qualsiasi contesto aggiuntivo di cui ha bisogno."
+        ),
+        "multiapi_agent": (
+            "dati in tempo reale che richiedono un'api esterna: meteo e temperatura attuali di una città, "
+            "tasso di cambio e conversione fra due valute, ora locale corrente o fuso orario, "
+            "informazioni su un paese (capitale, popolazione, superficie, lingue, valuta, confini)."
+        ),
     }
     agent_request_timeout_seconds: float = float(os.getenv("AGENT_REQUEST_TIMEOUT_SECONDS", "330"))
     out_of_scope_message: str = os.getenv(
